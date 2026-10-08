@@ -1,0 +1,864 @@
+USE [EquineCareDB]
+GO
+/****** Object:  Table [dbo].[Audit_Logs]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Audit_Logs](
+	[log_id] [int] IDENTITY(1,1) NOT NULL,
+	[user_id] [int] NULL,
+	[action_type] [varchar](20) NOT NULL,
+	[target_table] [varchar](50) NOT NULL,
+	[old_value] [nvarchar](max) NULL,
+	[new_value] [nvarchar](max) NULL,
+	[ip_address] [varchar](45) NULL,
+	[timestamp] [datetime] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[log_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Club_Manager_Profiles]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Club_Manager_Profiles](
+	[user_id] [int] NOT NULL,
+	[department] [nvarchar](50) NOT NULL,
+	[approval_limit] [decimal](14, 2) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Competition_Entries]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Competition_Entries](
+	[entry_id] [int] IDENTITY(1,1) NOT NULL,
+	[competition_id] [int] NOT NULL,
+	[horse_id] [int] NOT NULL,
+	[entry_fee_charged] [decimal](12, 2) NOT NULL,
+	[transport_fee] [decimal](12, 2) NOT NULL,
+	[finish_time_seconds] [decimal](6, 2) NULL,
+	[rank_position] [int] NULL,
+	[prize_awarded] [decimal](12, 2) NOT NULL,
+	[registration_status] [varchar](20) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[entry_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+ CONSTRAINT [UQ_Horse_Competition] UNIQUE NONCLUSTERED 
+(
+	[competition_id] ASC,
+	[horse_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Daily_Tasks]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Daily_Tasks](
+	[task_id] [int] IDENTITY(1,1) NOT NULL,
+	[horse_id] [int] NOT NULL,
+	[groom_id] [int] NOT NULL,
+	[task_type] [nvarchar](50) NOT NULL,
+	[scheduled_time] [time](7) NOT NULL,
+	[service_fee] [decimal](10, 2) NOT NULL,
+	[is_completed] [bit] NOT NULL,
+	[completed_at] [datetime] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[task_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Diet_Plans]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Diet_Plans](
+	[diet_id] [int] IDENTITY(1,1) NOT NULL,
+	[horse_id] [int] NOT NULL,
+	[meal_time] [varchar](20) NOT NULL,
+	[grain_kg] [decimal](4, 2) NOT NULL,
+	[hay_kg] [decimal](4, 2) NOT NULL,
+	[supplements] [nvarchar](255) NULL,
+	[daily_diet_fee] [decimal](10, 2) NOT NULL,
+	[updated_at] [datetime] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[diet_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[External_Competitions]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[External_Competitions](
+	[competition_id] [int] IDENTITY(1,1) NOT NULL,
+	[competition_name] [nvarchar](150) NOT NULL,
+	[organizer] [nvarchar](150) NOT NULL,
+	[location] [nvarchar](100) NOT NULL,
+	[start_date] [date] NOT NULL,
+	[race_distance_m] [decimal](7, 2) NOT NULL,
+	[standard_entry_fee] [decimal](12, 2) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[competition_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Groom_Profiles]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Groom_Profiles](
+	[user_id] [int] NOT NULL,
+	[assigned_barn_zone] [nvarchar](50) NULL,
+	[shift_type] [varchar](20) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Horse_Owner_Profiles]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Horse_Owner_Profiles](
+	[user_id] [int] NOT NULL,
+	[tax_code] [varchar](30) NULL,
+	[billing_address] [nvarchar](255) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Horses]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Horses](
+	[horse_id] [int] IDENTITY(1,1) NOT NULL,
+	[horse_name] [nvarchar](100) NOT NULL,
+	[dob] [date] NOT NULL,
+	[gender] [varchar](10) NOT NULL,
+	[breed] [nvarchar](50) NOT NULL,
+	[pedigree] [nvarchar](255) NULL,
+	[weight_kg] [decimal](6, 2) NOT NULL,
+	[health_status] [varchar](20) NOT NULL,
+	[is_locked] [bit] NOT NULL,
+	[prize_share_pct] [decimal](5, 2) NOT NULL,
+	[owner_id] [int] NOT NULL,
+	[stall_id] [int] NULL,
+	[created_at] [datetime] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[horse_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[stall_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Incident_Reports]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Incident_Reports](
+	[incident_id] [int] IDENTITY(1,1) NOT NULL,
+	[horse_id] [int] NOT NULL,
+	[groom_id] [int] NOT NULL,
+	[issue_type] [nvarchar](50) NOT NULL,
+	[issue_description] [nvarchar](max) NOT NULL,
+	[image_url] [varchar](255) NULL,
+	[severity] [varchar](20) NOT NULL,
+	[is_resolved] [bit] NOT NULL,
+	[reported_at] [datetime] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[incident_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Injury_Marks]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Injury_Marks](
+	[mark_id] [int] IDENTITY(1,1) NOT NULL,
+	[record_id] [int] NOT NULL,
+	[body_part_code] [varchar](30) NOT NULL,
+	[coord_x] [decimal](6, 2) NOT NULL,
+	[coord_y] [decimal](6, 2) NOT NULL,
+	[severity_level] [varchar](20) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[mark_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Inventory_Items]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Inventory_Items](
+	[item_id] [int] IDENTITY(1,1) NOT NULL,
+	[item_name] [nvarchar](100) NOT NULL,
+	[category] [varchar](30) NOT NULL,
+	[unit] [nvarchar](20) NOT NULL,
+	[unit_price] [decimal](12, 2) NOT NULL,
+	[current_stock] [decimal](10, 2) NOT NULL,
+	[min_safety_stock] [decimal](10, 2) NOT NULL,
+	[last_restocked_at] [datetime] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[item_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Invoice_Line_Items]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Invoice_Line_Items](
+	[line_item_id] [int] IDENTITY(1,1) NOT NULL,
+	[invoice_id] [int] NOT NULL,
+	[expense_category] [varchar](30) NOT NULL,
+	[reference_id] [int] NULL,
+	[item_description] [nvarchar](255) NOT NULL,
+	[unit_price] [decimal](12, 2) NOT NULL,
+	[quantity] [decimal](8, 2) NOT NULL,
+	[amount]  AS ([unit_price]*[quantity]),
+	[service_date] [datetime] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[line_item_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Invoices]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Invoices](
+	[invoice_id] [int] IDENTITY(1,1) NOT NULL,
+	[invoice_code] [varchar](30) NOT NULL,
+	[horse_id] [int] NOT NULL,
+	[owner_id] [int] NOT NULL,
+	[billing_month] [varchar](7) NOT NULL,
+	[subtotal_amount] [decimal](12, 2) NOT NULL,
+	[prize_deduction_amount] [decimal](12, 2) NOT NULL,
+	[final_payable_amount] [decimal](12, 2) NOT NULL,
+	[payment_status] [varchar](20) NOT NULL,
+	[issued_at] [datetime] NOT NULL,
+	[due_date] [date] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[invoice_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[invoice_code] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Medical_Records]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Medical_Records](
+	[record_id] [int] IDENTITY(1,1) NOT NULL,
+	[horse_id] [int] NOT NULL,
+	[vet_id] [int] NOT NULL,
+	[visit_date] [datetime] NOT NULL,
+	[symptoms] [nvarchar](max) NOT NULL,
+	[diagnosis] [nvarchar](max) NOT NULL,
+	[treatment_performed] [nvarchar](max) NULL,
+	[treatment_fee] [decimal](12, 2) NOT NULL,
+	[is_lockout_ordered] [bit] NOT NULL,
+	[next_due_date] [date] NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[record_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Payment_Transactions]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Payment_Transactions](
+	[transaction_id] [int] IDENTITY(1,1) NOT NULL,
+	[invoice_id] [int] NOT NULL,
+	[payment_method] [varchar](30) NOT NULL,
+	[amount_paid] [decimal](12, 2) NOT NULL,
+	[transaction_ref] [varchar](100) NULL,
+	[gateway_trans_id] [varchar](100) NULL,
+	[payment_status] [varchar](20) NOT NULL,
+	[paid_at] [datetime] NOT NULL,
+	[notes] [nvarchar](255) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[transaction_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Prescription_Items]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Prescription_Items](
+	[record_id] [int] NOT NULL,
+	[item_id] [int] NOT NULL,
+	[dosage] [nvarchar](100) NOT NULL,
+	[quantity_prescribed] [decimal](8, 2) NOT NULL,
+	[unit_price_at_prescription] [decimal](12, 2) NOT NULL,
+	[line_total]  AS ([quantity_prescribed]*[unit_price_at_prescription]),
+PRIMARY KEY CLUSTERED 
+(
+	[record_id] ASC,
+	[item_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Stalls]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Stalls](
+	[stall_id] [int] IDENTITY(1,1) NOT NULL,
+	[stall_code] [varchar](20) NOT NULL,
+	[barn_zone] [nvarchar](50) NOT NULL,
+	[clean_status] [nvarchar](30) NOT NULL,
+	[monthly_base_fee] [decimal](12, 2) NOT NULL,
+	[updated_at] [datetime] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[stall_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[stall_code] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Task_Material_Usage]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+CREATE TABLE [dbo].[Task_Material_Usage](
+	[task_id] [int] NOT NULL,
+	[item_id] [int] NOT NULL,
+	[quantity_used] [decimal](8, 2) NOT NULL,
+	[unit_price_at_use] [decimal](12, 2) NOT NULL,
+	[total_cost]  AS ([quantity_used]*[unit_price_at_use]),
+PRIMARY KEY CLUSTERED 
+(
+	[task_id] ASC,
+	[item_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+/****** Object:  Table [dbo].[Trainer_Profiles]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Trainer_Profiles](
+	[user_id] [int] NOT NULL,
+	[license_number] [varchar](50) NOT NULL,
+	[experience_years] [int] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Training_Days]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Training_Days](
+	[training_day_id] [int] IDENTITY(1,1) NOT NULL,
+	[plan_id] [int] NOT NULL,
+	[trainer_id] [int] NOT NULL,
+	[groom_id] [int] NULL,
+	[training_date] [date] NOT NULL,
+	[duration_minutes] [int] NOT NULL,
+	[avg_heart_rate] [decimal](5, 2) NOT NULL,
+	[max_heart_rate] [decimal](5, 2) NOT NULL,
+	[avg_speed_kmh] [decimal](5, 2) NOT NULL,
+	[is_over_threshold] [bit] NOT NULL,
+	[performance_score] [int] NULL,
+	[training_fee] [decimal](10, 2) NOT NULL,
+	[trainer_notes] [nvarchar](max) NULL,
+	[video_url] [varchar](255) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[training_day_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Training_Plans]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Training_Plans](
+	[plan_id] [int] IDENTITY(1,1) NOT NULL,
+	[horse_id] [int] NOT NULL,
+	[trainer_id] [int] NOT NULL,
+	[plan_name] [nvarchar](100) NOT NULL,
+	[target_distance_m] [decimal](7, 2) NOT NULL,
+	[target_speed_kmh] [decimal](5, 2) NOT NULL,
+	[track_type] [nvarchar](50) NOT NULL,
+	[start_date] [date] NOT NULL,
+	[end_date] [date] NOT NULL,
+	[plan_status] [varchar](20) NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[plan_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Users]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Users](
+	[user_id] [int] IDENTITY(1,1) NOT NULL,
+	[username] [varchar](50) NOT NULL,
+	[password_hash] [varchar](255) NOT NULL,
+	[full_name] [nvarchar](100) NOT NULL,
+	[email] [varchar](100) NOT NULL,
+	[phone] [varchar](20) NULL,
+	[role_name] [varchar](30) NOT NULL,
+	[is_active] [bit] NOT NULL,
+	[created_at] [datetime] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[email] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+UNIQUE NONCLUSTERED 
+(
+	[username] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+/****** Object:  Table [dbo].[Veterinarian_Profiles]    Script Date: 03/10/2026 1:54:13 PM ******/
+SET ANSI_NULLS ON
+GO
+SET QUOTED_IDENTIFIER ON
+GO
+SET ANSI_PADDING ON
+GO
+CREATE TABLE [dbo].[Veterinarian_Profiles](
+	[user_id] [int] NOT NULL,
+	[vet_license_no] [varchar](50) NOT NULL,
+	[clinic_affiliation] [nvarchar](150) NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[user_id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+
+GO
+SET ANSI_PADDING OFF
+GO
+ALTER TABLE [dbo].[Audit_Logs] ADD  DEFAULT (getdate()) FOR [timestamp]
+GO
+ALTER TABLE [dbo].[Club_Manager_Profiles] ADD  DEFAULT ((0)) FOR [approval_limit]
+GO
+ALTER TABLE [dbo].[Competition_Entries] ADD  DEFAULT ((0)) FOR [entry_fee_charged]
+GO
+ALTER TABLE [dbo].[Competition_Entries] ADD  DEFAULT ((0)) FOR [transport_fee]
+GO
+ALTER TABLE [dbo].[Competition_Entries] ADD  DEFAULT ((0)) FOR [prize_awarded]
+GO
+ALTER TABLE [dbo].[Competition_Entries] ADD  DEFAULT ('Registered') FOR [registration_status]
+GO
+ALTER TABLE [dbo].[Daily_Tasks] ADD  DEFAULT ((0)) FOR [service_fee]
+GO
+ALTER TABLE [dbo].[Daily_Tasks] ADD  DEFAULT ((0)) FOR [is_completed]
+GO
+ALTER TABLE [dbo].[Diet_Plans] ADD  DEFAULT ((0)) FOR [grain_kg]
+GO
+ALTER TABLE [dbo].[Diet_Plans] ADD  DEFAULT ((0)) FOR [hay_kg]
+GO
+ALTER TABLE [dbo].[Diet_Plans] ADD  DEFAULT ((0)) FOR [daily_diet_fee]
+GO
+ALTER TABLE [dbo].[Diet_Plans] ADD  DEFAULT (getdate()) FOR [updated_at]
+GO
+ALTER TABLE [dbo].[External_Competitions] ADD  DEFAULT ((0)) FOR [standard_entry_fee]
+GO
+ALTER TABLE [dbo].[Horses] ADD  DEFAULT ('Thoroughbred') FOR [breed]
+GO
+ALTER TABLE [dbo].[Horses] ADD  DEFAULT ('Healthy') FOR [health_status]
+GO
+ALTER TABLE [dbo].[Horses] ADD  DEFAULT ((0)) FOR [is_locked]
+GO
+ALTER TABLE [dbo].[Horses] ADD  DEFAULT ((0.00)) FOR [prize_share_pct]
+GO
+ALTER TABLE [dbo].[Horses] ADD  DEFAULT (getdate()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[Incident_Reports] ADD  DEFAULT ('Low') FOR [severity]
+GO
+ALTER TABLE [dbo].[Incident_Reports] ADD  DEFAULT ((0)) FOR [is_resolved]
+GO
+ALTER TABLE [dbo].[Incident_Reports] ADD  DEFAULT (getdate()) FOR [reported_at]
+GO
+ALTER TABLE [dbo].[Inventory_Items] ADD  DEFAULT ((0)) FOR [unit_price]
+GO
+ALTER TABLE [dbo].[Inventory_Items] ADD  DEFAULT ((0)) FOR [current_stock]
+GO
+ALTER TABLE [dbo].[Inventory_Items] ADD  DEFAULT ((0)) FOR [min_safety_stock]
+GO
+ALTER TABLE [dbo].[Inventory_Items] ADD  DEFAULT (getdate()) FOR [last_restocked_at]
+GO
+ALTER TABLE [dbo].[Invoice_Line_Items] ADD  DEFAULT ((1)) FOR [quantity]
+GO
+ALTER TABLE [dbo].[Invoices] ADD  DEFAULT ((0)) FOR [subtotal_amount]
+GO
+ALTER TABLE [dbo].[Invoices] ADD  DEFAULT ((0)) FOR [prize_deduction_amount]
+GO
+ALTER TABLE [dbo].[Invoices] ADD  DEFAULT ((0)) FOR [final_payable_amount]
+GO
+ALTER TABLE [dbo].[Invoices] ADD  DEFAULT ('Pending') FOR [payment_status]
+GO
+ALTER TABLE [dbo].[Invoices] ADD  DEFAULT (getdate()) FOR [issued_at]
+GO
+ALTER TABLE [dbo].[Medical_Records] ADD  DEFAULT (getdate()) FOR [visit_date]
+GO
+ALTER TABLE [dbo].[Medical_Records] ADD  DEFAULT ((0)) FOR [treatment_fee]
+GO
+ALTER TABLE [dbo].[Medical_Records] ADD  DEFAULT ((0)) FOR [is_lockout_ordered]
+GO
+ALTER TABLE [dbo].[Payment_Transactions] ADD  DEFAULT ('Success') FOR [payment_status]
+GO
+ALTER TABLE [dbo].[Payment_Transactions] ADD  DEFAULT (getdate()) FOR [paid_at]
+GO
+ALTER TABLE [dbo].[Stalls] ADD  DEFAULT ('Clean') FOR [clean_status]
+GO
+ALTER TABLE [dbo].[Stalls] ADD  DEFAULT ((0)) FOR [monthly_base_fee]
+GO
+ALTER TABLE [dbo].[Stalls] ADD  DEFAULT (getdate()) FOR [updated_at]
+GO
+ALTER TABLE [dbo].[Trainer_Profiles] ADD  DEFAULT ((0)) FOR [experience_years]
+GO
+ALTER TABLE [dbo].[Training_Days] ADD  DEFAULT ((60)) FOR [duration_minutes]
+GO
+ALTER TABLE [dbo].[Training_Days] ADD  DEFAULT ((0)) FOR [is_over_threshold]
+GO
+ALTER TABLE [dbo].[Training_Days] ADD  DEFAULT ((0)) FOR [training_fee]
+GO
+ALTER TABLE [dbo].[Training_Plans] ADD  DEFAULT ('Active') FOR [plan_status]
+GO
+ALTER TABLE [dbo].[Users] ADD  DEFAULT ((1)) FOR [is_active]
+GO
+ALTER TABLE [dbo].[Users] ADD  DEFAULT (getdate()) FOR [created_at]
+GO
+ALTER TABLE [dbo].[Audit_Logs]  WITH CHECK ADD FOREIGN KEY([user_id])
+REFERENCES [dbo].[Users] ([user_id])
+ON DELETE SET NULL
+GO
+ALTER TABLE [dbo].[Club_Manager_Profiles]  WITH CHECK ADD FOREIGN KEY([user_id])
+REFERENCES [dbo].[Users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Competition_Entries]  WITH CHECK ADD FOREIGN KEY([competition_id])
+REFERENCES [dbo].[External_Competitions] ([competition_id])
+GO
+ALTER TABLE [dbo].[Competition_Entries]  WITH CHECK ADD FOREIGN KEY([horse_id])
+REFERENCES [dbo].[Horses] ([horse_id])
+GO
+ALTER TABLE [dbo].[Daily_Tasks]  WITH CHECK ADD FOREIGN KEY([groom_id])
+REFERENCES [dbo].[Users] ([user_id])
+GO
+ALTER TABLE [dbo].[Daily_Tasks]  WITH CHECK ADD FOREIGN KEY([horse_id])
+REFERENCES [dbo].[Horses] ([horse_id])
+GO
+ALTER TABLE [dbo].[Diet_Plans]  WITH CHECK ADD FOREIGN KEY([horse_id])
+REFERENCES [dbo].[Horses] ([horse_id])
+GO
+ALTER TABLE [dbo].[Groom_Profiles]  WITH CHECK ADD FOREIGN KEY([user_id])
+REFERENCES [dbo].[Users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Horse_Owner_Profiles]  WITH CHECK ADD FOREIGN KEY([user_id])
+REFERENCES [dbo].[Users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Horses]  WITH CHECK ADD FOREIGN KEY([owner_id])
+REFERENCES [dbo].[Users] ([user_id])
+GO
+ALTER TABLE [dbo].[Horses]  WITH CHECK ADD FOREIGN KEY([stall_id])
+REFERENCES [dbo].[Stalls] ([stall_id])
+GO
+ALTER TABLE [dbo].[Incident_Reports]  WITH CHECK ADD FOREIGN KEY([groom_id])
+REFERENCES [dbo].[Users] ([user_id])
+GO
+ALTER TABLE [dbo].[Incident_Reports]  WITH CHECK ADD FOREIGN KEY([horse_id])
+REFERENCES [dbo].[Horses] ([horse_id])
+GO
+ALTER TABLE [dbo].[Injury_Marks]  WITH CHECK ADD FOREIGN KEY([record_id])
+REFERENCES [dbo].[Medical_Records] ([record_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Invoice_Line_Items]  WITH CHECK ADD FOREIGN KEY([invoice_id])
+REFERENCES [dbo].[Invoices] ([invoice_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Invoices]  WITH CHECK ADD FOREIGN KEY([horse_id])
+REFERENCES [dbo].[Horses] ([horse_id])
+GO
+ALTER TABLE [dbo].[Invoices]  WITH CHECK ADD FOREIGN KEY([owner_id])
+REFERENCES [dbo].[Users] ([user_id])
+GO
+ALTER TABLE [dbo].[Medical_Records]  WITH CHECK ADD FOREIGN KEY([horse_id])
+REFERENCES [dbo].[Horses] ([horse_id])
+GO
+ALTER TABLE [dbo].[Medical_Records]  WITH CHECK ADD FOREIGN KEY([vet_id])
+REFERENCES [dbo].[Users] ([user_id])
+GO
+ALTER TABLE [dbo].[Payment_Transactions]  WITH CHECK ADD FOREIGN KEY([invoice_id])
+REFERENCES [dbo].[Invoices] ([invoice_id])
+GO
+ALTER TABLE [dbo].[Prescription_Items]  WITH CHECK ADD FOREIGN KEY([item_id])
+REFERENCES [dbo].[Inventory_Items] ([item_id])
+GO
+ALTER TABLE [dbo].[Prescription_Items]  WITH CHECK ADD FOREIGN KEY([record_id])
+REFERENCES [dbo].[Medical_Records] ([record_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Task_Material_Usage]  WITH CHECK ADD FOREIGN KEY([item_id])
+REFERENCES [dbo].[Inventory_Items] ([item_id])
+GO
+ALTER TABLE [dbo].[Task_Material_Usage]  WITH CHECK ADD FOREIGN KEY([task_id])
+REFERENCES [dbo].[Daily_Tasks] ([task_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Trainer_Profiles]  WITH CHECK ADD FOREIGN KEY([user_id])
+REFERENCES [dbo].[Users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Training_Days]  WITH CHECK ADD FOREIGN KEY([groom_id])
+REFERENCES [dbo].[Users] ([user_id])
+GO
+ALTER TABLE [dbo].[Training_Days]  WITH CHECK ADD FOREIGN KEY([plan_id])
+REFERENCES [dbo].[Training_Plans] ([plan_id])
+GO
+ALTER TABLE [dbo].[Training_Days]  WITH CHECK ADD FOREIGN KEY([trainer_id])
+REFERENCES [dbo].[Users] ([user_id])
+GO
+ALTER TABLE [dbo].[Training_Plans]  WITH CHECK ADD FOREIGN KEY([horse_id])
+REFERENCES [dbo].[Horses] ([horse_id])
+GO
+ALTER TABLE [dbo].[Training_Plans]  WITH CHECK ADD FOREIGN KEY([trainer_id])
+REFERENCES [dbo].[Users] ([user_id])
+GO
+ALTER TABLE [dbo].[Veterinarian_Profiles]  WITH CHECK ADD FOREIGN KEY([user_id])
+REFERENCES [dbo].[Users] ([user_id])
+ON DELETE CASCADE
+GO
+ALTER TABLE [dbo].[Competition_Entries]  WITH CHECK ADD  CONSTRAINT [CHK_Entry_Status] CHECK  (([registration_status]='Withdrawn' OR [registration_status]='Registered' OR [registration_status]='Approved' OR [registration_status]='Rejected' OR [registration_status]='Finished'))
+GO
+ALTER TABLE [dbo].[Competition_Entries] CHECK CONSTRAINT [CHK_Entry_Status]
+GO
+ALTER TABLE [dbo].[Daily_Tasks]  WITH CHECK ADD  CONSTRAINT [CHK_Task_Type] CHECK  (([task_type]='Exercise Walk' OR [task_type]='Hoof Care' OR [task_type]='Feeding' OR [task_type]='Stall Cleaning' OR [task_type]='Grooming & Bath' OR [task_type]='Ice Bath Therapy'))
+GO
+ALTER TABLE [dbo].[Daily_Tasks] CHECK CONSTRAINT [CHK_Task_Type]
+GO
+ALTER TABLE [dbo].[Diet_Plans]  WITH CHECK ADD  CONSTRAINT [CHK_Meal_Time] CHECK  (([meal_time]='Morning' OR [meal_time]='Noon' OR [meal_time]='Evening'))
+GO
+ALTER TABLE [dbo].[Diet_Plans] CHECK CONSTRAINT [CHK_Meal_Time]
+GO
+ALTER TABLE [dbo].[Horses]  WITH CHECK ADD  CONSTRAINT [CHK_Horse_Gender] CHECK  (([gender]='Colt' OR [gender]='Filly' OR [gender]='Stallion' OR [gender]='Mare' OR [gender]='Gelding'))
+GO
+ALTER TABLE [dbo].[Horses] CHECK CONSTRAINT [CHK_Horse_Gender]
+GO
+ALTER TABLE [dbo].[Horses]  WITH CHECK ADD  CONSTRAINT [CHK_Horse_Health] CHECK  (([health_status]='Healthy' OR [health_status]='Need_Check' OR [health_status]='Injured' OR [health_status]='Isolated'))
+GO
+ALTER TABLE [dbo].[Horses] CHECK CONSTRAINT [CHK_Horse_Health]
+GO
+ALTER TABLE [dbo].[Horses]  WITH CHECK ADD  CONSTRAINT [CHK_Horse_Weight] CHECK  (([weight_kg]>(0)))
+GO
+ALTER TABLE [dbo].[Horses] CHECK CONSTRAINT [CHK_Horse_Weight]
+GO
+ALTER TABLE [dbo].[Incident_Reports]  WITH CHECK ADD  CONSTRAINT [CHK_Incident_Severity] CHECK  (([severity]='Low' OR [severity]='Medium' OR [severity]='High'))
+GO
+ALTER TABLE [dbo].[Incident_Reports] CHECK CONSTRAINT [CHK_Incident_Severity]
+GO
+ALTER TABLE [dbo].[Injury_Marks]  WITH CHECK ADD  CONSTRAINT [CHK_Injury_Severity] CHECK  (([severity_level]='Minor' OR [severity_level]='Moderate' OR [severity_level]='Severe'))
+GO
+ALTER TABLE [dbo].[Injury_Marks] CHECK CONSTRAINT [CHK_Injury_Severity]
+GO
+ALTER TABLE [dbo].[Inventory_Items]  WITH CHECK ADD  CONSTRAINT [CHK_Item_Cat] CHECK  (([category]='Supplement' OR [category]='Feed' OR [category]='Hay' OR [category]='Medication' OR [category]='Tool' OR [category]='Bedding'))
+GO
+ALTER TABLE [dbo].[Inventory_Items] CHECK CONSTRAINT [CHK_Item_Cat]
+GO
+ALTER TABLE [dbo].[Inventory_Items]  WITH CHECK ADD  CONSTRAINT [CHK_Item_Stock] CHECK  (([current_stock]>=(0) AND [min_safety_stock]>=(0)))
+GO
+ALTER TABLE [dbo].[Inventory_Items] CHECK CONSTRAINT [CHK_Item_Stock]
+GO
+ALTER TABLE [dbo].[Invoice_Line_Items]  WITH CHECK ADD  CONSTRAINT [CHK_Expense_Category] CHECK  (([expense_category]='Other' OR [expense_category]='Diet_Extra' OR [expense_category]='Competition' OR [expense_category]='Daily_Care' OR [expense_category]='Training' OR [expense_category]='Medication' OR [expense_category]='Medical' OR [expense_category]='Boarding'))
+GO
+ALTER TABLE [dbo].[Invoice_Line_Items] CHECK CONSTRAINT [CHK_Expense_Category]
+GO
+ALTER TABLE [dbo].[Invoices]  WITH CHECK ADD  CONSTRAINT [CHK_Invoice_Status] CHECK  (([payment_status]='Cancelled' OR [payment_status]='Overdue' OR [payment_status]='Paid' OR [payment_status]='Partially_Paid' OR [payment_status]='Pending' OR [payment_status]='Draft'))
+GO
+ALTER TABLE [dbo].[Invoices] CHECK CONSTRAINT [CHK_Invoice_Status]
+GO
+ALTER TABLE [dbo].[Payment_Transactions]  WITH CHECK ADD  CONSTRAINT [CHK_Payment_Trans_Status] CHECK  (([payment_status]='Refunded' OR [payment_status]='Pending_Verification' OR [payment_status]='Failed' OR [payment_status]='Success'))
+GO
+ALTER TABLE [dbo].[Payment_Transactions] CHECK CONSTRAINT [CHK_Payment_Trans_Status]
+GO
+ALTER TABLE [dbo].[Stalls]  WITH CHECK ADD  CONSTRAINT [CHK_Stall_Status] CHECK  (([clean_status]='Clean' OR [clean_status]='Needs Cleaning' OR [clean_status]='Under Maintenance'))
+GO
+ALTER TABLE [dbo].[Stalls] CHECK CONSTRAINT [CHK_Stall_Status]
+GO
+ALTER TABLE [dbo].[Training_Days]  WITH CHECK ADD  CONSTRAINT [CHK_Perf_Score] CHECK  (([performance_score]>=(1) AND [performance_score]<=(5)))
+GO
+ALTER TABLE [dbo].[Training_Days] CHECK CONSTRAINT [CHK_Perf_Score]
+GO
+ALTER TABLE [dbo].[Training_Plans]  WITH CHECK ADD  CONSTRAINT [CHK_Plan_Dates] CHECK  (([end_date]>=[start_date]))
+GO
+ALTER TABLE [dbo].[Training_Plans] CHECK CONSTRAINT [CHK_Plan_Dates]
+GO
+ALTER TABLE [dbo].[Training_Plans]  WITH CHECK ADD  CONSTRAINT [CHK_Plan_Status] CHECK  (([plan_status]='Active' OR [plan_status]='Completed' OR [plan_status]='Cancelled'))
+GO
+ALTER TABLE [dbo].[Training_Plans] CHECK CONSTRAINT [CHK_Plan_Status]
+GO
+ALTER TABLE [dbo].[Training_Plans]  WITH CHECK ADD  CONSTRAINT [CHK_Track_Type] CHECK  (([track_type]='Turf' OR [track_type]='Dirt' OR [track_type]='Synthetic'))
+GO
+ALTER TABLE [dbo].[Training_Plans] CHECK CONSTRAINT [CHK_Track_Type]
+GO
+ALTER TABLE [dbo].[Users]  WITH CHECK ADD  CONSTRAINT [CHK_User_Role] CHECK  (([role_name]='Club Manager' OR [role_name]='Head Trainer' OR [role_name]='Veterinarian' OR [role_name]='Groom' OR [role_name]='Horse Owner'))
+GO
+ALTER TABLE [dbo].[Users] CHECK CONSTRAINT [CHK_User_Role]
+GO
