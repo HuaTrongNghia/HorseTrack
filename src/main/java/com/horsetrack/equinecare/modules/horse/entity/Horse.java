@@ -1,6 +1,5 @@
 package com.horsetrack.equinecare.modules.horse.entity;
 
-import com.horsetrack.equinecare.common.enums.HealthStatus;
 import com.horsetrack.equinecare.modules.auth.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -40,12 +39,14 @@ public class Horse {
     @Column(name = "weight_kg", nullable = false, precision = 6, scale = 2)
     private BigDecimal weightKg;
 
-    @Enumerated(EnumType.STRING)
     @Column(name = "health_status", nullable = false, length = 20)
-    private HealthStatus healthStatus;
+    private String healthStatus;
 
     @Column(name = "is_locked", nullable = false)
     private Boolean isLocked;
+
+    @Column(name = "prize_share_pct", precision = 5, scale = 2)
+    private BigDecimal prizeSharePct;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "owner_id", nullable = false)
@@ -57,12 +58,4 @@ public class Horse {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
-
-    public Boolean getLocked() {
-        return isLocked;
-    }
-
-    public void setLocked(Boolean locked) {
-        isLocked = locked;
-    }
 }
