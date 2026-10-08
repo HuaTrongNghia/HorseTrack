@@ -17,7 +17,7 @@ public class SecurityConfig {
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http.csrf(AbstractHttpConfigurer::disable) // Tắt bảo vệ CSRF để có thể test API từ bên ngoài
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/accounts/**", "/index.html").permitAll() // Mở cửa tự do cho API accounts và file giao diện
+                        .requestMatchers("/api/accounts/**", "/api/training/**", "/index.html").permitAll()
                         .anyRequest().authenticated() // Các API khác sau này sẽ yêu cầu đăng nhập
                 );
         return http.build();
