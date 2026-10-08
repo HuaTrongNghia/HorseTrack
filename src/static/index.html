@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Giao Diện Web - HorseTrack</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; padding: 50px; text-align: center; }
+        .box { background: white; border: 1px solid #ccc; padding: 30px; width: 350px; margin: 0 auto; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        input, button { margin: 10px 0; padding: 12px; width: 90%; border-radius: 5px; border: 1px solid #ccc; box-sizing: border-box; }
+        button { background-color: #007bff; color: white; font-weight: bold; cursor: pointer; border: none; }
+        button:hover { background-color: #0056b3; }
+        .btn-logout { background-color: #dc3545; }
+        .btn-logout:hover { background-color: #c82333; }
+        #welcome-screen { display: none; }
+        #error-msg { color: red; font-size: 14px; margin-top: 10px; }
+    </style>
+</head>
+<body>
+
+<!-- Màn hình 1: Form Đăng nhập -->
+<div class="box" id="login-screen">
+    <h2>🏇 HorseTrack Login</h2>
+    <input type="text" id="username" placeholder="Tên đăng nhập" value="chu_ngua_lanhoang">
+    <input type="password" id="password" placeholder="Mật khẩu" value="Password123!">
+    <button onclick="testLoginAPI()">Đăng Nhập Ngay</button>
+    <p id="error-msg"></p>
+</div>
+
+<!-- Màn hình 2: Trang chủ (Sau khi đăng nhập) -->
+<div class="box" id="welcome-screen">
+    <h2>🎉 Đăng nhập thành công!</h2>
+    <h3 id="welcome-text" style="color: #28a745;"></h3>
+    <p>Hệ thống tự động lưu bạn vào bộ nhớ trình duyệt (localStorage).</p>
+    <p>Bấm F5 tải lại trang web, bạn sẽ thấy mình không bị văng ra ngoài!</p>
+    <button class="btn-logout" onclick="testLogout()">Đăng Xuất</button>
+</div>
+
+<script>
+    // 1. Tự động kiểm tra localStorage ngay khi vừa mở trình duyệt
+    window.onload = function() {
+        const savedUser = localStorage.getItem("horseTrackUser");
+        if (savedUser) {
+            const user = JSON.parse(savedUser);
+            showWelcomeScreen(user.fullName);
+        }
+    };
+
+    // 2. Hàm gọi trực tiếp API Spring Boot của bạn
+    async function testLoginAPI() {
+        const u = document.getElementById("username").value;
+        const p = document.getElementById("password").value;
+
+        try {
+            // Gọi tới backend localhost:8080
+            const response = await fetch('/api/accounts/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: u, password: p })
+            });
+
+            const result = await response.json();
+
+            if (response.ok) {
+                // Thành công: Ghi vào localStorage và chuyển giao diện
+                localStorage.setItem("horseTrackUser", JSON.stringify(result.data));
+                showWelcomeScreen(result.data.fullName);
+            } else {
+                // Thất bại: In câu lỗi từ Backend lên màn hình
+                document.getElementById("error-msg").innerText = result.message || "Lỗi đăng nhập!";
+            }
+        } catch (error) {
+            document.getElementById("error-msg").innerText = "Máy chủ Spring Boot chưa bật!";
+        }
+    }
+
+    // 3. Hàm Đăng xuất: Xóa bộ nhớ và quay lại màn hình Login
+    function testLogout() {
+        localStorage.removeItem("horseTrackUser");
+        document.getElementById("login-screen").style.display = "block";
+        document.getElementById("welcome-screen").style.display = "none";
+        document.getElementById("error-msg").innerText = "";
+    }
+
+    function showWelcomeScreen(fullName) {
+        document.getElementById("login-screen").style.display = "none";
+        document.getElementById("welcome-screen").style.display = "block";
+        document.getElementById("welcome-text").innerText = "Xin chào Chủ Ngựa: " + fullName;
+    }
+</script>
+</body>
+</html>

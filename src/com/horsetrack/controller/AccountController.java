@@ -1,7 +1,11 @@
 package com.horsetrack.controller;
 
+import com.horsetrack.dto.LoginDTO;
 import com.horsetrack.dto.OwnerRegistrationDTO;
+import com.horsetrack.entity.User;
 import com.horsetrack.response.ApiResponse;
+import com.horsetrack.service.AccountService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -10,9 +14,15 @@ import org.springframework.web.bind.annotation.*;
 @CrossOrigin(origins = "*") // Mở CORS cho Frontend React
 public class AccountController {
 
+    @Autowired
+    private AccountService accountService;
+
+    // ==========================================
+    // 1. API ĐĂNG KÝ TÀI KHOẢN CHỦ NGỰA
+    // ==========================================
     @PostMapping("/register-owner")
     public ResponseEntity<ApiResponse<String>> registerOwner(
-            @RequestBody OwnerRegistrationDTO dto) { // Dùng @RequestBody để nhận JSON từ React
+            @RequestBody OwnerRegistrationDTO dto) {
 
         try {
             // 1. Kiểm tra bắt buộc đồng ý điều khoản
@@ -33,21 +43,44 @@ public class AccountController {
                         .body(new ApiResponse<>(400, "Mật khẩu phải có tối thiểu 8 ký tự.", null));
             }
 
-            // TODO: Bổ sung logic kiểm tra Email đã tồn tại trong DB chưa
-            // TODO: Mã hóa mật khẩu (dùng BCrypt) trước khi lưu
-            // ownerService.createOwnerAccount(com.horsetrack.dto);
+            // 4. Gọi AccountService để xử lý lưu vào Database (đã bao gồm kiểm tra trùng lặp và mã hóa BCrypt)
+            accountService.createOwnerAccount(dto);
 
-            System.out.println("Đã tiếp nhận yêu cầu tạo tài khoản cho Email: " + dto.getEmail());
+            System.out.println("Đã tạo tài khoản thành công cho Email: " + dto.getEmail());
 
-            // 4. Phản hồi thành công
+            // 5. Phản hồi thành công
             return ResponseEntity.ok(
                     new ApiResponse<>(200, "Tạo tài khoản Chủ ngựa thành công!", null)
             );
 
         } catch (Exception e) {
             e.printStackTrace();
-            return ResponseEntity.internalServerError()
-                    .body(new ApiResponse<>(500, "Lỗi hệ thống: " + e.getMessage(), null));
+            // Bắt lỗi từ Service (ví dụ: trùng email, trùng username) và báo lỗi về cho Frontend
+            return ResponseEntity.badRequest()
+                    .body(new ApiResponse<>(400, e.getMessage(), null));
+        }
+    }
+
+    // ==========================================
+    // 2. API ĐĂNG NHẬP
+    // ==========================================
+    @PostMapping("/login")
+    public ResponseEntity<ApiResponse<User>> login(@RequestBody LoginDTO loginDTO) {
+        try {
+            // Gọi Service để kiểm tra tài khoản và mật khẩu
+            User loggedInUser = accountService.login(loginDTO);
+
+            // BẮT BUỘC: Xóa mật khẩu đã mã hóa trước khi gửi về Frontend để bảo mật
+            loggedInUser.setPasswordHash(null);
+
+            // Trả về thông tin User nếu đăng nhập thành công
+            return ResponseEntity.ok(
+                    new ApiResponse<>(200, "Đăng nhập thành công!", loggedInUser)
+            );
+        } catch (Exception e) {
+            // Báo lỗi sai tài khoản hoặc mật khẩu
+            return ResponseEntity.badRequest()
+                    .body(new ApiResponse<>(400, e.getMessage(), null));
         }
     }
 }

@@ -1,12 +1,13 @@
 package com.horsetrack.service;
 
+import com.horsetrack.dto.LoginDTO; // Đã bổ sung import cho LoginDTO
 import com.horsetrack.dto.OwnerRegistrationDTO;
 import com.horsetrack.entity.HorseOwnerProfile;
 import com.horsetrack.entity.User;
 import com.horsetrack.repository.HorseOwnerProfileRepository;
 import com.horsetrack.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.security.crypto.password.PasswordEncoder; // Nhớ import thư viện này
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -20,7 +21,7 @@ public class AccountService {
     private HorseOwnerProfileRepository profileRepository;
 
     @Autowired
-    private PasswordEncoder passwordEncoder; // Gọi máy xay BCrypt ra đây
+    private PasswordEncoder passwordEncoder;
 
     @Transactional
     public void createOwnerAccount(OwnerRegistrationDTO dto) throws Exception {
@@ -50,5 +51,24 @@ public class AccountService {
         profile.setTaxCode(dto.getTaxCode());
 
         profileRepository.save(profile);
+    }
+
+    public User login(LoginDTO dto) throws Exception {
+        // 1. Tìm tài khoản trong Database
+        User user = userRepository.findByUsername(dto.getUsername())
+                .orElseThrow(() -> new Exception("Sai tên đăng nhập hoặc mật khẩu!"));
+
+        // 2. Dùng máy xay BCrypt để so sánh mật khẩu người dùng nhập với mật khẩu mã hóa trong DB
+        if (!passwordEncoder.matches(dto.getPassword(), user.getPasswordHash())) {
+            throw new Exception("Sai tên đăng nhập hoặc mật khẩu!");
+        }
+
+        // 3. Kiểm tra xem tài khoản có bị vô hiệu hóa không
+        if (!user.isActive()) {
+            throw new Exception("Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.");
+        }
+
+        // 4. Nếu mọi thứ hợp lệ, trả thông tin user về cho Frontend
+        return user;
     }
 }
