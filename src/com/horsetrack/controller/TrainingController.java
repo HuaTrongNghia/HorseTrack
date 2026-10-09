@@ -1,8 +1,10 @@
 package com.horsetrack.controller;
 
-import com.horsetrack.dto.TrainingPlanDTO;
-import com.horsetrack.dto.TrainingMetricDTO;
 import com.horsetrack.dto.EvaluationDTO;
+import com.horsetrack.dto.TrainingMetricDTO;
+import com.horsetrack.dto.TrainingPlanDTO;
+import com.horsetrack.dto.UpdateTaskStatusDTO;
+import com.horsetrack.entity.TrainingSession;
 import com.horsetrack.response.ApiResponse;
 import com.horsetrack.service.TrainingService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/training")
+@CrossOrigin(origins = "*") // Cho phép Frontend gọi API
 public class TrainingController {
 
     @Autowired
@@ -38,5 +41,17 @@ public class TrainingController {
     public ResponseEntity<ApiResponse> evaluateSession(@RequestBody EvaluationDTO request) {
         ApiResponse response = trainingService.submitEvaluation(request);
         return ResponseEntity.ok(response);
+    }
+
+    // BỔ SUNG: API Cập nhật trạng thái nhiệm vụ (COMPLETED / CANCELLED từ Modal)
+    // Đường dẫn: PUT http://localhost:8080/api/training/tasks/update-status
+    @PutMapping("/tasks/update-status")
+    public ResponseEntity<ApiResponse<TrainingSession>> updateTaskStatus(@RequestBody UpdateTaskStatusDTO request) {
+        try {
+            ApiResponse<TrainingSession> response = trainingService.updateTaskStatus(request);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(new ApiResponse<>(400, e.getMessage(), null));
+        }
     }
 }
