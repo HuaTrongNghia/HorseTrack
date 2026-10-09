@@ -1,19 +1,20 @@
 package com.horsetrack.equinecare.modules.auth.controller;
 
 import com.horsetrack.equinecare.common.base.ApiResponse;
-import com.horsetrack.equinecare.modules.auth.dto.RegisterRequestDTO;
-import com.horsetrack.equinecare.modules.auth.entity.User;
+import com.horsetrack.equinecare.modules.auth.dto.OwnerRegisterRequestDTO;
+import com.horsetrack.equinecare.modules.auth.dto.StaffCreateRequestDTO;
 import com.horsetrack.equinecare.modules.auth.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/v1/auth")
-@CrossOrigin(origins = "*") // Cho phép Frontend (React/Vue/HTML) gọi API từ các port khác nhau mà không bị lỗi CORS
+@CrossOrigin(origins = "*")
 @Tag(name = "Authentication & Onboarding", description = "Các API xác thực và tiếp nhận tài khoản")
 public class AuthController {
 
@@ -23,29 +24,36 @@ public class AuthController {
         this.authService = authService;
     }
 
-    /**
-     * Endpoint tiếp nhận thông tin từ form đăng ký (Create Your Account).
-     * Method: POST
-     * URL: <a href="http://localhost:8080/api/v1/auth/register">http://localhost:8080/api/v1/auth/register</a>
-     */
-    @PostMapping("/register")
-    @Operation(summary = "Đăng ký tài khoản thành viên mới", description = "Tiếp nhận Full Name, Email, Phone và Role để tạo tài khoản mới.")
-    public ResponseEntity<ApiResponse<User>> registerAccount(@Valid @RequestBody RegisterRequestDTO request) {
+    @PostMapping("/register-owner")
+    @Operation(summary = "Khách hàng tự đăng ký", description = "Dành cho Horse Owner tự tạo tài khoản.")
+    public ResponseEntity<ApiResponse<Void>> registerOwner(@Valid @RequestBody OwnerRegisterRequestDTO request) {
         try {
-            User createdUser = authService.register(request);
-
-            // Xóa hash mật khẩu trước khi trả về Frontend nhằm bảo mật tuyệt đối
-            createdUser.setPasswordHash(null);
-
+            authService.registerOwner(request);
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.ok("Tạo tài khoản thành công!", createdUser));
-
+                    .body(ApiResponse.ok("Tạo tài khoản chủ ngựa thành công!", null));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.error(ex.getMessage()));
         } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ApiResponse.error("Không thể hoàn tất đăng ký: " + ex.getMessage()));
+        }
+    }
+
+    @PostMapping("/staff/create")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @Operation(summary = "Quản lý tạo nhân viên", description = "Chỉ dành cho Club Manager tạo tài khoản Staff.")
+    public ResponseEntity<ApiResponse<Void>> createStaff(@Valid @RequestBody StaffCreateRequestDTO request) {
+        try {
+            authService.createStaff(request);
+            return ResponseEntity.status(HttpStatus.CREATED)
+                    .body(ApiResponse.ok("Tạo tài khoản nhân viên thành công!", null));
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(ex.getMessage()));
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.error("Không thể hoàn tất tạo tài khoản: " + ex.getMessage()));
         }
     }
 }

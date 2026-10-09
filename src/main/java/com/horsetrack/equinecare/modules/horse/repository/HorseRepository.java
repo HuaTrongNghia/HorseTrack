@@ -14,4 +14,9 @@ public interface HorseRepository extends JpaRepository<Horse, Integer> {
     
     org.springframework.data.domain.Page<Horse> findByStallIsNull(org.springframework.data.domain.Pageable pageable);
     org.springframework.data.domain.Page<Horse> findByStallIsNotNull(org.springframework.data.domain.Pageable pageable);
+
+    long countByHealthStatus(String healthStatus);
+
+    @org.springframework.data.jpa.repository.Query("SELECT h FROM Horse h WHERE h.isLocked = false AND h.horseId NOT IN (SELECT tp.horse.horseId FROM TrainingPlan tp WHERE tp.status = 'ACTIVE')")
+    List<Horse> findAvailableHorses();
 }

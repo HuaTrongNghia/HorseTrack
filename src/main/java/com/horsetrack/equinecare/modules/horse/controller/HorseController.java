@@ -3,6 +3,8 @@ package com.horsetrack.equinecare.modules.horse.controller;
 import com.horsetrack.equinecare.common.base.ApiResponse;
 import com.horsetrack.equinecare.modules.horse.dto.*;
 import com.horsetrack.equinecare.modules.horse.service.HorseService;
+import com.horsetrack.equinecare.modules.training.dto.AvailableHorseDTO;
+import com.horsetrack.equinecare.modules.training.service.TrainingPlanService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
@@ -16,9 +18,11 @@ import java.util.List;
 public class HorseController {
 
     private final HorseService horseService;
+    private final TrainingPlanService trainingPlanService;
 
-    public HorseController(HorseService horseService) {
+    public HorseController(HorseService horseService, TrainingPlanService trainingPlanService) {
         this.horseService = horseService;
+        this.trainingPlanService = trainingPlanService;
     }
 
     @PostMapping("/register")
@@ -32,6 +36,12 @@ public class HorseController {
     public ResponseEntity<ApiResponse<List<HorseResponseDTO>>> getMyHorses(@PathVariable Integer ownerId) {
         List<HorseResponseDTO> response = horseService.getMyHorses(ownerId);
         return ResponseEntity.ok(ApiResponse.ok("Fetched my horses successfully", response));
+    }
+
+    @GetMapping("/available-for-training")
+    public ResponseEntity<ApiResponse<List<AvailableHorseDTO>>> getAvailableHorsesForTraining() {
+        List<AvailableHorseDTO> response = trainingPlanService.getAvailableHorses();
+        return ResponseEntity.ok(ApiResponse.ok("Fetched available horses successfully", response));
     }
 
     @GetMapping

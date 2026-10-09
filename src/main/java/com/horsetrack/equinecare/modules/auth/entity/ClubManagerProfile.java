@@ -6,7 +6,11 @@ import java.math.BigDecimal;
 
 @Entity
 @Table(name = "Club_Manager_Profiles")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class ClubManagerProfile {
     @Id
     @Column(name = "user_id")

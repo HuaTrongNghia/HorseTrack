@@ -5,7 +5,11 @@ import lombok.*;
 
 @Entity
 @Table(name = "Trainer_Profiles")
-@Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class TrainerProfile {
     @Id
     @Column(name = "user_id")
