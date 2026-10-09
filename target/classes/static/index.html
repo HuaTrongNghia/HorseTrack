@@ -3,245 +3,458 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Giao Diện Web - HorseTrack</title>
+    <title>EquineCarePro - Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        :root {
+            --primary: #4338ca;
+            --primary-hover: #3730a3;
+            --secondary: #10b981;
+            --danger: #ef4444;
+            --warning: #f59e0b;
+            --bg-color: #f3f4f6;
+            --text-main: #1f2937;
+            --text-muted: #6b7280;
+            --card-bg: #ffffff;
+            --border: #e5e7eb;
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7f6;
-            padding: 20px;
-            text-align: center;
+            font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
         }
 
-        .box {
-            background: white;
-            border: 1px solid #ccc;
-            padding: 30px;
-            width: 400px;
-            margin: 0 auto;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        /* Top Navigation Bar */
+        .navbar {
+            background-color: var(--card-bg);
+            border-bottom: 1px solid var(--border);
+            padding: 0 30px;
+            height: 70px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            position: sticky;
+            top: 0;
+            z-index: 100;
         }
 
-        input, button {
-            margin: 10px 0;
-            padding: 10px;
-            width: 90%;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            box-sizing: border-box;
-        }
+        .navbar-brand { font-size: 22px; font-weight: 700; color: var(--primary); display: flex; align-items: center; gap: 10px; }
+        .user-profile { display: flex; align-items: center; gap: 15px; }
 
-        .checkbox-group {
-            text-align: left;
-            margin-left: 5%;
-            font-size: 14px;
-            color: #555;
+        .nav-dev-tool {
+            display: flex; align-items: center; gap: 8px; background: #fffbeb; padding: 6px 12px;
+            border-radius: 6px; border: 1px dashed #f59e0b; margin-right: 15px;
         }
+        .nav-dev-tool select { border: 1px solid #fcd34d; background: white; padding: 4px 8px; border-radius: 4px; font-size: 13px; color: #b45309; outline: none; cursor: pointer; }
 
-        .checkbox-group input {
-            width: auto;
-            margin-right: 10px;
-        }
+        .role-badge { background-color: #e0e7ff; color: var(--primary); padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
 
-        button {
-            background-color: #007bff;
-            color: white;
-            font-weight: bold;
-            cursor: pointer;
-            border: none;
-        }
+        .btn-logout { background-color: transparent; color: var(--text-muted); border: 1px solid var(--border); padding: 8px 15px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .btn-logout:hover { background-color: #fee2e2; color: var(--danger); border-color: #fca5a5; }
 
-        button:hover {
-            background-color: #0056b3;
-        }
+        /* Container & Cards */
+        .container { max-width: 1000px; margin: 40px auto; padding: 0 20px; flex: 1; width: 100%; box-sizing: border-box; }
+        .auth-container { max-width: 450px; margin: 80px auto; }
 
-        .btn-logout {
-            background-color: #dc3545;
-        }
+        .card { background: var(--card-bg); border-radius: 12px; border: 1px solid var(--border); padding: 30px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); margin-bottom: 25px; }
+        .welcome-header { margin-bottom: 30px; }
+        .welcome-header h2 { margin: 0 0 5px 0; font-size: 24px; }
+        .welcome-header p { margin: 0; color: var(--text-muted); }
 
-        .btn-logout:hover {
-            background-color: #c82333;
+        /* Form Elements */
+        .form-group { margin-bottom: 15px; text-align: left; }
+        .form-group label { display: block; margin-bottom: 5px; font-size: 14px; font-weight: 500; }
+        input[type="text"], input[type="password"], input[type="email"], input[type="number"], select, textarea {
+            width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 15px; box-sizing: border-box; transition: border-color 0.2s; font-family: inherit;
         }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.1); }
 
-        .btn-switch {
-            background-color: transparent;
-            color: #007bff;
-            border: 1px solid #007bff;
-        }
+        /* Buttons */
+        .btn { width: 100%; padding: 12px; border-radius: 8px; font-size: 15px; font-weight: 600; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: all 0.2s; }
+        .btn-primary { background-color: var(--primary); color: white; }
+        .btn-primary:hover { background-color: var(--primary-hover); }
+        .btn-success { background-color: var(--secondary); color: white; }
+        .btn-success:hover { background-color: #059669; }
+        .btn-warning { background-color: var(--warning); color: white; }
+        .btn-warning:hover { background-color: #d97706; }
+        .btn-danger { background-color: #fee2e2; color: var(--danger); }
+        .btn-danger:hover { background-color: #fecaca; }
+        .btn-outline { background-color: transparent; color: var(--primary); border: 1px solid var(--primary); margin-top: 15px; }
+        .btn-outline:hover { background-color: #f5f3ff; }
 
-        .btn-switch:hover {
-            background-color: #f8f9fa;
-            color: #0056b3;
-        }
+        /* Action Grid */
+        .action-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .action-module { background: #f9fafb; border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+        .action-module h3 { margin: 0 0 15px 0; font-size: 16px; color: var(--text-main); display: flex; align-items: center; gap: 8px; }
+        .action-module .btn { margin-bottom: 10px; }
 
-        #welcome-screen, #register-screen {
-            display: none;
+        /* MODAL (Cửa sổ nổi) */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5);
+            display: flex; align-items: center; justify-content: center; z-index: 1000; opacity: 0; visibility: hidden; transition: all 0.2s;
         }
+        .modal-overlay.active { opacity: 1; visibility: visible; }
+        .modal-content {
+            background: white; width: 500px; max-width: 90%; border-radius: 12px; padding: 25px;
+            transform: translateY(-20px); transition: transform 0.3s; box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+        .modal-overlay.active .modal-content { transform: translateY(0); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border); padding-bottom: 15px; margin-bottom: 15px; }
+        .modal-header h3 { margin: 0; font-size: 18px; color: var(--primary); }
+        .btn-close { background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); }
+        .btn-close:hover { color: var(--danger); }
 
-        .error-msg {
-            color: red;
-            font-size: 14px;
-            margin-top: 10px;
-        }
+        .two-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 
-        .success-msg {
-            color: green;
-            font-size: 14px;
-            margin-top: 10px;
-            font-weight: bold;
-        }
+        .hidden { display: none !important; }
+        .msg { font-size: 14px; margin-top: 10px; text-align: center; font-weight: 500; }
+        .msg.error { color: var(--danger); }
+        .msg.success { color: var(--secondary); }
+        hr { border: 0; height: 1px; background: var(--border); margin: 20px 0; }
     </style>
 </head>
 <body>
 
-<!-- MÀN HÌNH 1: FORM ĐĂNG NHẬP -->
-<div class="box" id="login-screen">
-    <h2>🏇 HorseTrack Login</h2>
-    <input type="text" id="username" placeholder="Tên đăng nhập" value="chu_ngua_lanhoang">
-    <input type="password" id="password" placeholder="Mật khẩu" value="Password123!">
-    <button onclick="testLoginAPI()">Đăng Nhập Ngay</button>
-    <p class="error-msg" id="login-msg"></p>
-    <hr style="border: 0.5px solid #eee; margin: 20px 0;">
-    <button class="btn-switch" onclick="switchScreen('register-screen')">Chưa có tài khoản? Đăng ký ngay</button>
-</div>
-
-<!-- MÀN HÌNH 2: FORM ĐĂNG KÝ -->
-<div class="box" id="register-screen">
-    <h2>📝 Đăng Ký Chủ Ngựa</h2>
-    <input type="text" id="reg-username" placeholder="Tên đăng nhập (*)">
-    <input type="text" id="reg-fullName" placeholder="Họ và tên (*)">
-    <input type="email" id="reg-email" placeholder="Email (*)">
-    <input type="text" id="reg-phone" placeholder="Số điện thoại">
-    <input type="password" id="reg-password" placeholder="Mật khẩu (tối thiểu 8 ký tự) (*)">
-    <input type="password" id="reg-confirmPassword" placeholder="Xác nhận mật khẩu (*)">
-    <input type="text" id="reg-billingAddress" placeholder="Địa chỉ thanh toán">
-    <input type="text" id="reg-taxCode" placeholder="Mã số thuế">
-    <div class="checkbox-group">
-        <label><input type="checkbox" id="reg-agreeToTerms"> Tôi đồng ý với Điều khoản (*) </label>
+<!-- THANH ĐIỀU HƯỚNG TOPBAR -->
+<nav class="navbar hidden" id="navbar">
+    <div class="navbar-brand">
+        <i class="fa-solid fa-horse-head"></i> EquineCarePro
     </div>
-    <button onclick="testRegisterAPI()" style="background-color: #28a745;">Đăng Ký</button>
-    <p id="reg-msg" class="error-msg"></p>
-    <hr style="border: 0.5px solid #eee; margin: 20px 0;">
-    <button class="btn-switch" onclick="switchScreen('login-screen')">Đã có tài khoản? Quay lại Đăng nhập</button>
+    <div class="user-profile">
+        <div class="nav-dev-tool">
+            <i class="fa-solid fa-code" style="color: #b45309;"></i>
+            <select id="dev-role-select" onchange="simulateRole(this.value)">
+                <option value="Horse Owner">Test: Horse Owner</option>
+                <option value="Head Trainer">Test: Head Trainer</option>
+                <option value="Groom">Test: Groom</option>
+            </select>
+        </div>
+        <span class="role-badge" id="nav-role">Role</span>
+        <span id="nav-name" style="font-weight: 500;">Tên User</span>
+        <button class="btn-logout" onclick="testLogout()"><i class="fa-solid fa-right-from-bracket"></i> Đăng xuất</button>
+    </div>
+</nav>
+
+<!-- MÀN HÌNH ĐĂNG NHẬP (Giữ nguyên) -->
+<div class="container auth-container" id="login-screen">
+    <div class="card" style="text-align: center;">
+        <i class="fa-solid fa-horse-head" style="font-size: 40px; color: var(--primary); margin-bottom: 15px;"></i>
+        <h2 style="margin-top: 0;">Đăng Nhập</h2>
+        <p style="color: var(--text-muted); margin-bottom: 25px;">Hệ thống Quản lý Huấn luyện Ngựa</p>
+        <div class="form-group"><input type="text" id="username" placeholder="Tên đăng nhập" value="chu_ngua_lanhoang"></div>
+        <div class="form-group"><input type="password" id="password" placeholder="Mật khẩu" value="Password123!"></div>
+        <button class="btn btn-primary" onclick="testLoginAPI()"><i class="fa-solid fa-arrow-right-to-bracket"></i> Đăng Nhập</button>
+        <p class="msg" id="login-msg"></p>
+        <button class="btn btn-outline" onclick="switchScreen('register-screen')">Tạo tài khoản Chủ Ngựa mới</button>
+    </div>
 </div>
 
-<!-- MÀN HÌNH 3: TRANG CHỦ -->
-<div class="box" id="welcome-screen">
-    <h2>🎉 Đăng nhập thành công!</h2>
-    <h3 id="welcome-text" style="color: #28a745;"></h3>
-    <p>Hệ thống tự động lưu bạn vào bộ nhớ trình duyệt (localStorage).</p>
-    <button class="btn-logout" onclick="testLogout()">Đăng Xuất</button>
+<!-- MÀN HÌNH ĐĂNG KÝ (Giữ nguyên) -->
+<div class="container auth-container" id="register-screen">
+    <div class="card">
+        <h2 style="margin-top: 0; text-align: center;">Đăng Ký Chủ Ngựa</h2>
+        <hr>
+        <div class="form-group"><input type="text" id="reg-username" placeholder="Tên đăng nhập (*)"></div>
+        <div class="form-group"><input type="text" id="reg-fullName" placeholder="Họ và tên (*)"></div>
+        <div class="form-group"><input type="email" id="reg-email" placeholder="Email (*)"></div>
+        <div class="form-group"><input type="password" id="reg-password" placeholder="Mật khẩu (*)"></div>
+        <div class="form-group"><input type="password" id="reg-confirmPassword" placeholder="Xác nhận mật khẩu (*)"></div>
+        <div class="form-group" style="display: flex; gap: 10px;">
+            <input type="checkbox" id="reg-agreeToTerms" style="width: auto;">
+            <label for="reg-agreeToTerms" style="margin: 0; line-height: 20px;">Tôi đồng ý với Điều khoản hệ thống</label>
+        </div>
+        <button class="btn btn-success" onclick="testRegisterAPI()">Đăng Ký Tài Khoản</button>
+        <p class="msg" id="reg-msg"></p>
+        <div style="text-align: center; margin-top: 15px;">
+            <a href="#" style="color: var(--primary); text-decoration: none; font-size: 14px;" onclick="switchScreen('login-screen')">
+                <i class="fa-solid fa-arrow-left"></i> Quay lại Đăng nhập
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- MÀN HÌNH DASHBOARD -->
+<div class="container hidden" id="dashboard-screen">
+    <div class="welcome-header">
+        <h2 id="welcome-text">Xin chào!</h2>
+        <p>Dưới đây là các tác vụ nghiệp vụ dành cho bạn trong ngày hôm nay.</p>
+    </div>
+
+    <!-- KHU VỰC HEAD TRAINER -->
+    <div id="trainer-actions" class="action-grid hidden">
+        <div class="action-module">
+            <h3><i class="fa-solid fa-clipboard-list" style="color: var(--primary);"></i> Flow 2.1: Lập giáo án</h3>
+            <button class="btn btn-primary" onclick="openModal('modal-training-plan')">Lập giáo án mới</button>
+        </div>
+        <div class="action-module">
+            <h3><i class="fa-solid fa-heart-pulse" style="color: var(--danger);"></i> Flow 2.2: Đánh giá & Xử lý</h3>
+            <button class="btn btn-warning" onclick="openModal('modal-alert-vet')"><i class="fa-solid fa-triangle-exclamation"></i> Báo cáo chấn thương (Dừng tập)</button>
+            <button class="btn btn-success" onclick="openModal('modal-evaluate')"><i class="fa-solid fa-star"></i> Đánh giá phong độ ngựa</button>
+        </div>
+    </div>
+
+    <!-- KHU VỰC GROOM -->
+    <div id="groom-actions" class="action-grid hidden">
+        <div class="action-module">
+            <h3><i class="fa-regular fa-calendar-check" style="color: var(--primary);"></i> Lịch phân công</h3>
+            <button class="btn btn-primary" onclick="mockAction('Đã xác nhận lịch dắt ngựa cho hôm nay!')">Xác nhận lịch mới</button>
+        </div>
+        <div class="action-module">
+            <h3><i class="fa-solid fa-stopwatch" style="color: var(--secondary);"></i> Flow 2.2: Buổi tập</h3>
+            <button class="btn btn-success" onclick="mockAction('Đã bắt đầu ghi nhận thời gian tập!')">Bắt đầu tập</button>
+            <div style="display: flex; gap: 10px; margin: 10px 0;">
+                <input type="number" id="groom-hr" placeholder="Nhịp tim (bpm)">
+                <input type="number" id="groom-speed" placeholder="Vận tốc (km/h)">
+            </div>
+            <button class="btn btn-primary" onclick="submitMetrics()"><i class="fa-solid fa-upload"></i> Gửi chỉ số đo lường</button>
+        </div>
+    </div>
+
+    <!-- KHU VỰC HORSE OWNER -->
+    <div id="owner-actions" class="action-grid hidden">
+        <div class="action-module" style="width: 100%; max-width: 500px;">
+            <h3><i class="fa-solid fa-chart-line" style="color: var(--primary);"></i> Theo dõi ngựa ký gửi</h3>
+            <button class="btn btn-primary" onclick="openModal('modal-owner-result')"><i class="fa-solid fa-file-waveform"></i> Xem nhật ký buổi tập gần nhất</button>
+            <button class="btn btn-danger" onclick="openModal('modal-owner-alert')"><i class="fa-solid fa-ban"></i> Thông báo từ hệ thống</button>
+        </div>
+    </div>
+</div>
+
+<!-- CÁC MODAL (CỬA SỔ NỔI) DÀNH CHO NGHIỆP VỤ -->
+
+<div class="modal-overlay" id="modal-training-plan">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-pen-to-square"></i> Lập Giáo Án Huấn Luyện</h3>
+            <button class="btn-close" onclick="closeModal('modal-training-plan')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="two-cols">
+            <div class="form-group">
+                <label>Chọn Ngựa cần huấn luyện:</label>
+                <select id="plan-horse">
+                    <option value="H001">Hắc Phong (H001) - Sẵn sàng</option>
+                    <option value="H002">Xích Thố (H002) - Đang nghỉ</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Phân công Groom (Dắt ngựa):</label>
+                <select id="plan-groom">
+                    <option value="G01">Nguyễn Văn A (Đang rảnh)</option>
+                    <option value="G02">Trần Thị B (Đang bận)</option>
+                    <option value="G03">Lê Văn C (Đang rảnh)</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="two-cols">
+            <div class="form-group">
+                <label>Cự ly dự kiến (km):</label>
+                <input type="number" placeholder="VD: 5">
+            </div>
+            <div class="form-group">
+                <label>Khối lượng tạ (kg):</label>
+                <input type="number" placeholder="VD: 60">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Loại mặt sân:</label>
+            <select>
+                <option>Sân cát (Sand)</option>
+                <option>Sân cỏ (Turf)</option>
+                <option>Sân tổng hợp (Synthetic)</option>
+            </select>
+        </div>
+        <button class="btn btn-primary" onclick="submitPlan()"><i class="fa-solid fa-check"></i> Lưu Kế Hoạch & Check Vetlock</button>
+    </div>
+</div>
+
+<!-- Modal 2: HLV Đánh giá sau tập -->
+<div class="modal-overlay" id="modal-evaluate">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-star"></i> Đánh Giá Phong Độ</h3>
+            <button class="btn-close" onclick="closeModal('modal-evaluate')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="form-group">
+            <label>Mã buổi tập:</label>
+            <input type="text" value="SESSION-20261008-01" readonly style="background: #f3f4f6;">
+        </div>
+        <div class="form-group">
+            <label>Điểm phong độ (1-10):</label>
+            <input type="number" min="1" max="10" placeholder="Nhập điểm">
+        </div>
+        <div class="form-group">
+            <label>Nhận xét chuyên môn:</label>
+            <textarea rows="4" placeholder="Ghi chú về sải chân, nhịp thở, thái độ của ngựa..."></textarea>
+        </div>
+        <button class="btn btn-success" onclick="mockAction('Đã lưu đánh giá vào CSDL!', 'modal-evaluate')">Hoàn tất đánh giá</button>
+    </div>
+</div>
+
+<!-- Modal 3: Thông báo Báo cáo Bác sĩ Thú Y (HLV) -->
+<div class="modal-overlay" id="modal-alert-vet">
+    <div class="modal-content" style="border-top: 5px solid var(--danger);">
+        <div class="modal-header">
+            <h3 style="color: var(--danger);"><i class="fa-solid fa-truck-medical"></i> Ra Quyết Định Dừng Tập</h3>
+            <button class="btn-close" onclick="closeModal('modal-alert-vet')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <p style="font-size: 14px; color: #555;">Hệ thống ghi nhận chỉ số nhịp tim của ngựa <b>Hắc Phong</b> vượt quá 180bpm. Bạn có muốn kích hoạt quy trình Vetlock khẩn cấp?</p>
+        <div class="form-group">
+            <label>Lý do y tế (Gửi Bác sĩ):</label>
+            <textarea rows="3" placeholder="Mô tả triệu chứng..."></textarea>
+        </div>
+        <button class="btn btn-danger" onclick="mockAction('Đã phát cảnh báo khẩn đến Bác sĩ thú y. Ngựa đã bị khóa (Vetlock)!', 'modal-alert-vet')">Xác nhận Dừng & Khóa y tế</button>
+    </div>
+</div>
+
+<!-- Modal 4: Chủ ngựa xem kết quả -->
+<div class="modal-overlay" id="modal-owner-result">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-file-invoice"></i> Nhật Ký Buổi Tập</h3>
+            <button class="btn-close" onclick="closeModal('modal-owner-result')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div style="background: #f9fafb; padding: 15px; border-radius: 8px; font-size: 14px; line-height: 1.6;">
+            <p><b>Ngựa:</b> Hắc Phong (H001)</p>
+            <p><b>Ngày tập:</b> 08/10/2026</p>
+            <p><b>Chỉ số đo lường:</b> Vận tốc max: 55km/h | Nhịp tim TB: 140bpm</p>
+            <hr style="margin: 10px 0;">
+            <p><b>Đánh giá của HLV:</b> 8/10 điểm. Ngựa duy trì tốc độ tốt ở cự ly 1000m cuối. Cần chú ý khớp chân sau bên phải.</p>
+        </div>
+    </div>
 </div>
 
 <script>
-    // 1. Tự động kiểm tra Đăng nhập khi mở web
     window.onload = function () {
         const savedUser = localStorage.getItem("horseTrackUser");
-        if (savedUser) {
-            const user = JSON.parse(savedUser);
-            showWelcomeScreen(user.fullName);
-        }
+        if (savedUser) loadDashboard(JSON.parse(savedUser));
     };
 
-    // 2. Hàm chuyển đổi qua lại giữa các màn hình
     function switchScreen(screenId) {
-        document.getElementById("login-screen").style.display = "none";
-        document.getElementById("register-screen").style.display = "none";
-        document.getElementById("welcome-screen").style.display = "none";
+        document.getElementById("login-screen").classList.add("hidden");
+        document.getElementById("register-screen").classList.add("hidden");
+        document.getElementById("dashboard-screen").classList.add("hidden");
+        document.getElementById("navbar").classList.add("hidden");
 
-        document.getElementById(screenId).style.display = "block";
-
-        // Xóa sạch các thông báo báo lỗi cũ
+        document.getElementById(screenId).classList.remove("hidden");
         document.getElementById("login-msg").innerText = "";
         document.getElementById("reg-msg").innerText = "";
-        document.getElementById("reg-msg").className = "error-msg";
     }
 
-    // 3. Hàm gọi API Đăng Nhập
     async function testLoginAPI() {
         const u = document.getElementById("username").value;
         const p = document.getElementById("password").value;
         const msgBox = document.getElementById("login-msg");
-
-        msgBox.innerText = "Đang kiểm tra...";
+        msgBox.className = "msg"; msgBox.innerText = "Đang kết nối Backend...";
 
         try {
             const response = await fetch('http://localhost:8080/api/accounts/login', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
+                method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username: u, password: p})
             });
             const result = await response.json();
 
             if (response.ok) {
                 localStorage.setItem("horseTrackUser", JSON.stringify(result.data));
-                showWelcomeScreen(result.data.fullName);
+                loadDashboard(result.data);
             } else {
-                msgBox.innerText = result.message || "Lỗi đăng nhập!";
+                msgBox.className = "msg error"; msgBox.innerText = result.message || "Sai tài khoản hoặc mật khẩu!";
             }
         } catch (error) {
-            msgBox.innerText = "Máy chủ Spring Boot chưa bật!";
+            msgBox.className = "msg error"; msgBox.innerText = "Máy chủ Spring Boot chưa bật!";
         }
     }
 
-    // 4. Hàm gọi API Đăng Ký
     async function testRegisterAPI() {
         const msgBox = document.getElementById("reg-msg");
-        msgBox.className = "error-msg";
-        msgBox.innerText = "Đang xử lý...";
-
-        // Đóng gói dữ liệu từ các ô nhập liệu vào một cục JSON
+        msgBox.className = "msg"; msgBox.innerText = "Đang xử lý...";
         const payload = {
-            username: document.getElementById("reg-username").value,
-            fullName: document.getElementById("reg-fullName").value,
-            email: document.getElementById("reg-email").value,
-            phone: document.getElementById("reg-phone").value,
-            password: document.getElementById("reg-password").value,
-            confirmPassword: document.getElementById("reg-confirmPassword").value,
-            billingAddress: document.getElementById("reg-billingAddress").value,
-            taxCode: document.getElementById("reg-taxCode").value,
-            agreeToTerms: document.getElementById("reg-agreeToTerms").checked
+            username: document.getElementById("reg-username").value, fullName: document.getElementById("reg-fullName").value,
+            email: document.getElementById("reg-email").value, password: document.getElementById("reg-password").value,
+            confirmPassword: document.getElementById("reg-confirmPassword").value, agreeToTerms: document.getElementById("reg-agreeToTerms").checked
         };
 
         try {
-            // Bắn dữ liệu về API đăng ký
             const response = await fetch('http://localhost:8080/api/accounts/register-owner', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(payload)
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
             });
             const result = await response.json();
 
             if (response.ok) {
-                msgBox.className = "success-msg";
-                msgBox.innerText = "Đăng ký thành công! Đang chuyển sang Đăng nhập...";
-
-                // Mẹo nhỏ: Tự động copy tài khoản vừa tạo qua màn hình đăng nhập cho bạn đỡ phải gõ lại
-                document.getElementById("username").value = payload.username;
-                document.getElementById("password").value = payload.password;
-
-                // Tự động nhảy sang trang đăng nhập sau 1.5 giây
+                msgBox.className = "msg success"; msgBox.innerText = "Đăng ký thành công! Đang tự động chuyển...";
+                document.getElementById("username").value = payload.username; document.getElementById("password").value = payload.password;
                 setTimeout(() => switchScreen('login-screen'), 1500);
             } else {
-                msgBox.innerText = result.message || "Đăng ký thất bại!";
+                msgBox.className = "msg error"; msgBox.innerText = result.message || "Lỗi dữ liệu đầu vào!";
             }
-        } catch (error) {
-            msgBox.innerText = "Máy chủ Spring Boot chưa bật!";
+        } catch (error) { msgBox.className = "msg error"; msgBox.innerText = "Máy chủ Spring Boot chưa bật!"; }
+    }
+
+    function loadDashboard(user) {
+        switchScreen('dashboard-screen');
+        document.getElementById("navbar").classList.remove("hidden");
+        document.getElementById("nav-name").innerText = user.fullName;
+        document.getElementById("nav-role").innerText = user.roleName;
+        document.getElementById("welcome-text").innerText = "Xin chào, " + user.fullName + " 👋";
+        document.getElementById("dev-role-select").value = user.roleName;
+
+        document.getElementById("trainer-actions").classList.add("hidden");
+        document.getElementById("groom-actions").classList.add("hidden");
+        document.getElementById("owner-actions").classList.add("hidden");
+
+        if (user.roleName === "Head Trainer") { document.getElementById("trainer-actions").classList.remove("hidden"); }
+        else if (user.roleName === "Groom") { document.getElementById("groom-actions").classList.remove("hidden"); }
+        else if (user.roleName === "Horse Owner") { document.getElementById("owner-actions").classList.remove("hidden"); }
+    }
+
+    function simulateRole(newRole) {
+        const savedUser = localStorage.getItem("horseTrackUser");
+        if (savedUser) {
+            let user = JSON.parse(savedUser); user.roleName = newRole; loadDashboard(user);
         }
     }
 
-    // 5. Hàm Đăng xuất
-    function testLogout() {
-        localStorage.removeItem("horseTrackUser");
-        switchScreen('login-screen');
+    function testLogout() { localStorage.removeItem("horseTrackUser"); switchScreen('login-screen'); }
+
+    /* HÀM ĐIỀU KHIỂN MODAL & NGHIỆP VỤ */
+    function openModal(modalId) { document.getElementById(modalId).classList.add('active'); }
+    function closeModal(modalId) { document.getElementById(modalId).classList.remove('active'); }
+
+    function submitPlan() {
+        const btn = document.querySelector('#modal-training-plan .btn-primary');
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang check hệ thống Y tế...';
+        setTimeout(() => {
+            btn.innerHTML = '<i class="fa-solid fa-check"></i> Lưu Kế Hoạch & Check Vetlock';
+            alert("Hệ thống: Ngựa không bị khóa y tế. Đã lưu kế hoạch tập luyện và phân công Groom!");
+            closeModal('modal-training-plan');
+        }, 1000);
     }
 
-    // 6. Hàm hiển thị Trang chủ
-    function showWelcomeScreen(fullName) {
-        document.getElementById("login-screen").style.display = "none";
-        document.getElementById("register-screen").style.display = "none";
-        document.getElementById("welcome-screen").style.display = "block";
-        document.getElementById("welcome-text").innerText = "Xin chào Chủ Ngựa: " + fullName;
+    function submitMetrics() {
+        const hr = document.getElementById('groom-hr').value;
+        if(!hr) return alert("Vui lòng nhập nhịp tim!");
+
+        if(parseInt(hr) > 170) {
+            alert("⚠️ CẢNH BÁO HỆ THỐNG: Nhịp tim (" + hr + "bpm) vượt ngưỡng an toàn! Đã gửi thông báo khẩn cho HLV.");
+        } else {
+            alert("Đã gửi chỉ số an toàn lên hệ thống.");
+        }
+        document.getElementById('groom-hr').value = '';
+        document.getElementById('groom-speed').value = '';
+    }
+
+    function mockAction(message, modalIdToClose = null) {
+        alert(message);
+        if(modalIdToClose) closeModal(modalIdToClose);
     }
 </script>
 </body>

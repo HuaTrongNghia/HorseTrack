@@ -14,4 +14,5 @@ public interface UserRepository extends JpaRepository<User, Integer> {
 
     // Thêm dòng này để phục vụ chức năng Đăng nhập
     Optional<User> findByUsername(String username);
+    Optional<User> findByEmail(String email);
 }

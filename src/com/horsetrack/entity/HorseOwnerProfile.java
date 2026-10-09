@@ -2,23 +2,27 @@ package com.horsetrack.entity;
 
 import jakarta.persistence.*;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
-@Data
 @Entity
-@Table(name = "Horse_Owner_Profiles")
+@Table(name = "HorseOwnerProfiles")
+@Data
+@NoArgsConstructor
 public class HorseOwnerProfile {
-    @Id
-    @Column(name = "user_id")
-    private Integer userId;
 
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    // Liên kết 1-1 với bảng User
     @OneToOne
-    @MapsId
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(name = "tax_code")
-    private String taxCode;
+    // Cho phép null và gán luôn giá trị khởi tạo mặc định
+    @Column(name = "billing_address", nullable = true)
+    private String billingAddress = "Chưa cập nhật";
 
-    @Column(name = "billing_address", nullable = false)
-    private String billingAddress;
+    @Column(name = "tax_code", nullable = true)
+    private String taxCode = "Chưa cập nhật";
 }

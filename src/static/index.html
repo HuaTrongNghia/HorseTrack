@@ -56,7 +56,8 @@
 
         .role-badge { background-color: #e0e7ff; color: var(--primary); padding: 5px 12px; border-radius: 20px; font-size: 13px; font-weight: 600; }
 
-        .btn-logout { background-color: transparent; color: var(--text-muted); border: 1px solid var(--border); padding: 8px 15px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .btn-action { background-color: transparent; color: var(--text-muted); border: 1px solid var(--border); padding: 8px 15px; border-radius: 6px; cursor: pointer; transition: all 0.2s; }
+        .btn-action:hover { background-color: #f3f4f6; color: var(--primary); border-color: var(--primary); }
         .btn-logout:hover { background-color: #fee2e2; color: var(--danger); border-color: #fca5a5; }
 
         /* Container & Cards */
@@ -138,26 +139,37 @@
         </div>
         <span class="role-badge" id="nav-role">Role</span>
         <span id="nav-name" style="font-weight: 500;">Tên User</span>
-        <button class="btn-logout" onclick="testLogout()"><i class="fa-solid fa-right-from-bracket"></i> Đăng xuất</button>
+
+        <!-- Bổ sung nút đổi mật khẩu -->
+        <button class="btn-action" onclick="openModal('modal-change-password')"><i class="fa-solid fa-key"></i> Đổi pass</button>
+        <button class="btn-action btn-logout" onclick="testLogout()"><i class="fa-solid fa-right-from-bracket"></i> Thoát</button>
     </div>
 </nav>
 
-<!-- MÀN HÌNH ĐĂNG NHẬP (Giữ nguyên) -->
+<!-- MÀN HÌNH ĐĂNG NHẬP -->
 <div class="container auth-container" id="login-screen">
     <div class="card" style="text-align: center;">
         <i class="fa-solid fa-horse-head" style="font-size: 40px; color: var(--primary); margin-bottom: 15px;"></i>
         <h2 style="margin-top: 0;">Đăng Nhập</h2>
         <p style="color: var(--text-muted); margin-bottom: 25px;">Hệ thống Quản lý Huấn luyện Ngựa</p>
         <div class="form-group"><input type="text" id="username" placeholder="Tên đăng nhập" value="chu_ngua_lanhoang"></div>
-        <div class="form-group"><input type="password" id="password" placeholder="Mật khẩu" value="Password123!"></div>
+
+        <!-- Bổ sung link Quên mật khẩu -->
+        <div class="form-group" style="margin-bottom: 5px;">
+            <input type="password" id="password" placeholder="Mật khẩu" value="Password123!">
+        </div>
+        <div style="text-align: right; margin-bottom: 15px;">
+            <a href="#" style="color: var(--primary); text-decoration: none; font-size: 13px;" onclick="switchScreen('forgot-password-screen')">Quên mật khẩu?</a>
+        </div>
+
         <button class="btn btn-primary" onclick="testLoginAPI()"><i class="fa-solid fa-arrow-right-to-bracket"></i> Đăng Nhập</button>
         <p class="msg" id="login-msg"></p>
         <button class="btn btn-outline" onclick="switchScreen('register-screen')">Tạo tài khoản Chủ Ngựa mới</button>
     </div>
 </div>
 
-<!-- MÀN HÌNH ĐĂNG KÝ (Giữ nguyên) -->
-<div class="container auth-container" id="register-screen">
+<!-- MÀN HÌNH ĐĂNG KÝ -->
+<div class="container auth-container hidden" id="register-screen">
     <div class="card">
         <h2 style="margin-top: 0; text-align: center;">Đăng Ký Chủ Ngựa</h2>
         <hr>
@@ -172,6 +184,36 @@
         </div>
         <button class="btn btn-success" onclick="testRegisterAPI()">Đăng Ký Tài Khoản</button>
         <p class="msg" id="reg-msg"></p>
+        <div style="text-align: center; margin-top: 15px;">
+            <a href="#" style="color: var(--primary); text-decoration: none; font-size: 14px;" onclick="switchScreen('login-screen')">
+                <i class="fa-solid fa-arrow-left"></i> Quay lại Đăng nhập
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- BỔ SUNG: MÀN HÌNH QUÊN MẬT KHẨU -->
+<div class="container auth-container hidden" id="forgot-password-screen">
+    <div class="card">
+        <h2 style="margin-top: 0; text-align: center;">Khôi Phục Mật Khẩu</h2>
+        <hr>
+
+        <!-- Bước 1: Nhập Email -->
+        <div id="forgot-step-1">
+            <p style="font-size: 14px; color: var(--text-muted); text-align: center; margin-bottom: 20px;">Nhập email đã đăng ký để nhận mã xác thực (OTP).</p>
+            <div class="form-group"><input type="email" id="forgot-email" placeholder="Email của bạn"></div>
+            <button class="btn btn-primary" onclick="testForgotPasswordAPI()">Nhận mã OTP</button>
+        </div>
+
+        <!-- Bước 2: Đổi Pass (Ẩn đi cho đến khi gửi OTP thành công) -->
+        <div id="forgot-step-2" class="hidden">
+            <p style="font-size: 14px; color: var(--secondary); text-align: center; margin-bottom: 20px;">Đã gửi OTP! Kiểm tra Console của Spring Boot.</p>
+            <div class="form-group"><input type="text" id="reset-otp" placeholder="Nhập mã OTP (6 số)"></div>
+            <div class="form-group"><input type="password" id="reset-newPass" placeholder="Nhập mật khẩu mới"></div>
+            <button class="btn btn-success" onclick="testResetPasswordAPI()">Xác nhận Đổi Mật Khẩu</button>
+        </div>
+
+        <p class="msg" id="forgot-msg"></p>
         <div style="text-align: center; margin-top: 15px;">
             <a href="#" style="color: var(--primary); text-decoration: none; font-size: 14px;" onclick="switchScreen('login-screen')">
                 <i class="fa-solid fa-arrow-left"></i> Quay lại Đăng nhập
@@ -229,6 +271,27 @@
 
 <!-- CÁC MODAL (CỬA SỔ NỔI) DÀNH CHO NGHIỆP VỤ -->
 
+<!-- BỔ SUNG: Modal Đổi mật khẩu chủ động -->
+<div class="modal-overlay" id="modal-change-password">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3><i class="fa-solid fa-key"></i> Đổi Mật Khẩu</h3>
+            <button class="btn-close" onclick="closeModal('modal-change-password')"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="form-group">
+            <label>Mật khẩu hiện tại:</label>
+            <input type="password" id="change-oldPass" placeholder="Nhập mật khẩu đang dùng">
+        </div>
+        <div class="form-group">
+            <label>Mật khẩu mới:</label>
+            <input type="password" id="change-newPass" placeholder="Nhập mật khẩu mới (Tối thiểu 8 ký tự)">
+        </div>
+        <button class="btn btn-primary" onclick="testChangePasswordAPI()">Xác nhận thay đổi</button>
+        <p class="msg" id="change-pass-msg"></p>
+    </div>
+</div>
+
+<!-- Modal 1: Lập giáo án -->
 <div class="modal-overlay" id="modal-training-plan">
     <div class="modal-content">
         <div class="modal-header">
@@ -334,6 +397,8 @@
 </div>
 
 <script>
+    const API_BASE = 'http://localhost:8080/api/accounts';
+
     window.onload = function () {
         const savedUser = localStorage.getItem("horseTrackUser");
         if (savedUser) loadDashboard(JSON.parse(savedUser));
@@ -342,14 +407,23 @@
     function switchScreen(screenId) {
         document.getElementById("login-screen").classList.add("hidden");
         document.getElementById("register-screen").classList.add("hidden");
+        document.getElementById("forgot-password-screen").classList.add("hidden");
         document.getElementById("dashboard-screen").classList.add("hidden");
         document.getElementById("navbar").classList.add("hidden");
 
+        // Reset các form trạng thái
+        document.getElementById("forgot-step-1").classList.remove("hidden");
+        document.getElementById("forgot-step-2").classList.add("hidden");
+
         document.getElementById(screenId).classList.remove("hidden");
+
+        // Reset message boxes
         document.getElementById("login-msg").innerText = "";
         document.getElementById("reg-msg").innerText = "";
+        document.getElementById("forgot-msg").innerText = "";
     }
 
+    // 1. API ĐĂNG NHẬP
     async function testLoginAPI() {
         const u = document.getElementById("username").value;
         const p = document.getElementById("password").value;
@@ -357,7 +431,7 @@
         msgBox.className = "msg"; msgBox.innerText = "Đang kết nối Backend...";
 
         try {
-            const response = await fetch('http://localhost:8080/api/accounts/login', {
+            const response = await fetch(`${API_BASE}/login`, {
                 method: 'POST', headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({username: u, password: p})
             });
@@ -374,6 +448,7 @@
         }
     }
 
+    // 2. API ĐĂNG KÝ
     async function testRegisterAPI() {
         const msgBox = document.getElementById("reg-msg");
         msgBox.className = "msg"; msgBox.innerText = "Đang xử lý...";
@@ -384,7 +459,7 @@
         };
 
         try {
-            const response = await fetch('http://localhost:8080/api/accounts/register-owner', {
+            const response = await fetch(`${API_BASE}/register-owner`, {
                 method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
             });
             const result = await response.json();
@@ -397,6 +472,79 @@
                 msgBox.className = "msg error"; msgBox.innerText = result.message || "Lỗi dữ liệu đầu vào!";
             }
         } catch (error) { msgBox.className = "msg error"; msgBox.innerText = "Máy chủ Spring Boot chưa bật!"; }
+    }
+
+    // 3. API QUÊN MẬT KHẨU (GỬI OTP)
+    async function testForgotPasswordAPI() {
+        const email = document.getElementById("forgot-email").value;
+        const msgBox = document.getElementById("forgot-msg");
+        msgBox.className = "msg"; msgBox.innerText = "Đang gửi yêu cầu...";
+
+        try {
+            const response = await fetch(`${API_BASE}/forgot-password`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ email })
+            });
+            const result = await response.json();
+
+            if (response.ok) {
+                document.getElementById("forgot-step-1").classList.add("hidden");
+                document.getElementById("forgot-step-2").classList.remove("hidden");
+                msgBox.innerText = "";
+            } else {
+                msgBox.className = "msg error"; msgBox.innerText = result.message;
+            }
+        } catch (error) { msgBox.className = "msg error"; msgBox.innerText = "Lỗi kết nối Server!"; }
+    }
+
+    // 4. API QUÊN MẬT KHẨU (XÁC NHẬN OTP & ĐỔI PASS)
+    async function testResetPasswordAPI() {
+        const email = document.getElementById("forgot-email").value;
+        const otp = document.getElementById("reset-otp").value;
+        const newPassword = document.getElementById("reset-newPass").value;
+        const msgBox = document.getElementById("forgot-msg");
+
+        try {
+            const response = await fetch(`${API_BASE}/reset-password`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email, otp, newPassword })
+            });
+            const result = await response.json();
+
+            if (response.ok) {
+                msgBox.className = "msg success"; msgBox.innerText = "Đổi mật khẩu thành công!";
+                setTimeout(() => switchScreen('login-screen'), 1500);
+            } else {
+                msgBox.className = "msg error"; msgBox.innerText = result.message;
+            }
+        } catch (error) { msgBox.className = "msg error"; msgBox.innerText = "Lỗi kết nối Server!"; }
+    }
+
+    // 5. API ĐỔI MẬT KHẨU CHỦ ĐỘNG
+    async function testChangePasswordAPI() {
+        const oldPass = document.getElementById("change-oldPass").value;
+        const newPass = document.getElementById("change-newPass").value;
+        const msgBox = document.getElementById("change-pass-msg");
+        const user = JSON.parse(localStorage.getItem("horseTrackUser"));
+
+        try {
+            const response = await fetch(`${API_BASE}/change-password`, {
+                method: 'POST', headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username: user.username, currentPassword: oldPass, newPassword: newPass })
+            });
+            const result = await response.json();
+
+            if (response.ok) {
+                msgBox.className = "msg success"; msgBox.innerText = "Đổi mật khẩu thành công!";
+                setTimeout(() => {
+                    closeModal('modal-change-password');
+                    msgBox.innerText = "";
+                    document.getElementById("change-oldPass").value = "";
+                    document.getElementById("change-newPass").value = "";
+                }, 1500);
+            } else {
+                msgBox.className = "msg error"; msgBox.innerText = result.message;
+            }
+        } catch (error) { msgBox.className = "msg error"; msgBox.innerText = "Lỗi kết nối Server!"; }
     }
 
     function loadDashboard(user) {
