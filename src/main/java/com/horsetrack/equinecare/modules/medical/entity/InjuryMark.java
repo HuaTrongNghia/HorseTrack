@@ -23,6 +23,12 @@ public class InjuryMark {
     @Column(name = "severity_level", nullable = false, length = 20)
     private String severityLevel;
 
+    @Column(name = "coord_x")
+    private Double coordX;
+
+    @Column(name = "coord_y")
+    private Double coordY;
+
     @Column(name = "notes", columnDefinition = "NVARCHAR(255)")
     private String notes;
 

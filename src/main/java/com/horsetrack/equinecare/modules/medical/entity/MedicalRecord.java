@@ -26,11 +26,17 @@ public class MedicalRecord {
     @Column(name = "diagnosis", nullable = false, columnDefinition = "NVARCHAR(500)")
     private String diagnosis;
 
+    @Column(name = "symptoms", columnDefinition = "NVARCHAR(MAX)")
+    private String symptoms;
+
     @Column(name = "treatment_plan", columnDefinition = "NVARCHAR(MAX)")
     private String treatmentPlan;
 
     @Column(name = "is_lockout_ordered", nullable = false)
     private Boolean isLockoutOrdered;
+
+    @Column(name = "status", nullable = false, length = 50)
+    private String status;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
