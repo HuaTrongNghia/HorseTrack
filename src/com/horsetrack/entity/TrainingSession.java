@@ -39,6 +39,20 @@ public class TrainingSession {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
+    // THÊM CÁC TRƯỜNG NÀY VÀO TRONG TRAINING SESSION
+    @Column(name = "session_date")
+    private java.time.LocalDateTime sessionDate;
+
+    @Column(name = "activity_type")
+    private String activityType;
+
+    @ManyToOne
+    @JoinColumn(name = "plan_id")
+    private TrainingPlan trainingPlan;
+
+    @ManyToOne
+    @JoinColumn(name = "assigned_to_id")
+    private User assignedTo;
 
     @PreUpdate
     @PrePersist

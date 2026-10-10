@@ -72,7 +72,7 @@
         /* Form Elements */
         .form-group { margin-bottom: 15px; text-align: left; }
         .form-group label { display: block; margin-bottom: 5px; font-size: 14px; font-weight: 500; }
-        input[type="text"], input[type="password"], input[type="email"], input[type="number"], select, textarea {
+        input[type="text"], input[type="password"], input[type="email"], input[type="number"], input[type="date"], input[type="datetime-local"], select, textarea {
             width: 100%; padding: 12px; border: 1px solid var(--border); border-radius: 8px; font-size: 15px; box-sizing: border-box; transition: border-color 0.2s; font-family: inherit;
         }
         input:focus, select:focus, textarea:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(67, 56, 202, 0.1); }
@@ -262,6 +262,7 @@
             <h3><i class="fa-regular fa-calendar-days" style="color: var(--primary);"></i> Lịch làm việc hôm nay (Bấm vào ô để cập nhật kết quả)</h3>
             <div style="display: flex; gap: 15px; flex-wrap: wrap;">
 
+
                 <!-- Ô công việc 1 -->
                 <div class="task-card" id="task-card-1" onclick="openTaskModal({
                     id: 1,
@@ -301,6 +302,19 @@
                     <span class="badge badge-pending" id="badge-task-3">PENDING</span>
                 </div>
             </div>
+
+        </div>
+
+
+        <!-- KHU VỰC HIỂN THỊ TẤT CẢ BUỔI TẬP -->
+        <div class="action-module" style="grid-column: 1 / -1; margin-top: 15px;">
+            <h3><i class="fa-solid fa-list-check" style="color: var(--secondary);"></i> Danh Sách Tất Cả Các Buổi Tập Trong Hệ Thống</h3>
+            <div id="all-sessions-container" style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 10px;">
+                <p style="color: var(--text-muted); font-size: 14px;">Đang tải danh sách buổi tập...</p>
+            </div>
+            <button type="button" class="btn btn-primary" style="margin-top: 12px;" onclick="loadAllSessions()">
+                <i class="fa-solid fa-rotate"></i> Tải lại danh sách
+            </button>
         </div>
 
         <!-- Các module nghiệp vụ khác của Trainer -->
@@ -344,7 +358,7 @@
 
 <!-- ==================== CÁC MODAL (CỬA SỔ NỔI) ==================== -->
 
-<!-- 1. MODAL CẬP NHẬT TRẠNG THÁI BUỔI TẬP (YÊU CẦU MỚI) -->
+<!-- 1. MODAL CẬP NHẬT TRẠNG THÁI BUỔI TẬP -->
 <div class="modal-overlay" id="modal-task-detail">
     <div class="modal-content">
         <div class="modal-header">
@@ -402,49 +416,63 @@
     </div>
 </div>
 
-<!-- 3. MODAL LẬP GIÁO ÁN -->
+<!-- 3. MODAL LẬP GIÁO ÁN (MASTER PLAN & SESSIONS) -->
 <div class="modal-overlay" id="modal-training-plan">
-    <div class="modal-content">
+    <div class="modal-content" style="max-width: 600px; max-height: 90vh; overflow-y: auto;">
         <div class="modal-header">
-            <h3><i class="fa-solid fa-pen-to-square"></i> Lập Giáo Án Huấn Luyện</h3>
+            <h3><i class="fa-solid fa-pen-to-square"></i> Lập Giáo Án & Phân Công</h3>
             <button class="btn-close" onclick="closeModal('modal-training-plan')"><i class="fa-solid fa-xmark"></i></button>
         </div>
-        <div class="two-cols">
-            <div class="form-group">
-                <label>Chọn Ngựa cần huấn luyện:</label>
-                <select id="plan-horse">
-                    <option value="H001">Hắc Phong (H001) - Sẵn sàng</option>
-                    <option value="H002">Xích Thố (H002) - Đang nghỉ</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label>Phân công Groom (Dắt ngựa):</label>
-                <select id="plan-groom">
-                    <option value="G01">Nguyễn Văn A (Đang rảnh)</option>
-                    <option value="G02">Trần Thị B (Đang bận)</option>
-                    <option value="G03">Lê Văn C (Đang rảnh)</option>
-                </select>
-            </div>
-        </div>
-        <div class="two-cols">
-            <div class="form-group">
-                <label>Cự ly dự kiến (km):</label>
-                <input type="number" placeholder="VD: 5">
-            </div>
-            <div class="form-group">
-                <label>Khối lượng tạ (kg):</label>
-                <input type="number" placeholder="VD: 60">
-            </div>
+
+        <!-- THÔNG TIN MASTER (GIÁO ÁN) -->
+        <h4 style="margin-top: 0; color: var(--primary);">1. Thông tin chung</h4>
+        <div class="form-group">
+            <label>Tên giáo án (*):</label>
+            <input type="text" id="plan-name" placeholder="VD: Giáo án tăng sức bền cự ly dài">
         </div>
         <div class="form-group">
-            <label>Loại mặt sân:</label>
-            <select>
-                <option>Sân cát (Sand)</option>
-                <option>Sân cỏ (Turf)</option>
-                <option>Sân tổng hợp (Synthetic)</option>
+            <label>Mục tiêu (Goal):</label>
+            <textarea id="plan-objective" rows="2" placeholder="VD: Cải thiện nhịp tim..."></textarea>
+        </div>
+        <div class="form-group">
+            <label>Chọn Ngựa (Horse ID) (*):</label>
+            <select id="plan-horse">
+                <option value="">-- Bấm để chọn ngựa --</option>
+                <!-- Đổi value thành số nguyên (ID) để khớp với Backend Integer -->
+                <option value="1">Hắc Phong (ID: 1) - Sẵn sàng</option>
+                <option value="2">Xích Thố (ID: 2) - Đang nghỉ</option>
             </select>
         </div>
-        <button class="btn btn-primary" onclick="submitPlan()"><i class="fa-solid fa-check"></i> Lưu Kế Hoạch & Check Vetlock</button>
+        <div class="two-cols">
+            <div class="form-group"><label>Từ ngày (*):</label><input type="date" id="plan-start-date"></div>
+            <div class="form-group"><label>Đến ngày (*):</label><input type="date" id="plan-end-date"></div>
+        </div>
+
+        <hr style="margin: 20px 0;">
+
+        <!-- THÔNG TIN DETAIL (BUỔI TẬP) -->
+        <h4 style="margin-top: 0; color: var(--secondary);">2. Phân công buổi tập (Sessions)</h4>
+        <div style="background: #f8fafc; padding: 15px; border-radius: 8px; border: 1px dashed #cbd5e1;">
+            <div class="two-cols">
+                <div class="form-group">
+                    <label>Ngày giờ tập (*):</label>
+                    <input type="datetime-local" id="session-datetime">
+                </div>
+                <div class="form-group">
+                    <label>Loại bài tập (*):</label>
+                    <input type="text" id="session-activity" placeholder="VD: Canter 1200m">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Phân công cho (ID Nhân viên) (*):</label>
+                <input type="number" id="session-assigned-id" placeholder="VD: Nhập số 1 hoặc 2 (Trainer ID)">
+            </div>
+        </div>
+
+        <p id="plan-error-msg" class="msg error" style="display: none; text-align: left;"></p>
+        <button class="btn btn-primary" onclick="submitMasterPlan()" style="margin-top: 15px;">
+            <i class="fa-solid fa-floppy-disk"></i> Khởi tạo Giáo án
+        </button>
     </div>
 </div>
 
@@ -506,7 +534,7 @@
 
 <script>
     const API_ACCOUNT = 'http://localhost:8080/api/accounts';
-    const API_TRAINING = 'http://localhost:8080/api/training/tasks';
+    const API_TRAINING = 'http://localhost:8080/api/training'; // Gốc API
     let currentTask = null;
 
     window.onload = function () {
@@ -578,7 +606,7 @@
         };
 
         try {
-            const response = await fetch(`${API_TRAINING}/update-status`, {
+            const response = await fetch(`${API_TRAINING}/tasks/update-status`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -751,6 +779,82 @@
         if (user.roleName === "Head Trainer") { document.getElementById("trainer-actions").classList.remove("hidden"); }
         else if (user.roleName === "Groom") { document.getElementById("groom-actions").classList.remove("hidden"); }
         else if (user.roleName === "Horse Owner") { document.getElementById("owner-actions").classList.remove("hidden"); }
+
+        // Tự động tải danh sách buổi tập khi mở Dashboard
+        loadAllSessions();
+    }
+
+    // ---------------- HIỂN THỊ TẤT CẢ BUỔI TẬP ----------------
+    async function loadAllSessions() {
+        const container = document.getElementById("all-sessions-container");
+        if (!container) return;
+
+        container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">Đang tải danh sách buổi tập...</p>';
+
+        try {
+            // GET dùng cùng đường dẫn tài nguyên với API POST tạo giáo án.
+            const response = await fetch('http://localhost:8080/api/v1/training-plans');
+            if (!response.ok) throw new Error(`Máy chủ trả về mã ${response.status}`);
+
+            const result = await response.json();
+            const plans = Array.isArray(result) ? result :
+                (Array.isArray(result.data) ? result.data :
+                    (Array.isArray(result.content) ? result.content :
+                        (Array.isArray(result.data?.content) ? result.data.content : [])));
+
+            const sessions = [];
+            plans.forEach(plan => {
+                const planSessions = Array.isArray(plan.sessions) ? plan.sessions :
+                    (Array.isArray(plan.trainingSessions) ? plan.trainingSessions : []);
+                planSessions.forEach(session => sessions.push({
+                    ...session,
+                    planName: session.planName || plan.planName || plan.name || "Chưa có tên giáo án",
+                    horseName: session.horseName || plan.horseName || plan.horse?.name ||
+                        (plan.horseId != null ? `Ngựa ID: ${plan.horseId}` : "Chưa có thông tin ngựa")
+                }));
+            });
+
+            container.innerHTML = "";
+            if (sessions.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">Chưa có buổi tập nào trong hệ thống.</p>';
+                return;
+            }
+
+            sessions.sort((a, b) => new Date(a.sessionDate || a.dateTime || 0) - new Date(b.sessionDate || b.dateTime || 0));
+            sessions.forEach(session => {
+                const card = document.createElement("div");
+                card.style.cssText = "flex: 1 1 250px; max-width: 360px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: #fff; line-height: 1.6;";
+
+                const title = document.createElement("div");
+                title.style.cssText = "font-weight: 700; color: var(--text-main); margin-bottom: 6px;";
+                title.textContent = session.activityType || session.exerciseType || "Buổi tập";
+
+                const detail = document.createElement("div");
+                detail.style.cssText = "font-size: 13px; color: var(--text-muted);";
+                const dateValue = session.sessionDate || session.dateTime || session.date;
+                let formattedDate = "Chưa có ngày tập";
+                if (dateValue) {
+                    const parsedDate = new Date(dateValue);
+                    formattedDate = Number.isNaN(parsedDate.getTime()) ? String(dateValue) :
+                        parsedDate.toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
+                }
+                detail.textContent = `Ngựa: ${session.horseName} | Ngày tập: ${formattedDate}`;
+
+                const plan = document.createElement("div");
+                plan.style.cssText = "font-size: 13px; margin-top: 5px;";
+                plan.textContent = `Giáo án: ${session.planName}`;
+
+                const status = document.createElement("div");
+                status.style.cssText = "font-size: 12px; font-weight: 700; margin-top: 8px; color: var(--secondary);";
+                status.textContent = `Trạng thái: ${session.status || session.sessionStatus || "Chưa cập nhật"}`;
+
+                card.append(title, detail, plan, status);
+                container.appendChild(card);
+            });
+        } catch (error) {
+            console.error("Không thể tải danh sách buổi tập:", error);
+            container.innerHTML = '<p style="color: var(--danger); font-size: 14px;">Không tải được danh sách buổi tập. Hãy kiểm tra Backend và API GET /api/v1/training-plans.</p>';
+        }
     }
 
     function simulateRole(newRole) {
@@ -768,14 +872,91 @@
     function openModal(modalId) { document.getElementById(modalId).classList.add('active'); }
     function closeModal(modalId) { document.getElementById(modalId).classList.remove('active'); }
 
-    function submitPlan() {
+    // ---------------- LẬP GIÁO ÁN MASTER VÀ GỬI NESTED JSON ----------------
+    async function submitMasterPlan() {
+        // 1. Lấy dữ liệu Master (Giáo án)
+        const planName = document.getElementById("plan-name").value.trim();
+        const objective = document.getElementById("plan-objective").value.trim();
+        const horseId = document.getElementById("plan-horse").value;
+        const startDate = document.getElementById("plan-start-date").value;
+        const endDate = document.getElementById("plan-end-date").value;
+
+        // 2. Lấy dữ liệu Detail (Buổi tập)
+        const sessionDatetime = document.getElementById("session-datetime").value;
+        const sessionActivity = document.getElementById("session-activity").value.trim();
+        const sessionAssignedId = document.getElementById("session-assigned-id").value;
+
+        const errorMsg = document.getElementById("plan-error-msg");
         const btn = document.querySelector('#modal-training-plan .btn-primary');
-        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang check hệ thống Y tế...';
-        setTimeout(() => {
-            btn.innerHTML = '<i class="fa-solid fa-check"></i> Lưu Kế Hoạch & Check Vetlock';
-            alert("Hệ thống: Ngựa không bị khóa y tế. Đã lưu kế hoạch tập luyện và phân công Groom!");
+
+        // Client-side Validation: Kiểm tra rỗng
+        if (!planName || !horseId || !startDate || !endDate || !sessionDatetime || !sessionActivity || !sessionAssignedId) {
+            errorMsg.innerText = "Vui lòng nhập đầy đủ thông tin có dấu (*)!";
+            errorMsg.style.display = "block";
+            return;
+        }
+
+        if (new Date(startDate) > new Date(endDate)) {
+            errorMsg.innerText = "Lỗi: Ngày kết thúc không hợp lệ!";
+            errorMsg.style.display = "block";
+            return;
+        }
+
+        errorMsg.style.display = "none";
+        btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
+
+        // 3. TẠO CẤU TRÚC NESTED JSON KHỚP VỚI SPRING BOOT DTO
+        const payload = {
+            planName: planName,
+            horseId: parseInt(horseId), // Ép kiểu Integer cho Backend
+            startDate: startDate,
+            endDate: endDate,
+            goal: objective,
+            sessions: [
+                {
+                    sessionDate: sessionDatetime,
+                    activityType: sessionActivity,
+                    assignedToId: parseInt(sessionAssignedId) // Ép kiểu Integer
+                }
+            ]
+        };
+
+        console.log("Dữ liệu gửi xuống Backend:", JSON.stringify(payload, null, 2));
+
+        try {
+            // Gọi đến API mới tạo: POST /api/v1/training-plans
+            const response = await fetch('http://localhost:8080/api/v1/training-plans', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await response.json();
+
+            if (response.ok) {
+                alert(`Thành công! ${result.message} (ID Giáo án: ${result.data})`);
+
+                // Reset form sau khi lưu thành công
+                document.getElementById("plan-name").value = "";
+                document.getElementById("plan-objective").value = "";
+                document.getElementById("plan-horse").value = "";
+                document.getElementById("plan-start-date").value = "";
+                document.getElementById("plan-end-date").value = "";
+                document.getElementById("session-datetime").value = "";
+                document.getElementById("session-activity").value = "";
+                document.getElementById("session-assigned-id").value = "";
+
+                closeModal('modal-training-plan');
+                loadAllSessions();
+            } else {
+                errorMsg.innerText = result.message || "Lỗi từ máy chủ!";
+                errorMsg.style.display = "block";
+            }
+        } catch (err) {
+            alert(`[Chế độ Test Giao diện] Đã gửi JSON lồng nhau đến Backend!`);
             closeModal('modal-training-plan');
-        }, 800);
+        } finally {
+            btn.innerHTML = '<i class="fa-solid fa-floppy-disk"></i> Khởi tạo Giáo án';
+        }
     }
 
     function submitMetrics() {
