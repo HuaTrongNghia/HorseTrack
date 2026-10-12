@@ -1,0 +1,8 @@
+### Test API Đăng nhập
+POST http://localhost:8080/api/accounts/login
+Content-Type: application/json
+
+{
+  "username": "chu_ngua_lanhoang",
+  "password": "Password123!"
+}

@@ -1,5 +1,4 @@
 package com.horsetrack.dto;
-
 import lombok.Data;
 
 @Data
@@ -10,7 +9,7 @@ public class OwnerRegistrationDTO {
     private String phone;
     private String password;
     private String confirmPassword;
-    private String billingAddress; // Bắt buộc cho bảng Horse_Owner_Profiles
+    private String billingAddress;
     private String taxCode;
     private boolean agreeToTerms;
 }
