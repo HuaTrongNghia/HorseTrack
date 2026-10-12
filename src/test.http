@@ -1,0 +1,15 @@
+POST http://localhost:8080/api/v1/auth/register
+Content-Type: application/json
+
+{
+  "username": "vodaihiep",
+  "fullName": "Võ Đại Hiệp",
+  "email": "hiep.vo@royalstables.vn",
+  "phone": "+84 908 123 456",
+  "password": "Password123!",
+  "confirmPassword": "Password123!",
+  "isActive": true,
+  "roleName": "Horse Owner",
+  "taxCode": "0312456789",
+  "billingAddress": "Tầng 12, Tòa nhà Royal Tower, 180 Nguyễn Huệ, TP.HCM"
+}
