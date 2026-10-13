@@ -1,5 +1,6 @@
 package com.horsetrack.equinecare.modules.auth.service;
 
+import com.horsetrack.equinecare.modules.auth.dto.LoginDTO;
 import com.horsetrack.equinecare.modules.auth.dto.OwnerRegisterRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.StaffCreateRequestDTO;
 import com.horsetrack.equinecare.modules.auth.entity.*;
@@ -115,5 +116,10 @@ public class AuthServiceImpl implements AuthService {
             default:
                 throw new IllegalArgumentException("Vai trò không hợp lệ: " + request.getRoleName());
         }
+    }
+
+    @Override
+    public String login(LoginDTO request) {
+        return "chuoi_jwt_token_gia_lap_cua_ban\"";
     }
 }
