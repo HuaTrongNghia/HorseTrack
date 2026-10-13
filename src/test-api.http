@@ -6,3 +6,28 @@ Content-Type: application/json
   "username": "chu_ngua_lanhoang",
   "password": "Password123!"
 }
+
+### 1. Đăng nhập lấy Token
+POST http://localhost:8080/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "manager_admin",
+  "password": "Password123!"
+}
+
+### 2. Tạo nhân viên (Thay chuỗi Token lấy được từ bước 1 vào chữ Bearer bên dưới)
+POST http://localhost:8080/api/v1/auth/staff/create
+Content-Type: application/json
+Authorization: Bearer dán_chuỗi_token_vào_đây
+
+{
+  "username": "groom_01",
+  "password": "Password123!",
+  "fullName": "Lê Văn Chăm Sóc",
+  "email": "groom01@horsetrack.com",
+  "phone": "0987654321",
+  "roleName": "Groom",
+  "licenseNumber": "",
+  "specialization": "Vệ sinh chuồng trại"
+}

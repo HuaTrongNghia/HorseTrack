@@ -5,6 +5,10 @@ import com.horsetrack.equinecare.modules.auth.dto.OwnerRegisterRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.StaffCreateRequestDTO;
 import com.horsetrack.equinecare.modules.auth.entity.*;
 import com.horsetrack.equinecare.modules.auth.repository.*;
+import com.horsetrack.equinecare.modules.auth.security.JwtTokenProvider;
+import lombok.RequiredArgsConstructor;
+import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -12,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 
 @Service
+@RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
 
     private final UserRepository userRepository;
@@ -20,18 +25,7 @@ public class AuthServiceImpl implements AuthService {
     private final TrainerProfileRepository trainerRepo;
     private final VeterinarianProfileRepository vetRepo;
     private final GroomProfileRepository groomRepo;
-
-    public AuthServiceImpl(UserRepository userRepository, PasswordEncoder passwordEncoder,
-                           HorseOwnerProfileRepository horseOwnerRepo,
-                           TrainerProfileRepository trainerRepo, VeterinarianProfileRepository vetRepo,
-                           GroomProfileRepository groomRepo) {
-        this.userRepository = userRepository;
-        this.passwordEncoder = passwordEncoder;
-        this.horseOwnerRepo = horseOwnerRepo;
-        this.trainerRepo = trainerRepo;
-        this.vetRepo = vetRepo;
-        this.groomRepo = groomRepo;
-    }
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -61,7 +55,7 @@ public class AuthServiceImpl implements AuthService {
                 .taxCode(request.getTaxCode())
                 .billingAddress(request.getBillingAddress())
                 .build();
-                
+
         horseOwnerRepo.save(ownerProfile);
     }
 
@@ -92,25 +86,25 @@ public class AuthServiceImpl implements AuthService {
             case "Trainer":
             case "Head Trainer":
                 TrainerProfile trainerProfile = TrainerProfile.builder()
-                        .user(savedUser)
-                        .licenseNumber(request.getLicenseNumber() != null ? request.getLicenseNumber() : "N/A")
-                        .experienceYears(0)
-                        .build();
+                .user(savedUser)
+                .licenseNumber(request.getLicenseNumber() != null ? request.getLicenseNumber() : "N/A")
+                .experienceYears(0)
+                .build();
                 trainerRepo.save(trainerProfile);
                 break;
             case "Veterinarian":
                 VeterinarianProfile vetProfile = VeterinarianProfile.builder()
-                        .user(savedUser)
-                        .vetLicenseNo(request.getLicenseNumber() != null ? request.getLicenseNumber() : "N/A")
-                        .clinicAffiliation(request.getSpecialization())
-                        .build();
+                .user(savedUser)
+                .vetLicenseNo(request.getLicenseNumber() != null ? request.getLicenseNumber() : "N/A")
+                .clinicAffiliation(request.getSpecialization())
+                .build();
                 vetRepo.save(vetProfile);
                 break;
             case "Groom":
                 GroomProfile groomProfile = GroomProfile.builder()
-                        .user(savedUser)
-                        .assignedBarnZone(request.getSpecialization())
-                        .build();
+                .user(savedUser)
+                .assignedBarnZone(request.getSpecialization())
+                .build();
                 groomRepo.save(groomProfile);
                 break;
             default:
@@ -119,7 +113,23 @@ public class AuthServiceImpl implements AuthService {
     }
 
     @Override
+    @Transactional(readOnly = true)
     public String login(LoginDTO request) {
-        return "chuoi_jwt_token_gia_lap_cua_ban\"";
+        // Bước 1: Lấy thông tin user từ DB dựa trên username từ LoginDTO
+        User user = userRepository.findByUsername(request.getUsername().trim())
+                .orElseThrow(() -> new BadCredentialsException("Tên đăng nhập hoặc mật khẩu không chính xác"));
+
+        // Kiểm tra xem tài khoản có đang hoạt động hay không
+        if (Boolean.FALSE.equals(user.getIsActive())) {
+            throw new DisabledException("Tài khoản đã bị vô hiệu hóa hoặc chưa được kích hoạt");
+        }
+
+        // Bước 2: So khớp mật khẩu raw với password_hash từ Database bằng PasswordEncoder
+        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
+            throw new BadCredentialsException("Tên đăng nhập hoặc mật khẩu không chính xác");
+        }
+
+        // Bước 3, 4 & 5: Sinh JWT Token (chứa sub, userId, role) và trả về
+        return jwtTokenProvider.generateToken(user);
     }
 }
