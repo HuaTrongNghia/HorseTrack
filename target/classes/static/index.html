@@ -199,7 +199,7 @@
         </div>
         <span class="role-badge" id="nav-role">Role</span>
         <span id="nav-name" style="font-weight: 500;">Tên User</span>
-
+        <button class="btn btn-danger" style="width: auto; padding: 6px 12px; font-size: 13px;" onclick="openModal('modal-alert-vet')">Khóa Y Tế</button>
         <button class="btn-action" onclick="openModal('modal-change-password')"><i class="fa-solid fa-key"></i> Đổi pass</button>
         <button class="btn-action btn-logout" onclick="testLogout()"><i class="fa-solid fa-right-from-bracket"></i> Thoát</button>
     </div>
@@ -603,7 +603,7 @@
             <label>Lý do y tế (Gửi Bác sĩ):</label>
             <textarea rows="3" placeholder="Mô tả triệu chứng..."></textarea>
         </div>
-        <button class="btn btn-danger" onclick="mockAction('Đã phát cảnh báo khẩn đến Bác sĩ thú y. Ngựa đã bị khóa (Vetlock)!', 'modal-alert-vet')">Xác nhận Dừng & Khóa y tế</button>
+        <button class="btn btn-danger" onclick="triggerVetLock()">Xác nhận Dừng & Khóa y tế</button>
     </div>
 </div>
 
@@ -634,7 +634,6 @@
         if (savedUser) {
             loadDashboard(JSON.parse(savedUser));
         } else {
-            // Thiết lập mặc định để test ngay không cần login lại
             loadDashboard({
                 username: "trainer_pro",
                 fullName: "Nguyễn Vỹ Long",
@@ -661,17 +660,13 @@
         document.getElementById("forgot-msg").innerText = "";
     }
 
-    // ---------------- LOGIC MỞ & XỬ LÝ TASK MODAL (MỚI) ----------------
     function openTaskModal(taskData) {
         currentTask = taskData;
-
-        // Gán thông tin Read-only
         document.getElementById("view-plan-name").innerText = taskData.planName;
         document.getElementById("view-horse-name").innerText = taskData.horseName;
         document.getElementById("view-date-time").innerText = taskData.dateTime;
         document.getElementById("view-exercise-type").innerText = taskData.exerciseType;
 
-        // Reset ô Ghi chú & cảnh báo lỗi
         document.getElementById("task-notes").value = "";
         document.getElementById("task-error-msg").style.display = "none";
         document.getElementById("note-required-hint").style.display = "none";
@@ -683,7 +678,6 @@
         const notes = document.getElementById("task-notes").value.trim();
         const errorMsg = document.getElementById("task-error-msg");
 
-        // Client-side validation: Nếu Hủy, bắt buộc phải có chữ trong Ghi chú
         if (status === "CANCELLED" && notes.length === 0) {
             errorMsg.innerText = "Vui lòng nhập lý do vào ô Ghi chú trước khi Hủy buổi tập!";
             errorMsg.style.display = "block";
@@ -708,8 +702,6 @@
 
             if (response.ok) {
                 alert(`Cập nhật trạng thái thành công: ${status}`);
-
-                // Cập nhật giao diện trực tiếp trên Task Card
                 if (currentTask && currentTask.id) {
                     const badge = document.getElementById(`badge-task-${currentTask.id}`);
                     if (badge) {
@@ -723,7 +715,6 @@
                 errorMsg.style.display = "block";
             }
         } catch (err) {
-            // Khi Backend chưa chạy hoặc chưa có record DB với ID tương ứng: Giả lập thành công để test UI mượt mà
             alert(`[Chế độ Test Giao diện] Đã chuyển trạng thái: ${status}`);
             if (currentTask && currentTask.id) {
                 const badge = document.getElementById(`badge-task-${currentTask.id}`);
@@ -736,7 +727,6 @@
         }
     }
 
-    // ---------------- AUTH APIs ----------------
     async function testLoginAPI() {
         const u = document.getElementById("username").value.trim();
         const p = document.getElementById("password").value.trim();
@@ -758,7 +748,6 @@
                 body: JSON.stringify({ username: u, password: p })
             });
 
-            // Đọc dưới dạng Text trước để tránh lỗi SyntaxError khi server trả về rỗng (như 403 Forbidden)
             const text = await response.text();
             let result = {};
             if (text) {
@@ -766,7 +755,6 @@
             }
 
             if (response.ok) {
-                // Tự động điều chỉnh để lấy đúng thông tin User tùy theo API cấu trúc
                 const userData = result.data || result || { username: u, fullName: "User", roleName: "Head Trainer" };
                 localStorage.setItem("horseTrackUser", JSON.stringify(userData));
                 loadDashboard(userData);
@@ -780,6 +768,7 @@
             msgBox.innerText = "Không thể kết nối đến máy chủ Spring Boot (Port 8080)!";
         }
     }
+
     async function testRegisterAPI() {
         const msgBox = document.getElementById("reg-msg");
         msgBox.className = "msg"; msgBox.innerText = "Đang xử lý...";
@@ -875,7 +864,6 @@
         } catch (error) { msgBox.className = "msg error"; msgBox.innerText = "Lỗi kết nối Server!"; }
     }
 
-    // ---------------- DASHBOARD CONTROL ----------------
     function loadDashboard(user) {
         switchScreen('dashboard-screen');
         document.getElementById("navbar").classList.remove("hidden");
@@ -892,11 +880,9 @@
         else if (user.roleName === "Groom") { document.getElementById("groom-actions").classList.remove("hidden"); }
         else if (user.roleName === "Horse Owner") { document.getElementById("owner-actions").classList.remove("hidden"); }
 
-        // Tự động tải danh sách buổi tập khi mở Dashboard
         loadAllTrainingSessions();
     }
 
-    // ---------------- HÀM TẢI VÀ HIỂN THỊ TẤT CẢ BUỔI TẬP ----------------
     async function loadAllTrainingSessions() {
         const container = document.getElementById('all-sessions-container');
         if (!container) return;
@@ -912,7 +898,6 @@
                 (Array.isArray(result.data) ? result.data :
                     (Array.isArray(result.content) ? result.content :
                         (Array.isArray(result.data?.content) ? result.data.content : [])));
-            console.log("Dữ liệu API trả về:", list);
 
             container.innerHTML = '';
 
@@ -979,16 +964,13 @@
     function openModal(modalId) { document.getElementById(modalId).classList.add('active'); }
     function closeModal(modalId) { document.getElementById(modalId).classList.remove('active'); }
 
-    // ---------------- LẬP GIÁO ÁN MASTER VÀ GỬI NESTED JSON ----------------
     async function submitMasterPlan() {
-        // 1. Lấy dữ liệu Master (Giáo án)
         const planName = document.getElementById("plan-name").value.trim();
         const objective = document.getElementById("plan-objective").value.trim();
         const horseId = document.getElementById("plan-horse").value;
         const startDate = document.getElementById("plan-start-date").value;
         const endDate = document.getElementById("plan-end-date").value;
 
-        // 2. Lấy dữ liệu Detail (Buổi tập)
         const sessionDatetime = document.getElementById("session-datetime").value;
         const sessionActivity = document.getElementById("session-activity").value.trim();
         const sessionAssignedId = document.getElementById("session-assigned-id").value;
@@ -996,7 +978,6 @@
         const errorMsg = document.getElementById("plan-error-msg");
         const btn = document.querySelector('#modal-training-plan .btn-primary');
 
-        // Client-side Validation: Kiểm tra rỗng
         if (!planName || !horseId || !startDate || !endDate || !sessionDatetime || !sessionActivity || !sessionAssignedId) {
             errorMsg.innerText = "Vui lòng nhập đầy đủ thông tin có dấu (*)!";
             errorMsg.style.display = "block";
@@ -1012,10 +993,9 @@
         errorMsg.style.display = "none";
         btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang xử lý...';
 
-        // 3. TẠO CẤU TRÚC NESTED JSON KHỚP VỚI SPRING BOOT DTO
         const payload = {
             planName: planName,
-            horseId: parseInt(horseId), // Ép kiểu Integer cho Backend
+            horseId: parseInt(horseId),
             startDate: startDate,
             endDate: endDate,
             goal: objective,
@@ -1023,15 +1003,12 @@
                 {
                     sessionDate: sessionDatetime,
                     activityType: sessionActivity,
-                    assignedToId: parseInt(sessionAssignedId) // Ép kiểu Integer
+                    assignedToId: parseInt(sessionAssignedId)
                 }
             ]
         };
 
-        console.log("Dữ liệu gửi xuống Backend:", JSON.stringify(payload, null, 2));
-
         try {
-            // Gọi đến API mới tạo: POST /api/v1/training-plans
             const response = await fetch('http://localhost:8080/api/v1/training-plans', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1041,8 +1018,6 @@
 
             if (response.ok) {
                 alert(`Thành công! ${result.message} (ID Giáo án: ${result.data})`);
-
-                // Reset form sau khi lưu thành công
                 document.getElementById("plan-name").value = "";
                 document.getElementById("plan-objective").value = "";
                 document.getElementById("plan-horse").value = "";
@@ -1083,7 +1058,6 @@
         if(modalIdToClose) closeModal(modalIdToClose);
     }
 
-    // ---------------- LOGIC TẠO GIÁO ÁN NÂNG CAO ----------------
     let selectedPlanType = 'Sức bền';
     let stageCount = 0;
 
@@ -1100,7 +1074,6 @@
         startInput.min = getLocalDateString();
         if (startInput.value && startInput.value < startInput.min) startInput.value = '';
 
-        // Chỉ tạo các giai đoạn mẫu lần đầu, tránh ghi đè dữ liệu người dùng khi quay lại màn hình.
         if (document.querySelectorAll('#stages-wrapper .stage-item').length === 0) {
             addStageUI('Nền thể lực', 2, 'Nhẹ', 1200, 4, 160);
             addStageUI('Tăng sức bền', 3, 'Vừa', 1600, 4, 180);
@@ -1185,7 +1158,6 @@
         document.getElementById('sum-start-date').textContent = startDate ? startDate.split('-').reverse().join('/') : '—';
     }
 
-    // Gắn listener một lần, không nhân đôi mỗi lần mở màn hình.
     document.getElementById('adv-horse').addEventListener('change', updateAdvancedSummary);
     document.getElementById('adv-start-date').addEventListener('change', updateAdvancedSummary);
 
@@ -1234,7 +1206,6 @@
             goal,
             stages
         };
-        // Gửi payload giáo án và các giai đoạn xuống Backend Spring Boot.
         const btnSubmit = document.querySelector('.btn-submit-plan');
         const originalBtnText = btnSubmit ? btnSubmit.innerHTML : '<i class="fa-solid fa-check"></i> Lưu giáo án';
         if (btnSubmit) {
@@ -1249,7 +1220,6 @@
                 body: JSON.stringify(payload)
             });
 
-            // Hỗ trợ cả response JSON và response rỗng/không phải JSON.
             const responseText = await response.text();
             let result = {};
             if (responseText) {
@@ -1281,6 +1251,39 @@
         }
     }
 
+    async function triggerVetLock() {
+        const horseId = 1;
+        const reasonInput = document.querySelector('#modal-alert-vet textarea');
+        const reason = reasonInput ? reasonInput.value.trim() : "Khóa khẩn cấp từ giao diện Dashboard";
+
+        try {
+            const response = await fetch('http://localhost:8080/api/medical/vet-lock', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    horseId: horseId,
+                    reason: reason,
+                    vetId: 99
+                })
+            });
+
+            const responseText = await response.text();
+            let result = {};
+            if (responseText) {
+                try { result = JSON.parse(responseText); } catch (e) { result = { message: responseText }; }
+            }
+
+            if (response.ok) {
+                alert("🚨 " + (result.message || "Đã khóa huấn luyện thành công!"));
+                closeModal('modal-alert-vet');
+                if (reasonInput) reasonInput.value = "";
+            } else {
+                alert("Lỗi: " + (result.message || "Không thể thực hiện khóa y tế"));
+            }
+        } catch (error) {
+            alert("Lỗi kết nối đến Backend Spring Boot (Port 8080)!");
+        }
+    }
 </script>
 </body>
 </html>

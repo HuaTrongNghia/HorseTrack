@@ -14,7 +14,9 @@ public class Horse {
 
     @Column(name = "horse_name") // Thay "horse_name" bằng tên cột thực tế trong DB
     private String name;
-
+    // Thêm trường trạng thái để phục vụ cho tính năng Khóa y tế (VetLock)
+    @Column(name = "status")
+    private String status;
     @Column(name = "is_locked")
     private boolean locked; // Lombok sẽ tự động sinh hàm isLocked()
 }
