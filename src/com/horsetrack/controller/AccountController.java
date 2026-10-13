@@ -9,7 +9,7 @@ import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/accounts")
-@CrossOrigin(origins = "*") // Bắt buộc để Frontend có thể gọi API
+@CrossOrigin("*") // Bắt buộc để Frontend có thể gọi API
 @RequiredArgsConstructor
 public class AccountController {
 

@@ -149,6 +149,38 @@
         .msg.error { color: var(--danger); }
         .msg.success { color: var(--secondary); }
         hr { border: 0; height: 1px; background: var(--border); margin: 20px 0; }
+
+
+        /* ================= GIAO DIỆN TẠO GIÁO ÁN NÂNG CAO ================= */
+        .plan-container { display:flex; gap:25px; align-items:flex-start; margin-top:20px; text-align:left; }
+        .plan-main { flex:1; min-width:0; }
+        .plan-sidebar { width:320px; flex:0 0 320px; position:sticky; top:90px; }
+        .plan-section, .summary-card { background:#fff; border:1px solid var(--border); border-radius:12px; padding:25px; margin-bottom:25px; }
+        .plan-section-title { font-size:18px; font-weight:700; color:#111827; margin:0 0 12px; }
+        .plan-desc { font-size:13px; color:var(--text-muted); margin:0 0 20px; line-height:1.5; }
+        .type-tabs { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:20px; background:#f3f4f6; padding:5px; border-radius:8px; width:fit-content; max-width:100%; }
+        .type-tab { padding:8px 15px; font-size:14px; font-weight:600; color:#4b5563; border:0; background:transparent; border-radius:6px; cursor:pointer; }
+        .type-tab.active { background:#fff; color:var(--primary); box-shadow:0 1px 3px rgba(0,0,0,.1); }
+        .stage-item { border:1px solid var(--border); border-radius:10px; padding:20px; margin-bottom:15px; position:relative; background:#fff; }
+        .stage-header { display:flex; align-items:center; gap:10px; margin-bottom:15px; padding-right:30px; }
+        .stage-badge { background:#fef3c7; color:#d97706; padding:4px 10px; border-radius:20px; font-size:12px; font-weight:700; }
+        .stage-title-text { font-weight:600; font-size:15px; }
+        .btn-remove-stage { position:absolute; right:15px; top:15px; color:var(--text-muted); cursor:pointer; border:0; background:none; font-size:16px; padding:5px; }
+        .btn-remove-stage:hover { color:var(--danger); }
+        .stage-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+        .stage-grid label { font-size:12px; color:#4b5563; font-weight:600; margin-bottom:5px; display:block; }
+        .stage-grid input, .stage-grid select { padding:10px; border:1px solid #d1d5db; border-radius:6px; font-size:14px; width:100%; box-sizing:border-box; min-width:0; }
+        .btn-add-stage { background:#fff; border:1px dashed var(--primary); color:var(--primary); padding:8px 15px; border-radius:6px; font-size:13px; font-weight:600; cursor:pointer; margin:0 0 15px; }
+        .btn-add-stage:hover { background:#e0e7ff; }
+        .summary-row { display:flex; justify-content:space-between; gap:12px; margin-bottom:12px; font-size:14px; }
+        .summary-row span:first-child { color:var(--text-muted); }
+        .summary-row span:last-child { font-weight:600; color:#111827; text-align:right; overflow-wrap:anywhere; }
+        .btn-submit-plan { background:#047857; color:#fff; width:100%; padding:14px; border:0; border-radius:8px; font-size:15px; font-weight:700; cursor:pointer; margin-top:20px; display:flex; justify-content:center; gap:10px; align-items:center; }
+        .btn-submit-plan:hover { background:#065f46; }
+        .summary-note { font-size:12px; color:var(--text-muted); margin-top:15px; background:#eff6ff; padding:10px; border-radius:6px; border:1px solid #bfdbfe; line-height:1.5; }
+        @media (max-width:900px) { .plan-container { flex-direction:column; } .plan-main, .plan-sidebar { width:100%; flex:auto; box-sizing:border-box; position:static; } }
+        @media (max-width:560px) { .stage-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .plan-section, .summary-card { padding:16px; } }
+
     </style>
 </head>
 <body>
@@ -312,7 +344,7 @@
             <div id="all-sessions-container" style="display: flex; gap: 15px; flex-wrap: wrap; margin-top: 10px;">
                 <p style="color: var(--text-muted); font-size: 14px;">Đang tải danh sách buổi tập...</p>
             </div>
-            <button type="button" class="btn btn-primary" style="margin-top: 12px;" onclick="loadAllSessions()">
+            <button type="button" class="btn btn-primary" style="margin-top: 12px;" onclick="loadAllTrainingSessions()">
                 <i class="fa-solid fa-rotate"></i> Tải lại danh sách
             </button>
         </div>
@@ -320,7 +352,7 @@
         <!-- Các module nghiệp vụ khác của Trainer -->
         <div class="action-module">
             <h3><i class="fa-solid fa-clipboard-list" style="color: var(--primary);"></i> Flow 2.1: Lập giáo án</h3>
-            <button class="btn btn-primary" onclick="openModal('modal-training-plan')">Lập giáo án mới</button>
+            <button class="btn btn-primary" onclick="openAdvancedPlanScreen()">Lập giáo án mới</button>
         </div>
         <div class="action-module">
             <h3><i class="fa-solid fa-heart-pulse" style="color: var(--danger);"></i> Flow 2.2: Đánh giá & Xử lý</h3>
@@ -356,6 +388,73 @@
     </div>
 </div>
 
+
+
+<!-- MÀN HÌNH TẠO GIÁO ÁN NÂNG CAO -->
+<div class="container hidden" id="create-plan-screen">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:20px; flex-wrap:wrap;">
+        <button type="button" class="btn-action" onclick="switchScreen('dashboard-screen')"><i class="fa-solid fa-arrow-left"></i> Quay lại Dashboard</button>
+        <h2 style="margin:0;">Tạo giáo án huấn luyện</h2>
+    </div>
+    <div class="plan-container">
+        <div class="plan-main">
+            <section class="plan-section">
+                <h3 class="plan-section-title">Ngựa &amp; mục tiêu</h3>
+                <p class="plan-desc">Chọn ngựa, ngày bắt đầu, đặt tên giáo án, chọn loại và nhập mục tiêu. Danh sách ngựa hiện là dữ liệu mẫu; hãy đồng bộ với API ngựa khi backend sẵn sàng.</p>
+                <div class="two-cols" style="margin-bottom:20px;">
+                    <div class="form-group">
+                        <label for="adv-horse">Ngựa *</label>
+                        <select id="adv-horse">
+                            <option value="">— Chọn ngựa —</option>
+                            <option value="1" data-name="Hắc Phong">Hắc Phong (ID: 1)</option>
+                            <option value="2" data-name="Xích Thố">Xích Thố (ID: 2)</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="adv-start-date">Ngày bắt đầu *</label>
+                        <input type="date" id="adv-start-date">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom:20px;">
+                    <label for="adv-plan-name">Tên giáo án *</label>
+                    <input type="text" id="adv-plan-name" maxlength="150" placeholder="VD: Giáo án tăng sức bền Hắc Phong" required>
+                </div>
+                <label style="font-size:13px;font-weight:600;display:block;margin-bottom:8px;">Loại giáo án</label>
+                <div class="type-tabs" role="group" aria-label="Loại giáo án">
+                    <button type="button" class="type-tab active" aria-pressed="true" onclick="selectPlanType(this,'Sức bền')">Sức bền</button>
+                    <button type="button" class="type-tab" aria-pressed="false" onclick="selectPlanType(this,'Tốc độ')">Tốc độ</button>
+                    <button type="button" class="type-tab" aria-pressed="false" onclick="selectPlanType(this,'Phục hồi')">Phục hồi</button>
+                    <button type="button" class="type-tab" aria-pressed="false" onclick="selectPlanType(this,'Kỹ thuật')">Kỹ thuật</button>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label for="adv-goal">Mục tiêu *</label>
+                    <input type="text" id="adv-goal" maxlength="200" placeholder="VD: Giải đua Đại Việt 2026 - 1600m">
+                </div>
+            </section>
+            <section class="plan-section">
+                <h3 class="plan-section-title">Các giai đoạn</h3>
+                <p class="plan-desc">Mỗi giai đoạn gồm số tuần, cường độ, quãng đường mỗi buổi, số buổi mỗi tuần và ngưỡng nhịp tim mục tiêu.</p>
+                <button type="button" class="btn-add-stage" onclick="addStageUI()"><i class="fa-solid fa-plus"></i> Thêm giai đoạn</button>
+                <div id="stages-wrapper"></div>
+                <p id="adv-plan-error" class="msg error" style="display:none;text-align:left;margin-top:12px;"></p>
+            </section>
+        </div>
+        <aside class="plan-sidebar">
+            <div class="summary-card">
+                <h3 style="margin:0 0 20px;">Tóm tắt giáo án</h3>
+                <div class="summary-row"><span>Ngựa</span><span id="sum-horse">—</span></div>
+                <div class="summary-row"><span>Loại</span><span id="sum-type">Sức bền</span></div>
+                <div class="summary-row"><span>Bắt đầu</span><span id="sum-start-date">—</span></div>
+                <div class="summary-row"><span>Số giai đoạn</span><span id="sum-stages">0</span></div>
+                <div class="summary-row"><span>Tổng thời gian</span><span id="sum-weeks">0 tuần</span></div>
+                <div class="summary-row" style="border-top:1px solid var(--border);padding-top:12px;margin-top:12px;"><span>Tổng số buổi</span><span id="sum-sessions">0 buổi</span></div>
+                <button type="button" class="btn-submit-plan" onclick="submitAdvancedPlan()"><i class="fa-solid fa-check"></i> Lưu giáo án</button>
+                <div class="summary-note"><i class="fa-solid fa-circle-info" style="color:#3b82f6;"></i> Hiện tại chức năng sẽ kiểm tra và lưu bản nháp trên trình duyệt. Muốn lưu vào database cần API backend hỗ trợ cấu trúc giáo án theo giai đoạn.</div>
+            </div>
+        </aside>
+    </div>
+</div>
+
 <!-- ==================== CÁC MODAL (CỬA SỔ NỔI) ==================== -->
 
 <!-- 1. MODAL CẬP NHẬT TRẠNG THÁI BUỔI TẬP -->
@@ -378,7 +477,8 @@
         <div class="form-group">
             <label for="task-notes">
                 <strong>Ghi chú (Notes):</strong>
-                <span id="note-required-hint" style="color: var(--danger); font-size: 12px; display: none;">* Bắt buộc khi Hủy buổi tập</span>
+                -                 <span id="note-required-hint" style="color: var(--danger); font-size: 12px; display: none;">Bắt buộc khi Hủy buổi tập
+</span>
             </label>
             <textarea id="task-notes" rows="4" placeholder="Nhập tình trạng thể lực của ngựa, thành tích, hoặc lý do hủy..."></textarea>
             <p id="task-error-msg" class="msg error" style="display: none; margin-top: 5px; text-align: left;"></p>
@@ -425,7 +525,8 @@
         </div>
 
         <!-- THÔNG TIN MASTER (GIÁO ÁN) -->
-        <h4 style="margin-top: 0; color: var(--primary);">1. Thông tin chung</h4>
+        1.         <h4 style="margin-top: 0; color: var(--primary);">Thông tin chung
+    </h4>
         <div class="form-group">
             <label>Tên giáo án (*):</label>
             <input type="text" id="plan-name" placeholder="VD: Giáo án tăng sức bền cự ly dài">
@@ -556,6 +657,7 @@
         document.getElementById("register-screen").classList.add("hidden");
         document.getElementById("forgot-password-screen").classList.add("hidden");
         document.getElementById("dashboard-screen").classList.add("hidden");
+        document.getElementById("create-plan-screen").classList.add("hidden");
         document.getElementById("navbar").classList.add("hidden");
 
         document.getElementById("forgot-step-1").classList.remove("hidden");
@@ -645,15 +747,24 @@
 
     // ---------------- AUTH APIs ----------------
     async function testLoginAPI() {
-        const u = document.getElementById("username").value;
-        const p = document.getElementById("password").value;
+        const u = document.getElementById("username").value.trim();
+        const p = document.getElementById("password").value.trim();
         const msgBox = document.getElementById("login-msg");
-        msgBox.className = "msg"; msgBox.innerText = "Đang kết nối Backend...";
+
+        if (!u || !p) {
+            msgBox.className = "msg error";
+            msgBox.innerText = "Vui lòng nhập đầy đủ tên đăng nhập và mật khẩu!";
+            return;
+        }
+
+        msgBox.className = "msg";
+        msgBox.innerText = "Đang kết nối Backend...";
 
         try {
             const response = await fetch(`${API_ACCOUNT}/login`, {
-                method: 'POST', headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({username: u, password: p})
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ username: u, password: p })
             });
             const result = await response.json();
 
@@ -661,10 +772,13 @@
                 localStorage.setItem("horseTrackUser", JSON.stringify(result.data));
                 loadDashboard(result.data);
             } else {
-                msgBox.className = "msg error"; msgBox.innerText = result.message || "Sai tài khoản hoặc mật khẩu!";
+                msgBox.className = "msg error";
+                msgBox.innerText = result.message || "Sai tài khoản hoặc mật khẩu!";
             }
         } catch (error) {
-            msgBox.className = "msg error"; msgBox.innerText = "Máy chủ Spring Boot chưa bật!";
+            console.error(error);
+            msgBox.className = "msg error";
+            msgBox.innerText = "Không thể kết nối đến máy chủ Spring Boot (Port 8080)!";
         }
     }
 
@@ -781,79 +895,74 @@
         else if (user.roleName === "Horse Owner") { document.getElementById("owner-actions").classList.remove("hidden"); }
 
         // Tự động tải danh sách buổi tập khi mở Dashboard
-        loadAllSessions();
+        loadAllTrainingSessions();
     }
 
-    // ---------------- HIỂN THỊ TẤT CẢ BUỔI TẬP ----------------
-    async function loadAllSessions() {
-        const container = document.getElementById("all-sessions-container");
+    // ---------------- HÀM TẢI VÀ HIỂN THỊ TẤT CẢ BUỔI TẬP ----------------
+    async function loadAllTrainingSessions() {
+        const container = document.getElementById('all-sessions-container');
         if (!container) return;
 
-        container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">Đang tải danh sách buổi tập...</p>';
+        container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">Đang tải danh sách giáo án...</p>';
 
         try {
-            // GET dùng cùng đường dẫn tài nguyên với API POST tạo giáo án.
-            const response = await fetch('http://localhost:8080/api/v1/training-plans');
-            if (!response.ok) throw new Error(`Máy chủ trả về mã ${response.status}`);
+            const response = await fetch('http://localhost:8080/api/v1/training-plans/all');
+            if (!response.ok) throw new Error("Lỗi HTTP " + response.status);
 
             const result = await response.json();
-            const plans = Array.isArray(result) ? result :
+            const list = Array.isArray(result) ? result :
                 (Array.isArray(result.data) ? result.data :
                     (Array.isArray(result.content) ? result.content :
                         (Array.isArray(result.data?.content) ? result.data.content : [])));
+            console.log("Dữ liệu API trả về:", list);
 
-            const sessions = [];
-            plans.forEach(plan => {
-                const planSessions = Array.isArray(plan.sessions) ? plan.sessions :
-                    (Array.isArray(plan.trainingSessions) ? plan.trainingSessions : []);
-                planSessions.forEach(session => sessions.push({
-                    ...session,
-                    planName: session.planName || plan.planName || plan.name || "Chưa có tên giáo án",
-                    horseName: session.horseName || plan.horseName || plan.horse?.name ||
-                        (plan.horseId != null ? `Ngựa ID: ${plan.horseId}` : "Chưa có thông tin ngựa")
-                }));
-            });
+            container.innerHTML = '';
 
-            container.innerHTML = "";
-            if (sessions.length === 0) {
-                container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">Chưa có buổi tập nào trong hệ thống.</p>';
+            if (list.length === 0) {
+                container.innerHTML = '<p style="color: var(--text-muted); font-size: 14px;">Chưa có dữ liệu nào trong hệ thống.</p>';
                 return;
             }
 
-            sessions.sort((a, b) => new Date(a.sessionDate || a.dateTime || 0) - new Date(b.sessionDate || b.dateTime || 0));
-            sessions.forEach(session => {
-                const card = document.createElement("div");
-                card.style.cssText = "flex: 1 1 250px; max-width: 360px; padding: 14px; border: 1px solid var(--border); border-radius: 8px; background: #fff; line-height: 1.6;";
+            list.forEach(item => {
+                const card = document.createElement('div');
+                card.className = 'task-card';
+                card.style.cssText = 'min-width: 280px; flex: 1 1 280px; max-width: 420px;';
 
-                const title = document.createElement("div");
-                title.style.cssText = "font-weight: 700; color: var(--text-main); margin-bottom: 6px;";
-                title.textContent = session.activityType || session.exerciseType || "Buổi tập";
+                const itemId = item.planId ?? item.id ?? item.sessionId ?? 'N/A';
+                const title = item.planName || item.activityType || 'Giáo án #' + itemId;
+                const horse = item.horseName || item.horseId || item.horse?.id || 'N/A';
+                const dateValue = item.startDate || item.sessionDate || 'N/A';
+                const statusValue = item.planStatus || item.status || 'ACTIVE';
+                const isCompleted = statusValue === 'ACTIVE' || statusValue === 'COMPLETED';
 
-                const detail = document.createElement("div");
-                detail.style.cssText = "font-size: 13px; color: var(--text-muted);";
-                const dateValue = session.sessionDate || session.dateTime || session.date;
-                let formattedDate = "Chưa có ngày tập";
-                if (dateValue) {
-                    const parsedDate = new Date(dateValue);
-                    formattedDate = Number.isNaN(parsedDate.getTime()) ? String(dateValue) :
-                        parsedDate.toLocaleString("vi-VN", { dateStyle: "short", timeStyle: "short" });
-                }
-                detail.textContent = `Ngựa: ${session.horseName} | Ngày tập: ${formattedDate}`;
+                const idLine = document.createElement('div');
+                idLine.style.cssText = 'font-weight: 700; font-size: 14px; color: var(--primary);';
+                const icon = document.createElement('i');
+                icon.className = 'fa-solid fa-file-signature';
+                idLine.append(icon, document.createTextNode(' Mã ID: #' + itemId));
 
-                const plan = document.createElement("div");
-                plan.style.cssText = "font-size: 13px; margin-top: 5px;";
-                plan.textContent = `Giáo án: ${session.planName}`;
+                const titleLine = document.createElement('div');
+                titleLine.style.cssText = 'font-size: 16px; font-weight: 700; margin: 8px 0; color: #111827;';
+                titleLine.textContent = title;
 
-                const status = document.createElement("div");
-                status.style.cssText = "font-size: 12px; font-weight: 700; margin-top: 8px; color: var(--secondary);";
-                status.textContent = `Trạng thái: ${session.status || session.sessionStatus || "Chưa cập nhật"}`;
+                const horseLine = document.createElement('div');
+                horseLine.style.cssText = 'font-size: 13px; color: var(--text-main); margin-bottom: 4px;';
+                horseLine.textContent = 'Ngựa: ' + horse;
 
-                card.append(title, detail, plan, status);
+                const dateLine = document.createElement('div');
+                dateLine.style.cssText = 'font-size: 13px; color: var(--text-muted); margin-bottom: 10px;';
+                dateLine.textContent = 'Ngày: ' + dateValue;
+
+                const status = document.createElement('span');
+                status.className = 'badge ' + (isCompleted ? 'badge-completed' : 'badge-pending');
+                status.textContent = statusValue;
+
+                card.append(idLine, titleLine, horseLine, dateLine, status);
                 container.appendChild(card);
             });
-        } catch (error) {
-            console.error("Không thể tải danh sách buổi tập:", error);
-            container.innerHTML = '<p style="color: var(--danger); font-size: 14px;">Không tải được danh sách buổi tập. Hãy kiểm tra Backend và API GET /api/v1/training-plans.</p>';
+        } catch (err) {
+            console.error('Lỗi tải dữ liệu:', err);
+            container.innerHTML = '<p style="color: var(--danger); font-size: 14px;">Không tải được danh sách. Hãy kiểm tra Backend.</p>';
         }
     }
 
@@ -946,7 +1055,7 @@
                 document.getElementById("session-assigned-id").value = "";
 
                 closeModal('modal-training-plan');
-                loadAllSessions();
+                loadAllTrainingSessions();
             } else {
                 errorMsg.innerText = result.message || "Lỗi từ máy chủ!";
                 errorMsg.style.display = "block";
@@ -975,6 +1084,205 @@
         alert(message);
         if(modalIdToClose) closeModal(modalIdToClose);
     }
+
+    // ---------------- LOGIC TẠO GIÁO ÁN NÂNG CAO ----------------
+    let selectedPlanType = 'Sức bền';
+    let stageCount = 0;
+
+    function getLocalDateString() {
+        const now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        return now.toISOString().slice(0, 10);
+    }
+
+    function openAdvancedPlanScreen() {
+        switchScreen('create-plan-screen');
+        document.getElementById('navbar').classList.remove('hidden');
+        const startInput = document.getElementById('adv-start-date');
+        startInput.min = getLocalDateString();
+        if (startInput.value && startInput.value < startInput.min) startInput.value = '';
+
+        // Chỉ tạo các giai đoạn mẫu lần đầu, tránh ghi đè dữ liệu người dùng khi quay lại màn hình.
+        if (document.querySelectorAll('#stages-wrapper .stage-item').length === 0) {
+            addStageUI('Nền thể lực', 2, 'Nhẹ', 1200, 4, 160);
+            addStageUI('Tăng sức bền', 3, 'Vừa', 1600, 4, 180);
+            addStageUI('Duy trì trước giải', 2, 'Cao', 2000, 3, 185);
+        }
+        updateAdvancedSummary();
+    }
+
+    function selectPlanType(element, type) {
+        document.querySelectorAll('#create-plan-screen .type-tab').forEach(tab => {
+            tab.classList.remove('active');
+            tab.setAttribute('aria-pressed', 'false');
+        });
+        element.classList.add('active');
+        element.setAttribute('aria-pressed', 'true');
+        selectedPlanType = type;
+        document.getElementById('sum-type').textContent = type;
+    }
+
+    function addStageUI(name = '', weeks = 1, intensity = 'Vừa', distance = 1000, sessions = 3, bpm = 150) {
+        stageCount++;
+        const stageId = stageCount;
+        const wrapper = document.getElementById('stages-wrapper');
+        const box = document.createElement('div');
+        box.className = 'stage-item';
+        box.id = `stage-box-${stageId}`;
+        box.innerHTML = `
+            <button type="button" class="btn-remove-stage" aria-label="Xóa giai đoạn" title="Xóa giai đoạn"><i class="fa-solid fa-xmark"></i></button>
+            <div class="stage-header"><span class="stage-badge"></span><span class="stage-title-text"></span></div>
+            <div class="stage-grid">
+                <div><label>Tên giai đoạn</label><input type="text" class="st-name" maxlength="100"></div>
+                <div><label>Số tuần</label><input type="number" class="st-weeks" min="1" max="52" step="1"></div>
+                <div><label>Cường độ</label><select class="st-intensity"><option value="Nhẹ">Nhẹ</option><option value="Vừa">Vừa</option><option value="Cao">Cao</option></select></div>
+                <div><label>Quãng đường (m)</label><input type="number" class="st-dist" min="1" max="100000" step="1"></div>
+                <div><label>Buổi/tuần</label><input type="number" class="st-sess" min="1" max="7" step="1"></div>
+                <div><label>Ngưỡng bpm</label><input type="number" class="st-bpm" min="1" max="300" step="1"></div>
+            </div>`;
+        box.querySelector('.stage-badge').textContent = String(stageId).padStart(2, '0');
+        box.querySelector('.stage-title-text').textContent = `Giai đoạn ${stageId}`;
+        box.querySelector('.st-name').value = name;
+        box.querySelector('.st-weeks').value = weeks;
+        box.querySelector('.st-intensity').value = intensity;
+        box.querySelector('.st-dist').value = distance;
+        box.querySelector('.st-sess').value = sessions;
+        box.querySelector('.st-bpm').value = bpm;
+        box.querySelector('.btn-remove-stage').addEventListener('click', () => {
+            box.remove();
+            renumberStages();
+            updateAdvancedSummary();
+        });
+        box.querySelectorAll('input, select').forEach(input => {
+            input.addEventListener('input', updateAdvancedSummary);
+            input.addEventListener('change', updateAdvancedSummary);
+        });
+        wrapper.appendChild(box);
+        updateAdvancedSummary();
+    }
+
+    function renumberStages() {
+        document.querySelectorAll('#stages-wrapper .stage-item').forEach((box, index) => {
+            box.querySelector('.stage-badge').textContent = String(index + 1).padStart(2, '0');
+            box.querySelector('.stage-title-text').textContent = `Giai đoạn ${index + 1}`;
+        });
+    }
+
+    function updateAdvancedSummary() {
+        let totalWeeks = 0;
+        let totalSessions = 0;
+        const boxes = document.querySelectorAll('#stages-wrapper .stage-item');
+        boxes.forEach(box => {
+            const weeks = Math.max(0, parseInt(box.querySelector('.st-weeks').value, 10) || 0);
+            const sessions = Math.max(0, parseInt(box.querySelector('.st-sess').value, 10) || 0);
+            totalWeeks += weeks;
+            totalSessions += (weeks * sessions);
+        });
+        document.getElementById('sum-stages').textContent = boxes.length;
+        document.getElementById('sum-weeks').textContent = `${totalWeeks} tuần`;
+        document.getElementById('sum-sessions').textContent = `${totalSessions} buổi`;
+        const horseSelect = document.getElementById('adv-horse');
+        document.getElementById('sum-horse').textContent = horseSelect.value ? horseSelect.options[horseSelect.selectedIndex].text.split(' (')[0] : '—';
+        const startDate = document.getElementById('adv-start-date').value;
+        document.getElementById('sum-start-date').textContent = startDate ? startDate.split('-').reverse().join('/') : '—';
+    }
+
+    // Gắn listener một lần, không nhân đôi mỗi lần mở màn hình.
+    document.getElementById('adv-horse').addEventListener('change', updateAdvancedSummary);
+    document.getElementById('adv-start-date').addEventListener('change', updateAdvancedSummary);
+
+    async function submitAdvancedPlan() {
+        const horseId = document.getElementById('adv-horse').value;
+        const startDate = document.getElementById('adv-start-date').value;
+        const planName = document.getElementById('adv-plan-name').value.trim();
+        const goal = document.getElementById('adv-goal').value.trim();
+        const errorBox = document.getElementById('adv-plan-error');
+        const stages = [];
+        let validationError = '';
+
+        if (!horseId || !startDate || !planName || !goal) validationError = 'Vui lòng chọn ngựa, ngày bắt đầu, nhập tên giáo án và mục tiêu.';
+        else if (startDate < getLocalDateString()) validationError = 'Ngày bắt đầu không được ở quá khứ.';
+
+        document.querySelectorAll('#stages-wrapper .stage-item').forEach((box, index) => {
+            const stage = {
+                name: box.querySelector('.st-name').value.trim(),
+                weeks: Number(box.querySelector('.st-weeks').value),
+                intensity: box.querySelector('.st-intensity').value,
+                distanceM: Number(box.querySelector('.st-dist').value),
+                sessionsPerWeek: Number(box.querySelector('.st-sess').value),
+                targetBpm: Number(box.querySelector('.st-bpm').value)
+            };
+            if (!stage.name || !Number.isInteger(stage.weeks) || stage.weeks < 1 || stage.weeks > 52 ||
+                !Number.isInteger(stage.distanceM) || stage.distanceM < 1 ||
+                !Number.isInteger(stage.sessionsPerWeek) || stage.sessionsPerWeek < 1 || stage.sessionsPerWeek > 7 ||
+                !Number.isInteger(stage.targetBpm) || stage.targetBpm < 1 || stage.targetBpm > 300) {
+                validationError = validationError || `Vui lòng kiểm tra lại dữ liệu ở giai đoạn ${index + 1}.`;
+            }
+            stages.push(stage);
+        });
+        if (stages.length === 0) validationError = validationError || 'Giáo án phải có ít nhất một giai đoạn.';
+        if (validationError) {
+            errorBox.textContent = validationError;
+            errorBox.style.display = 'block';
+            return;
+        }
+
+        errorBox.style.display = 'none';
+        const payload = {
+            horseId: Number(horseId),
+            planName,
+            startDate,
+            planType: selectedPlanType,
+            goal,
+            stages
+        };
+        // Gửi payload giáo án và các giai đoạn xuống Backend Spring Boot.
+        const btnSubmit = document.querySelector('.btn-submit-plan');
+        const originalBtnText = btnSubmit ? btnSubmit.innerHTML : '<i class="fa-solid fa-check"></i> Lưu giáo án';
+        if (btnSubmit) {
+            btnSubmit.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Đang lưu...';
+            btnSubmit.disabled = true;
+        }
+
+        try {
+            const response = await fetch('http://localhost:8080/api/v1/training-plans', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            // Hỗ trợ cả response JSON và response rỗng/không phải JSON.
+            const responseText = await response.text();
+            let result = {};
+            if (responseText) {
+                try { result = JSON.parse(responseText); }
+                catch (_) { result = { message: responseText }; }
+            }
+
+            if (response.ok) {
+                alert(`Thành công! Đã gửi giáo án đến Backend (ID Giáo án: ${result.data ?? result.id ?? 'Thành công'})`);
+                switchScreen('dashboard-screen');
+                const navbar = document.getElementById('navbar');
+                if (navbar) navbar.classList.remove('hidden');
+                if (typeof loadAllTrainingSessions === 'function') {
+                    await loadAllTrainingSessions();
+                }
+            } else {
+                errorBox.textContent = result.message || `Máy chủ trả về lỗi HTTP ${response.status}.`;
+                errorBox.style.display = 'block';
+            }
+        } catch (error) {
+            console.error('Lỗi API khi lưu giáo án:', error);
+            errorBox.textContent = 'Không thể kết nối đến Backend. Hãy kiểm tra Spring Boot đang chạy ở port 8080 và API POST /api/v1/training-plans có hỗ trợ payload stages.';
+            errorBox.style.display = 'block';
+        } finally {
+            if (btnSubmit) {
+                btnSubmit.innerHTML = originalBtnText;
+                btnSubmit.disabled = false;
+            }
+        }
+    }
+
 </script>
 </body>
 </html>

@@ -46,4 +46,10 @@ public class TrainingPlan {
 
     @Column(name = "plan_status", length = 20)
     private String planStatus;
+    // Giữ nguyên các phần cũ, thêm 2 trường mới này vào class TrainingPlan:
+    @Column(name = "plan_type")
+    private String planType;
+
+    @Column(name = "goal")
+    private String goal;
 }

@@ -1,27 +1,25 @@
 package com.horsetrack.controller;
 
 import com.horsetrack.dto.TrainingPlanCreateRequestDTO;
-import com.horsetrack.entity.TrainingSession;
-import com.horsetrack.repository.TrainingSessionRepository; // Thêm import repository
+import com.horsetrack.repository.TrainingPlanRepository; // Đã đổi import cho đúng
 import com.horsetrack.response.ApiResponse;
 import com.horsetrack.service.TrainingPlanService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List; // Thêm import List
 
 @RestController
 @RequestMapping("/api/v1/training-plans")
 @RequiredArgsConstructor
-@CrossOrigin(origins = "*") // Hỗ trợ frontend gọi API
+@CrossOrigin("*") // Hỗ trợ frontend gọi API
 public class TrainingPlanController {
 
     private final TrainingPlanService trainingPlanService;
-    private final TrainingSessionRepository trainingSessionRepository; // Khai báo repository để lấy danh sách buổi tập
+
+    // ĐÃ SỬA: Đổi từ Session sang Plan để lấy đúng danh sách Giáo án
+    private final TrainingPlanRepository trainingPlanRepository;
 
     @PostMapping
     public ResponseEntity<ApiResponse<Integer>> createTrainingPlan(
@@ -45,8 +43,8 @@ public class TrainingPlanController {
     }
 
     @GetMapping("/all")
-    public ResponseEntity<List<TrainingSession>> getAllSessions() {
-        List<TrainingSession> sessions = trainingSessionRepository.findAll();
-        return ResponseEntity.ok(sessions);
+    public ResponseEntity<?> getAllPlans() {
+        // Trả về toàn bộ danh sách từ bảng Training_Plans
+        return ResponseEntity.ok(trainingPlanRepository.findAll());
     }
 }

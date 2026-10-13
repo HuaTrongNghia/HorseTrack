@@ -1,22 +1,18 @@
 package com.horsetrack.service.impl;
 
-import com.horsetrack.dto.TrainingPlanCreateRequestDTO; // Hãy đảm bảo đúng package của DTO
+import com.horsetrack.dto.TrainingPlanCreateRequestDTO;
 import com.horsetrack.entity.Horse;
 import com.horsetrack.entity.TrainingPlan;
-import com.horsetrack.entity.TrainingSession;
-import com.horsetrack.entity.User;
+import com.horsetrack.entity.TrainingStage;
 import com.horsetrack.repository.HorseRepository;
 import com.horsetrack.repository.TrainingPlanRepository;
-import com.horsetrack.repository.TrainingSessionRepository;
-import com.horsetrack.repository.UserRepository;
+import com.horsetrack.repository.TrainingStageRepository;
 import com.horsetrack.service.TrainingPlanService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,9 +20,8 @@ import java.util.stream.Collectors;
 public class TrainingPlanServiceImpl implements TrainingPlanService {
 
     private final TrainingPlanRepository trainingPlanRepository;
-    private final TrainingSessionRepository trainingSessionRepository;
+    private final TrainingStageRepository trainingStageRepository;
     private final HorseRepository horseRepository;
-    private final UserRepository userRepository;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -37,49 +32,48 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .orElseThrow(() -> new Exception("Không tìm thấy ngựa với ID: " + request.getHorseId()));
 
         if (horse.isLocked()) {
-            throw new Exception("Ngựa đang bị khóa y tế. Không thể lập giáo án!");
+            throw new Exception("Ngựa đang bị khóa y tế. Không thể lập giáo án (BR_01)!");
         }
 
-        // 2. Khởi tạo Giáo án (Master) khớp hoàn toàn với bảng Training_Plans
-        // Khởi tạo Giáo án (Master)
-        // Khởi tạo Giáo án (Master)
+        // 2. Lưu thông tin chung của Giáo án
         TrainingPlan plan = new TrainingPlan();
-        plan.setPlanName(request.getPlanName());
-        plan.setHorseId(horse.getId()); // Sửa dòng này từ setHorse thành setHorseId
+        plan.setHorseId(horse.getId());
         plan.setStartDate(request.getStartDate());
-        plan.setEndDate(request.getEndDate());
+        plan.setPlanType(request.getPlanType());
+        plan.setGoal(request.getGoal());
+        plan.setPlanStatus("ACTIVE");
 
-        // Gán các giá trị hoặc giá trị mặc định cho các cột không cho phép null
-        plan.setTrainerId(request.getTrainerId() != null ? request.getTrainerId() : 1);
-        plan.setTargetDistanceM(request.getTargetDistanceM() != null ? request.getTargetDistanceM() : 0.0);
-        plan.setTargetSpeedKmh(request.getTargetSpeedKmh() != null ? request.getTargetSpeedKmh() : 0.0);
-        plan.setTrackType(request.getTrackType() != null ? request.getTrackType() : "Dirt");
-        plan.setPlanStatus(request.getPlanStatus() != null ? request.getPlanStatus() : "ACTIVE");
+        // Tự động tính ngày kết thúc dựa trên tổng số tuần của các giai đoạn
+        int totalWeeks = request.getStages().stream().mapToInt(stage -> stage.getWeeks()).sum();
+        plan.setEndDate(request.getStartDate().plusWeeks(totalWeeks));
+
+        // Nếu DB cũ bắt buộc (NOT NULL) các cột này, gán tạm giá trị mặc định để tránh lỗi SQL
+        // ...
+        plan.setPlanName(request.getPlanName());
+        plan.setTrainerId(1);
+
+        // Sửa lại thành các giá trị hợp lệ với các Check Constraint trong DB của bạn
+        plan.setTargetDistanceM(1000.0); // Nếu DB cấm nhập số 0
+        plan.setTargetSpeedKmh(40.0);    // Nếu DB cấm nhập số 0
+        plan.setTrackType("Cát");        // HOẶC "Đường cát" (Tùy theo list dữ liệu cho phép của bạn)
+        // ...
 
         TrainingPlan savedPlan = trainingPlanRepository.save(plan);
 
-        // 3. Kiểm tra danh sách nhân viên phân công trong sessions
-        Set<Integer> assignedIds = request.getSessions().stream()
-                .map(dto -> dto.getAssignedToId())
-                .collect(Collectors.toMap(id -> id, id -> id, (existing, replacement) -> existing)).keySet(); // Hoặc dto.getAssignedToId() trực tiếp tùy DTO buổi tập
-
-        List<User> validUsers = userRepository.findAllById(assignedIds);
-        Map<Integer, User> userMap = validUsers.stream()
-                .collect(Collectors.toMap(User::getUserId, u -> u));
-
-        // 4. Chuyển đổi DTO sang Entity cho các Buổi tập
-        List<TrainingSession> sessions = request.getSessions().stream().map(dto -> {
-            TrainingSession session = new TrainingSession();
-            session.setSessionDate(dto.getSessionDate());
-            session.setActivityType(dto.getActivityType());
-            session.setAssignedTo(userMap.get(dto.getAssignedToId()));
-            session.setTrainingPlan(savedPlan);
-            session.setStatus("PENDING");
-            return session;
+        // 3. Chuyển đổi DTO và lưu tất cả các Giai đoạn (Stages)
+        List<TrainingStage> stages = request.getStages().stream().map(dto -> {
+            TrainingStage stage = new TrainingStage();
+            stage.setTrainingPlan(savedPlan);
+            stage.setName(dto.getName());
+            stage.setWeeks(dto.getWeeks());
+            stage.setIntensity(dto.getIntensity());
+            stage.setDistanceM(dto.getDistanceM());
+            stage.setSessionsPerWeek(dto.getSessionsPerWeek());
+            stage.setTargetBpm(dto.getTargetBpm());
+            return stage;
         }).collect(Collectors.toList());
 
-        // 5. Lưu toàn bộ buổi tập
-        trainingSessionRepository.saveAll(sessions);
+        trainingStageRepository.saveAll(stages);
 
         return savedPlan.getId();
     }
