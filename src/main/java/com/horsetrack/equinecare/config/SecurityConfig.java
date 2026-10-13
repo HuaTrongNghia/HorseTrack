@@ -36,7 +36,8 @@ public class SecurityConfig {
                                 "/swagger-resources",
                                 "/configuration/ui",
                                 "/configuration/security",
-                                "/webjars/**"
+                                "/webjars/**",
+                                "/error"
                         ).permitAll()
 
                         // 2. Cấp quyền cho API Xác thực
