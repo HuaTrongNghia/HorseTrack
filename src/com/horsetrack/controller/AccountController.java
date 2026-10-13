@@ -28,23 +28,16 @@ public class AccountController {
                 return ResponseEntity.badRequest().body(new ApiResponse<>(400, "Vui lòng nhập tài khoản và mật khẩu.", null));
             }
 
-            // Tạm thời tạo logic giả lập để đi xuyên qua giao diện (Bỏ qua Check DB)
-            // Sau này bạn thay bằng code gọi Database: accountService.login(dto);
-            if ("long".equals(dto.getUsername()) || "trainer_pro".equals(dto.getUsername()) || "minh".equals(dto.getUsername()) || "chu_ngua_lanhoang".equals(dto.getUsername())) {
+            // GỌI XUỐNG DATABASE THÔNG QUA SERVICE:
+            // accountService sẽ tự động vào SQL Server tìm username, kiểm tra mật khẩu (BCrypt)
+            // Nếu đúng, nó sẽ trả về thông tin User. Nếu sai, nó sẽ ném ra Exception (lỗi).
+            Map<String, Object> userData = accountService.login(dto);
 
-                // Tạo data trả về khớp với cấu trúc Frontend đang chờ (gồm role, fullName, username)
-                Map<String, Object> userData = new HashMap<>();
-                userData.put("username", dto.getUsername());
-                userData.put("fullName", "Nguyễn Vỹ Long");
-                userData.put("roleName", "Head Trainer"); // Sửa lại thành "Horse Owner" hoặc "Groom" nếu muốn test các luồng khác
-                userData.put("id", 1);
+            return ResponseEntity.ok(new ApiResponse<>(200, "Đăng nhập thành công!", userData));
 
-                return ResponseEntity.ok(new ApiResponse<>(200, "Đăng nhập thành công!", userData));
-            } else {
-                return ResponseEntity.status(401).body(new ApiResponse<>(401, "Sai tài khoản hoặc mật khẩu!", null));
-            }
         } catch (Exception e) {
-            return ResponseEntity.status(500).body(new ApiResponse<>(500, "Lỗi hệ thống: " + e.getMessage(), null));
+            // Bắt lỗi sai mật khẩu hoặc không tìm thấy tài khoản từ Service ném lên
+            return ResponseEntity.status(401).body(new ApiResponse<>(401, e.getMessage(), null));
         }
     }
 

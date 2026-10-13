@@ -42,6 +42,7 @@ public class AccountService {
         user.setFullName(dto.getFullName());
         user.setEmail(dto.getEmail());
         user.setPhone(dto.getPhone() != null ? dto.getPhone() : "");
+        // Mã hóa mật khẩu trước khi lưu
         user.setPasswordHash(passwordEncoder.encode(dto.getPassword()));
         user.setRoleName("Horse Owner");
         user.setActive(true);
@@ -104,5 +105,31 @@ public class AccountService {
 
         user.setPasswordHash(passwordEncoder.encode(dto.getNewPassword()));
         userRepository.save(user);
+    }
+
+    // --- 5. ĐĂNG NHẬP TỪ DATABASE ---
+    public Map<String, Object> login(LoginDTO dto) throws Exception {
+        // Tìm User trong DB
+        User user = userRepository.findByUsername(dto.getUsername())
+                .orElseThrow(() -> new Exception("Tài khoản không tồn tại!"));
+
+        // Kiểm tra trạng thái hoạt động
+        if (!user.isActive()) {
+            throw new Exception("Tài khoản của bạn đã bị khóa!");
+        }
+
+        // Kiểm tra mật khẩu
+        if (!passwordEncoder.matches(dto.getPassword(), user.getPasswordHash())) {
+            throw new Exception("Sai mật khẩu!");
+        }
+
+        // Đóng gói dữ liệu trả về cho Frontend
+        Map<String, Object> userData = new HashMap<>();
+        userData.put("id", user.getUserId());
+        userData.put("username", user.getUsername());
+        userData.put("fullName", user.getFullName());
+        userData.put("roleName", user.getRoleName());
+
+        return userData;
     }
 }
