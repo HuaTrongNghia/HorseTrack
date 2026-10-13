@@ -7,6 +7,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/accounts")
 @CrossOrigin("*") // Bắt buộc để Frontend có thể gọi API
@@ -14,6 +17,36 @@ import org.springframework.web.bind.annotation.*;
 public class AccountController {
 
     private final AccountService accountService;
+
+    // =========================================================
+    // ĐÃ BỔ SUNG API LOGIN ĐỂ FIX LỖI 404 KHI NHẤN ĐĂNG NHẬP
+    // =========================================================
+    @PostMapping("/login")
+    public ResponseEntity<ApiResponse<Object>> login(@RequestBody LoginDTO dto) {
+        try {
+            if (dto.getUsername() == null || dto.getPassword() == null) {
+                return ResponseEntity.badRequest().body(new ApiResponse<>(400, "Vui lòng nhập tài khoản và mật khẩu.", null));
+            }
+
+            // Tạm thời tạo logic giả lập để đi xuyên qua giao diện (Bỏ qua Check DB)
+            // Sau này bạn thay bằng code gọi Database: accountService.login(dto);
+            if ("long".equals(dto.getUsername()) || "trainer_pro".equals(dto.getUsername()) || "minh".equals(dto.getUsername()) || "chu_ngua_lanhoang".equals(dto.getUsername())) {
+
+                // Tạo data trả về khớp với cấu trúc Frontend đang chờ (gồm role, fullName, username)
+                Map<String, Object> userData = new HashMap<>();
+                userData.put("username", dto.getUsername());
+                userData.put("fullName", "Nguyễn Vỹ Long");
+                userData.put("roleName", "Head Trainer"); // Sửa lại thành "Horse Owner" hoặc "Groom" nếu muốn test các luồng khác
+                userData.put("id", 1);
+
+                return ResponseEntity.ok(new ApiResponse<>(200, "Đăng nhập thành công!", userData));
+            } else {
+                return ResponseEntity.status(401).body(new ApiResponse<>(401, "Sai tài khoản hoặc mật khẩu!", null));
+            }
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body(new ApiResponse<>(500, "Lỗi hệ thống: " + e.getMessage(), null));
+        }
+    }
 
     @PostMapping("/register-owner")
     public ResponseEntity<ApiResponse<String>> registerOwner(@RequestBody OwnerRegistrationDTO dto) {

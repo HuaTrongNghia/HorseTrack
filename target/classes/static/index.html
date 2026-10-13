@@ -150,7 +150,6 @@
         .msg.success { color: var(--secondary); }
         hr { border: 0; height: 1px; background: var(--border); margin: 20px 0; }
 
-
         /* ================= GIAO DIỆN TẠO GIÁO ÁN NÂNG CAO ================= */
         .plan-container { display:flex; gap:25px; align-items:flex-start; margin-top:20px; text-align:left; }
         .plan-main { flex:1; min-width:0; }
@@ -180,7 +179,6 @@
         .summary-note { font-size:12px; color:var(--text-muted); margin-top:15px; background:#eff6ff; padding:10px; border-radius:6px; border:1px solid #bfdbfe; line-height:1.5; }
         @media (max-width:900px) { .plan-container { flex-direction:column; } .plan-main, .plan-sidebar { width:100%; flex:auto; box-sizing:border-box; position:static; } }
         @media (max-width:560px) { .stage-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } .plan-section, .summary-card { padding:16px; } }
-
     </style>
 </head>
 <body>
@@ -294,7 +292,6 @@
             <h3><i class="fa-regular fa-calendar-days" style="color: var(--primary);"></i> Lịch làm việc hôm nay (Bấm vào ô để cập nhật kết quả)</h3>
             <div style="display: flex; gap: 15px; flex-wrap: wrap;">
 
-
                 <!-- Ô công việc 1 -->
                 <div class="task-card" id="task-card-1" onclick="openTaskModal({
                     id: 1,
@@ -336,7 +333,6 @@
             </div>
 
         </div>
-
 
         <!-- KHU VỰC HIỂN THỊ TẤT CẢ BUỔI TẬP -->
         <div class="action-module" style="grid-column: 1 / -1; margin-top: 15px;">
@@ -387,8 +383,6 @@
         </div>
     </div>
 </div>
-
-
 
 <!-- MÀN HÌNH TẠO GIÁO ÁN NÂNG CAO -->
 <div class="container hidden" id="create-plan-screen">
@@ -477,8 +471,7 @@
         <div class="form-group">
             <label for="task-notes">
                 <strong>Ghi chú (Notes):</strong>
-                -                 <span id="note-required-hint" style="color: var(--danger); font-size: 12px; display: none;">Bắt buộc khi Hủy buổi tập
-</span>
+                <span id="note-required-hint" style="color: var(--danger); font-size: 12px; display: none;">- Bắt buộc khi Hủy buổi tập</span>
             </label>
             <textarea id="task-notes" rows="4" placeholder="Nhập tình trạng thể lực của ngựa, thành tích, hoặc lý do hủy..."></textarea>
             <p id="task-error-msg" class="msg error" style="display: none; margin-top: 5px; text-align: left;"></p>
@@ -525,8 +518,7 @@
         </div>
 
         <!-- THÔNG TIN MASTER (GIÁO ÁN) -->
-        1.         <h4 style="margin-top: 0; color: var(--primary);">Thông tin chung
-    </h4>
+        <h4 style="margin-top: 0; color: var(--primary);">1. Thông tin chung</h4>
         <div class="form-group">
             <label>Tên giáo án (*):</label>
             <input type="text" id="plan-name" placeholder="VD: Giáo án tăng sức bền cự ly dài">
@@ -539,7 +531,6 @@
             <label>Chọn Ngựa (Horse ID) (*):</label>
             <select id="plan-horse">
                 <option value="">-- Bấm để chọn ngựa --</option>
-                <!-- Đổi value thành số nguyên (ID) để khớp với Backend Integer -->
                 <option value="1">Hắc Phong (ID: 1) - Sẵn sàng</option>
                 <option value="2">Xích Thố (ID: 2) - Đang nghỉ</option>
             </select>
@@ -766,14 +757,22 @@
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({ username: u, password: p })
             });
-            const result = await response.json();
+
+            // Đọc dưới dạng Text trước để tránh lỗi SyntaxError khi server trả về rỗng (như 403 Forbidden)
+            const text = await response.text();
+            let result = {};
+            if (text) {
+                try { result = JSON.parse(text); } catch (e) { }
+            }
 
             if (response.ok) {
-                localStorage.setItem("horseTrackUser", JSON.stringify(result.data));
-                loadDashboard(result.data);
+                // Tự động điều chỉnh để lấy đúng thông tin User tùy theo API cấu trúc
+                const userData = result.data || result || { username: u, fullName: "User", roleName: "Head Trainer" };
+                localStorage.setItem("horseTrackUser", JSON.stringify(userData));
+                loadDashboard(userData);
             } else {
                 msgBox.className = "msg error";
-                msgBox.innerText = result.message || "Sai tài khoản hoặc mật khẩu!";
+                msgBox.innerText = result.message || `Server từ chối kết nối (Lỗi HTTP ${response.status})`;
             }
         } catch (error) {
             console.error(error);
@@ -781,7 +780,6 @@
             msgBox.innerText = "Không thể kết nối đến máy chủ Spring Boot (Port 8080)!";
         }
     }
-
     async function testRegisterAPI() {
         const msgBox = document.getElementById("reg-msg");
         msgBox.className = "msg"; msgBox.innerText = "Đang xử lý...";
