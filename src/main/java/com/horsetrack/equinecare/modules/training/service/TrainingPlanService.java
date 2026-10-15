@@ -12,4 +12,7 @@ public interface TrainingPlanService {
     List<AvailableHorseDTO> getAvailableHorses();
     DashboardStatsDTO getDashboardStats();
     Page<TrainingPlanSummaryDTO> getTrainingPlans(String status, Pageable pageable);
+    List<com.horsetrack.equinecare.modules.training.dto.StaffAssignDTO> getAssignableStaff();
+    void addTrainingSessionToPlan(Integer planId, com.horsetrack.equinecare.modules.training.dto.TrainingSessionCreateRequestDTO request);
 }
+
