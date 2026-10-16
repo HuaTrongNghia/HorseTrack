@@ -114,4 +114,63 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
 
         return savedRecord.getRecordId();
     }
+    // ==========================================
+    // LUỒNG PHÊ DUYỆT VÀ THANH TOÁN (VNPay)
+    // ==========================================
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void approveMedicalRecord(Integer recordId) {
+        MedicalRecord record = medicalRecordRepository.findById(recordId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh án"));
+
+        if (!"PENDING_APPROVAL".equals(record.getStatus())) {
+            throw new RuntimeException("Hồ sơ không ở trạng thái chờ duyệt");
+        }
+
+        // Club Manager duyệt phác đồ
+        record.setStatus("APPROVED_AWAITING_PAYMENT");
+        medicalRecordRepository.save(record);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void processPayment(Integer recordId, String paymentMethod) {
+        MedicalRecord record = medicalRecordRepository.findById(recordId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh án"));
+
+        if (!"APPROVED_AWAITING_PAYMENT".equals(record.getStatus())) {
+            throw new RuntimeException("Hồ sơ không ở trạng thái chờ thanh toán");
+        }
+
+        // Xác thực đúng chủ ngựa đang đăng nhập mới được thanh toán
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        User user = userRepository.findByUsername(username).orElseThrow();
+        if (!record.getHorse().getOwner().getUserId().equals(user.getUserId())) {
+            throw new org.springframework.security.access.AccessDeniedException("Bạn không phải chủ của ngựa này");
+        }
+
+        // Giả lập (Mock) gọi cổng VNPay thành công
+        record.setStatus("IN_TREATMENT");
+        medicalRecordRepository.save(record);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void confirmRecovery(Integer recordId) {
+        MedicalRecord record = medicalRecordRepository.findById(recordId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh án"));
+
+        // Bác sĩ xác nhận hoàn tất điều trị
+        record.setStatus("COMPLETED");
+        medicalRecordRepository.save(record);
+
+        // Mở khóa VetLock cho ngựa
+        Horse horse = record.getHorse();
+        if (Boolean.TRUE.equals(record.getIsLockoutOrdered())) {
+            horse.setIsLocked(false);
+            horse.setHealthStatus("CLEARED");
+            horseRepository.save(horse);
+        }
+    }
 }
