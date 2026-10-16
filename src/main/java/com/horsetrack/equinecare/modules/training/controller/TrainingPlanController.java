@@ -5,6 +5,7 @@ import com.horsetrack.equinecare.modules.training.dto.DashboardStatsDTO;
 import com.horsetrack.equinecare.modules.training.dto.StaffAssignDTO;
 import com.horsetrack.equinecare.modules.training.dto.TrainingPlanSummaryDTO;
 import com.horsetrack.equinecare.modules.training.dto.TrainingSessionCreateRequestDTO;
+import com.horsetrack.equinecare.modules.training.dto.TrainingPlanDetailDTO; // <-- Import quan trọng mới thêm
 import com.horsetrack.equinecare.modules.training.service.TrainingPlanService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -25,9 +26,36 @@ public class TrainingPlanController {
 
     private final TrainingPlanService trainingPlanService;
 
-    // ... Các code cũ (getDashboardStats, getTrainingPlans) giữ nguyên ở đây ...
+    @GetMapping("/dashboard-stats")
+    public ResponseEntity<ApiResponse<DashboardStatsDTO>> getDashboardStats() {
+        DashboardStatsDTO stats = trainingPlanService.getDashboardStats();
+        return ResponseEntity.ok(ApiResponse.ok("Fetched dashboard stats successfully", stats));
+    }
 
-    // 1. Lấy danh sách Groom/Trainer đổ vào Dropdown gán việc
+    @GetMapping
+    public ResponseEntity<ApiResponse<Page<TrainingPlanSummaryDTO>>> getTrainingPlans(
+            @RequestParam(required = false) String status,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+
+        Pageable pageable = PageRequest.of(page, size);
+        Page<TrainingPlanSummaryDTO> plansPage = trainingPlanService.getTrainingPlans(status, pageable);
+        return ResponseEntity.ok(ApiResponse.ok("Fetched training plans successfully", plansPage));
+    }
+
+    // ==========================================
+    // API CHO MÀN HÌNH LẬP LỊCH
+    // ==========================================
+
+    // 1. Lấy chi tiết Giáo án & Các buổi tập để đổ lên Calendar
+    @GetMapping("/{planId}")
+    @PreAuthorize("hasAnyAuthority('Head Trainer', 'Club Manager')")
+    public ResponseEntity<ApiResponse<TrainingPlanDetailDTO>> getPlanDetail(@PathVariable Integer planId) {
+        TrainingPlanDetailDTO detail = trainingPlanService.getTrainingPlanDetail(planId);
+        return ResponseEntity.ok(ApiResponse.ok("Lấy dữ liệu lịch tập thành công", detail));
+    }
+
+    // 2. Lấy danh sách Groom/Trainer đổ vào Dropdown gán việc
     @GetMapping("/assignable-staff")
     @PreAuthorize("hasAuthority('Head Trainer')")
     public ResponseEntity<ApiResponse<List<StaffAssignDTO>>> getAssignableStaff() {
@@ -35,7 +63,7 @@ public class TrainingPlanController {
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách nhân sự phân công thành công", staffList));
     }
 
-    // 2. Head Trainer bấm tạo buổi tập trên Lịch
+    // 3. Head Trainer bấm tạo buổi tập trên Lịch
     @PostMapping("/{planId}/sessions")
     @PreAuthorize("hasAuthority('Head Trainer')")
     public ResponseEntity<ApiResponse<Void>> addSessionToPlan(

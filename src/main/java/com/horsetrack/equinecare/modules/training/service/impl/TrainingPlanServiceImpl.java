@@ -62,6 +62,38 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public TrainingPlanDetailDTO getTrainingPlanDetail(Integer planId) {
+        TrainingPlan plan = trainingPlanRepository.findById(planId)
+                .orElseThrow(() -> new RuntimeException("Không tìm thấy Giáo án với ID: " + planId));
+
+        // Map danh sách buổi tập sang DTO để Frontend rải lên Calendar
+        List<TrainingSessionDTO> sessionDTOs = plan.getSessions().stream()
+                .map(s -> TrainingSessionDTO.builder()
+                        .sessionId(s.getSessionId())
+                        .sessionDate(s.getSessionDate())
+                        .activityType(s.getActivityType())
+                        .status(s.getStatus())
+                        .notes(s.getNotes())
+                        .assignedToId(s.getAssignedTo() != null ? s.getAssignedTo().getUserId() : null)
+                        .assignedToName(s.getAssignedTo() != null ? s.getAssignedTo().getFullName() : null)
+                        .build())
+                .collect(Collectors.toList());
+
+        return TrainingPlanDetailDTO.builder()
+                .planId(plan.getPlanId())
+                .planName(plan.getPlanName())
+                .horseId(plan.getHorse().getHorseId())
+                .horseName(plan.getHorse().getHorseName())
+                .startDate(plan.getStartDate())
+                .endDate(plan.getEndDate())
+                .goal(plan.getGoal())
+                .status(plan.getStatus())
+                .sessions(sessionDTOs)
+                .build();
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void addTrainingSessionToPlan(Integer planId, TrainingSessionCreateRequestDTO request) {
         TrainingPlan plan = trainingPlanRepository.findById(planId)
@@ -85,4 +117,5 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
 
         trainingSessionRepository.save(session);
     }
+
 }
