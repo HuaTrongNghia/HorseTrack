@@ -36,4 +36,5 @@ public class MedicalController {
             return ResponseEntity.badRequest().body(new ApiResponse<>(400, e.getMessage(), null));
         }
     }
+
 }

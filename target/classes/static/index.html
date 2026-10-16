@@ -195,11 +195,15 @@
                 <option value="Head Trainer">Test: Head Trainer</option>
                 <option value="Horse Owner">Test: Horse Owner</option>
                 <option value="Groom">Test: Groom</option>
+                <option value="Veterinarian">Test: Bác sĩ Thú y</option>
             </select>
         </div>
         <span class="role-badge" id="nav-role">Role</span>
         <span id="nav-name" style="font-weight: 500;">Tên User</span>
-        <button class="btn btn-danger" style="width: auto; padding: 6px 12px; font-size: 13px;" onclick="openModal('modal-alert-vet')">Khóa Y Tế</button>
+
+        <!-- NÚT KHÓA Y TẾ CHỈ HIỆN KHI LÀ BÁC SĨ THÚ Y -->
+        <button class="btn btn-danger hidden" id="btn-vet-lock" style="width: auto; padding: 6px 12px; font-size: 13px;" onclick="openModal('modal-alert-vet')">Khóa Y Tế</button>
+
         <button class="btn-action" onclick="openModal('modal-change-password')"><i class="fa-solid fa-key"></i> Đổi pass</button>
         <button class="btn-action btn-logout" onclick="testLogout()"><i class="fa-solid fa-right-from-bracket"></i> Thoát</button>
     </div>
@@ -380,6 +384,17 @@
             <h3><i class="fa-solid fa-chart-line" style="color: var(--primary);"></i> Theo dõi ngựa ký gửi</h3>
             <button class="btn btn-primary" onclick="openModal('modal-owner-result')"><i class="fa-solid fa-file-waveform"></i> Xem nhật ký buổi tập gần nhất</button>
             <button class="btn btn-danger" onclick="openModal('modal-owner-alert')"><i class="fa-solid fa-ban"></i> Thông báo từ hệ thống</button>
+        </div>
+    </div>
+
+    <!-- KHU VỰC VETERINARIAN (BÁC SĨ THÚ Y) -->
+    <div id="vet-actions" class="action-grid hidden">
+        <div class="action-module" style="grid-column: 1 / -1;">
+            <h3><i class="fa-solid fa-stethoscope" style="color: var(--primary);"></i> Hộp Thư Ca Khám & Cấp Cứu Y Tế</h3>
+            <p style="font-size: 13px; color: var(--text-muted);">Quản lý các ca khám và thực thi khóa huấn luyện khẩn cấp (VetLock).</p>
+            <button class="btn btn-danger" style="width: auto; padding: 10px 20px;" onclick="openModal('modal-alert-vet')">
+                <i class="fa-solid fa-lock"></i> Kích Hoạt Khóa Y Tế (VetLock)
+            </button>
         </div>
     </div>
 </div>
@@ -595,15 +610,15 @@
 <div class="modal-overlay" id="modal-alert-vet">
     <div class="modal-content" style="border-top: 5px solid var(--danger);">
         <div class="modal-header">
-            <h3 style="color: var(--danger);"><i class="fa-solid fa-truck-medical"></i> Ra Quyết Định Dừng Tập</h3>
+            <h3 style="color: var(--danger);"><i class="fa-solid fa-truck-medical"></i> Khóa Huấn Luyện Khẩn Cấp (Vetlock)</h3>
             <button class="btn-close" onclick="closeModal('modal-alert-vet')"><i class="fa-solid fa-xmark"></i></button>
         </div>
-        <p style="font-size: 14px; color: #555;">Hệ thống ghi nhận chỉ số nhịp tim của ngựa <b>Hắc Phong</b> vượt quá 180bpm. Bạn có muốn kích hoạt quy trình Vetlock khẩn cấp?</p>
+        <p style="font-size: 14px; color: #555;">Thao tác này sẽ khóa toàn bộ lịch tập của ngựa <b>Hắc Phong (ID: 1)</b> trên hệ thống.</p>
         <div class="form-group">
-            <label>Lý do y tế (Gửi Bác sĩ):</label>
-            <textarea rows="3" placeholder="Mô tả triệu chứng..."></textarea>
+            <label>Lý do y tế / Chẩn đoán:</label>
+            <textarea rows="3" placeholder="Nhập triệu chứng, nhịp tim vượt ngưỡng..."></textarea>
         </div>
-        <button class="btn btn-danger" onclick="triggerVetLock()">Xác nhận Dừng & Khóa y tế</button>
+        <button class="btn btn-danger" onclick="triggerVetLock()">Xác nhận Khóa Y Tế</button>
     </div>
 </div>
 
@@ -626,7 +641,7 @@
 
 <script>
     const API_ACCOUNT = 'http://localhost:8080/api/accounts';
-    const API_TRAINING = 'http://localhost:8080/api/training'; // Gốc API
+    const API_TRAINING = 'http://localhost:8080/api/training';
     let currentTask = null;
 
     window.onload = function () {
@@ -872,13 +887,29 @@
         document.getElementById("welcome-text").innerText = "Xin chào, " + (user.fullName || user.username) + " 👋";
         document.getElementById("dev-role-select").value = user.roleName || "Head Trainer";
 
+        // Ẩn tất cả các module role trước
         document.getElementById("trainer-actions").classList.add("hidden");
         document.getElementById("groom-actions").classList.add("hidden");
         document.getElementById("owner-actions").classList.add("hidden");
+        document.getElementById("vet-actions").classList.add("hidden");
 
-        if (user.roleName === "Head Trainer") { document.getElementById("trainer-actions").classList.remove("hidden"); }
-        else if (user.roleName === "Groom") { document.getElementById("groom-actions").classList.remove("hidden"); }
-        else if (user.roleName === "Horse Owner") { document.getElementById("owner-actions").classList.remove("hidden"); }
+        // Ẩn nút Khóa Y Tế trên topbar mặc định
+        document.getElementById("btn-vet-lock").classList.add("hidden");
+
+        // Phân quyền hiển thị theo Role
+        if (user.roleName === "Head Trainer") {
+            document.getElementById("trainer-actions").classList.remove("hidden");
+        }
+        else if (user.roleName === "Groom") {
+            document.getElementById("groom-actions").classList.remove("hidden");
+        }
+        else if (user.roleName === "Horse Owner") {
+            document.getElementById("owner-actions").classList.remove("hidden");
+        }
+        else if (user.roleName === "Veterinarian") {
+            document.getElementById("vet-actions").classList.remove("hidden");
+            document.getElementById("btn-vet-lock").classList.remove("hidden"); // Chỉ hiện nút Khóa Y Tế cho Bác sĩ
+        }
 
         loadAllTrainingSessions();
     }

@@ -8,8 +8,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -17,28 +15,24 @@ public class MedicalService {
 
     private final HorseRepository horseRepository;
 
-    // (Tùy chọn) Bạn có thể inject thêm MedicalRecordRepository nếu muốn lưu lịch sử khám
-
     // 1. Hàm kích hoạt Khóa y tế (VetLock)
     @Transactional
     public void applyVetLock(VetLockRequestDTO dto) throws Exception {
-        // Tìm con ngựa trong Database
+        // Tìm con ngựa trong Database trực tiếp bằng horseId gửi từ Frontend
         Horse horse = horseRepository.findById(dto.getHorseId())
                 .orElseThrow(() -> new Exception("Không tìm thấy ngựa với ID: " + dto.getHorseId()));
 
-        // Chặn không cho khóa nếu ngựa đã bị khóa rồi
-        if ("VET_LOCKED".equals(horse.getStatus())) {
+        // Kiểm tra xem ngựa đã bị khóa chưa (Tránh lỗi null-pointer nếu DB trả về null)
+        if (Boolean.TRUE.equals(horse.isLocked()) || Boolean.TRUE.equals(horse.isLocked())) {
             throw new Exception("Ngựa này hiện đang bị khóa y tế rồi!");
         }
 
-        // Cập nhật trạng thái ngựa sang VET_LOCKED
-        horse.setStatus("VET_LOCKED");
+        // Cập nhật trạng thái khóa thành TRUE
+        horse.setLocked(true); // Hoặc horse.setIsLocked(true); tùy theo tên biến trong Horse.java
         horseRepository.save(horse);
 
-        log.warn("🚨 EMERGENCY VETLOCK: Ngựa {} (ID: {}) đã bị khóa bởi BS (ID: {}). Lý do: {}",
-                horse.getName(), horse.getId(), dto.getVetId(), dto.getReason());
-
-        // TODO: (Mở rộng sau này) Lưu log vào bảng MedicalRecord hoặc gửi Email cho Horse Owner
+        // In log ra console để dễ debug
+        log.warn("🚨 EMERGENCY VETLOCK: Ngựa ID {} đã bị khóa! Lý do: {}", horse.getId(), dto.getReason());
     }
 
     // 2. Hàm mở khóa y tế (Hồi phục)
@@ -47,7 +41,8 @@ public class MedicalService {
         Horse horse = horseRepository.findById(horseId)
                 .orElseThrow(() -> new Exception("Không tìm thấy ngựa!"));
 
-        horse.setStatus("ACTIVE"); // Chuyển lại trạng thái bình thường
+        // Mở khóa bằng cách set lại thành FALSE
+        horse.setLocked(false); // Hoặc horse.setIsLocked(false);
         horseRepository.save(horse);
     }
 }
