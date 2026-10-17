@@ -11,4 +11,7 @@ public interface StallRepository extends JpaRepository<Stall, Integer> {
 
     @Query("SELECT CASE WHEN COUNT(h) > 0 THEN true ELSE false END FROM Horse h WHERE h.stall.stallId = :stallId")
     boolean existsByIdAndHorseIsNotNull(@Param("stallId") Integer stallId);
+
+    @Query("SELECT s FROM Stall s LEFT JOIN FETCH s.horse")
+    java.util.List<Stall> findAllWithHorse();
 }
