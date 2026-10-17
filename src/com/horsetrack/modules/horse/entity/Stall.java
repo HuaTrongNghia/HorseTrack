@@ -29,4 +29,19 @@ public class Stall {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @OneToOne(mappedBy = "stall", fetch = FetchType.LAZY)
+    private Horse horse;
+
+    @Transient
+    @Builder.Default
+    private Integer capacity = 1;
+
+    public Integer getCapacity() {
+        return capacity != null ? capacity : 1;
+    }
+
+    public Integer getCurrentHorseId() {
+        return horse != null ? horse.getHorseId() : null;
+    }
 }
