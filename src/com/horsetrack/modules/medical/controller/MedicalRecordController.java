@@ -31,4 +31,9 @@ public class MedicalRecordController {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                 .body(ApiResponse.error(ex.getMessage()));
     }
+    @PutMapping("/{recordId}/clear-vetlock")
+    public ResponseEntity<ApiResponse<Void>> clearVetLock(@PathVariable Integer recordId) {
+        medicalRecordService.confirmRecovery(recordId);
+        return ResponseEntity.ok(ApiResponse.ok("Đã xác nhận hồi phục và mở khóa y tế cho ngựa (VetLock = CLEARED).", null));
+    }
 }
