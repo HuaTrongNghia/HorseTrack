@@ -1,6 +1,7 @@
 package com.horsetrack.equinecare.modules.auth.service;
 
 import com.horsetrack.equinecare.modules.auth.dto.LoginDTO;
+import com.horsetrack.equinecare.modules.auth.dto.LoginResponseDTO;
 import com.horsetrack.equinecare.modules.auth.dto.OwnerRegisterRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.StaffCreateRequestDTO;
 import com.horsetrack.equinecare.modules.auth.entity.*;
@@ -114,7 +115,7 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional(readOnly = true)
-    public String login(LoginDTO request) {
+    public LoginResponseDTO login(LoginDTO request) {
         // Bước 1: Lấy thông tin user từ DB dựa trên username từ LoginDTO
         User user = userRepository.findByUsername(request.getUsername().trim())
                 .orElseThrow(() -> new BadCredentialsException("Tên đăng nhập hoặc mật khẩu không chính xác"));
@@ -129,7 +130,12 @@ public class AuthServiceImpl implements AuthService {
             throw new BadCredentialsException("Tên đăng nhập hoặc mật khẩu không chính xác");
         }
 
-        // Bước 3, 4 & 5: Sinh JWT Token (chứa sub, userId, role) và trả về
-        return jwtTokenProvider.generateToken(user);
+        // Bước 3, 4 & 5: Sinh JWT Token (chứa sub, userId, role) và trả về kèm thông tin hạn dùng
+        return LoginResponseDTO.builder()
+                .accessToken(jwtTokenProvider.generateToken(user))
+                .expiresIn(jwtTokenProvider.getExpirationSeconds())
+                .role(user.getRoleName())
+                .userId(user.getUserId())
+                .build();
     }
 }
