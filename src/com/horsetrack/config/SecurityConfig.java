@@ -1,30 +1,92 @@
-# Cong chay ung dung
-server.port=8080
+package com.horsetrack.equinecare.config;
 
-# Ket noi toi database EquineCareDB tren SQL Server
-spring.datasource.url=jdbc:sqlserver://103.245.237.252:1433;databaseName=EquineCareDB;encrypt=false;trustServerCertificate=true;
-spring.datasource.username=duangua
-spring.datasource.password=choig@ycung@nh123
-spring.datasource.driver-class-name=com.microsoft.sqlserver.jdbc.SQLServerDriver
+import com.horsetrack.equinecare.modules.auth.security.JwtAuthenticationEntryPoint;
+import com.horsetrack.equinecare.modules.auth.security.JwtAuthenticationFilter;
+import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.security.config.Customizer;
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
+import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-# Cau hinh JPA / Hibernate
-spring.jpa.hibernate.ddl-auto=update
-spring.jpa.show-sql=true
-spring.jpa.properties.hibernate.format_sql=true
-spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.SQLServerDialect
+import java.util.List;
 
-# Cau hinh Spring MVC Path Matching Strategy
-spring.mvc.pathmatch.matching-strategy=ant_path_matcher
+@Configuration
+@EnableWebSecurity
+@EnableMethodSecurity
+@RequiredArgsConstructor
+public class SecurityConfig {
 
-# Cau hinh duong dan Swagger UI kiem thu API
-springdoc.swagger-ui.path=/swagger-ui.html
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
-# Cau hinh CORS: dia chi FE duoc phep goi API (nhieu dia chi cach nhau bang dau phay)
-app.cors.allowed-origins=${CORS_ALLOWED_ORIGINS:http://localhost:5173}
+    // Khởi tạo Bean băm mật khẩu
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
+    }
 
-# Cau hinh JWT Token (Secret key toi thieu 256 bits cho HS256)
-# Access token: 15 phut = 900000 ms; het han thi goi /api/v1/auth/refresh de lay token moi
-jwt.secret=${JWT_SECRET:HorseTrackEquineCareSecretKey2026SecureJwtAuthenticationSWP391Group3}
-jwt.expiration-ms=${JWT_EXPIRATION_MS:900000}
-# Refresh token: 7 ngay = 604800000 ms
-jwt.refresh-expiration-ms=${JWT_REFRESH_EXPIRATION_MS:604800000}
+    // Cấu hình phân quyền các luồng API
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http
+                // Bật CORS theo bean corsConfigurationSource để FE (Vite) gọi được API kèm header Authorization
+                .cors(Customizer.withDefaults())
+                .csrf(csrf -> csrf.disable())
+                .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+                .authorizeHttpRequests(auth -> auth
+                        // 1. Mở khóa Swagger UI và OpenAPI không bị chặn HTTP 403
+                        .requestMatchers(
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/v3/api-docs/**",
+                                "/v3/api-docs",
+                                "/swagger-resources/**",
+                                "/swagger-resources",
+                                "/configuration/ui",
+                                "/configuration/security",
+                                "/webjars/**",
+                                "/error"
+                        ).permitAll()
+
+                        // 2. Cấp quyền cho API Xác thực
+                        .requestMatchers("/api/v1/auth/register-owner", "/api/v1/auth/login",
+                                "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
+                        .requestMatchers("/api/v1/auth/staff/**").hasAuthority("Club Manager")
+
+                        // 3. Mở quyền cho các API khác trong giai đoạn kiểm thử nếu cần hoặc yêu cầu xác thực
+                        .anyRequest().authenticated()
+                )
+                // Trả về 401 JSON khi thiếu token, token sai hoặc hết hạn
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
+                // Bổ sung JWT Authentication Filter để nhận và giải mã Bearer Token gửi từ Swagger hoặc Postman
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+
+        return http.build();
+    }
+
+    // Cấu hình CORS: cho phép các địa chỉ FE trong app.cors.allowed-origins gọi API
+    @Bean
+    public CorsConfigurationSource corsConfigurationSource(
+            @Value("${app.cors.allowed-origins:http://localhost:5173}") List<String> allowedOrigins) {
+        CorsConfiguration config = new CorsConfiguration();
+        config.setAllowedOrigins(allowedOrigins);
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
+        config.setAllowedHeaders(List.of("Authorization", "Content-Type"));
+        config.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
+        source.registerCorsConfiguration("/**", config);
+        return source;
+    }
+}
