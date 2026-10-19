@@ -2,6 +2,7 @@ package com.horsetrack.equinecare.modules.auth.controller;
 
 import com.horsetrack.equinecare.common.base.ApiResponse;
 import com.horsetrack.equinecare.modules.auth.dto.LoginDTO;
+import com.horsetrack.equinecare.modules.auth.dto.LoginResponseDTO;
 import com.horsetrack.equinecare.modules.auth.dto.OwnerRegisterRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.StaffCreateRequestDTO;
 import com.horsetrack.equinecare.modules.auth.service.AuthService;
@@ -59,16 +60,16 @@ public class AuthController {
     }
     @PostMapping("/login")
     @Operation(summary = "Đăng nhập hệ thống", description = "Nhận JWT Token để gọi các API khác")
-    public ResponseEntity<ApiResponse<String>> login(@Valid @RequestBody LoginDTO loginRequest) {
+    public ResponseEntity<ApiResponse<LoginResponseDTO>> login(@Valid @RequestBody LoginDTO loginRequest) {
 
         // Gọi hàm login vừa tạo trong AuthService
-        String token = authService.login(loginRequest);
+        LoginResponseDTO loginResponse = authService.login(loginRequest);
 
         // Sử dụng Builder pattern chuẩn
-        ApiResponse<String> response = ApiResponse.<String>builder()
+        ApiResponse<LoginResponseDTO> response = ApiResponse.<LoginResponseDTO>builder()
                 .success(true)
                 .message("Đăng nhập thành công")
-                .data(token)
+                .data(loginResponse)
                 .build();
 
         return ResponseEntity.ok(response);
