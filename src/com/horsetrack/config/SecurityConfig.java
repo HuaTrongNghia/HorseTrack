@@ -1,5 +1,6 @@
 package com.horsetrack.equinecare.config;
 
+import com.horsetrack.equinecare.modules.auth.security.JwtAuthenticationEntryPoint;
 import com.horsetrack.equinecare.modules.auth.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -20,6 +21,7 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     // Khởi tạo Bean băm mật khẩu
     @Bean
@@ -55,6 +57,8 @@ public class SecurityConfig {
                         // 3. Mở quyền cho các API khác trong giai đoạn kiểm thử nếu cần hoặc yêu cầu xác thực
                         .anyRequest().authenticated()
                 )
+                // Trả về 401 JSON khi thiếu token, token sai hoặc hết hạn
+                .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
                 // Bổ sung JWT Authentication Filter để nhận và giải mã Bearer Token gửi từ Swagger hoặc Postman
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 
