@@ -48,6 +48,13 @@ public class JwtTokenProvider {
     }
 
     /**
+     * Thời gian sống của token (giây), dùng cho trường expiresIn khi đăng nhập
+     */
+    public long getExpirationSeconds() {
+        return jwtExpirationMs / 1000;
+    }
+
+    /**
      * Trích xuất username (Subject) từ JWT Token
      */
     public String getUsernameFromToken(String token) {
