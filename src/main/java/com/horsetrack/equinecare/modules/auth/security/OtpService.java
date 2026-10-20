@@ -65,12 +65,18 @@ public class OtpService {
     public void checkAndMarkCooldown(String email, Purpose purpose) {
         String key = key(email, purpose);
         Instant now = Instant.now();
-        Instant last = lastIssued.get(key);
-        if (last != null && last.plusSeconds(cooldownSeconds).isAfter(now)) {
-            long wait = cooldownSeconds - (now.getEpochSecond() - last.getEpochSecond());
-            throw new IllegalArgumentException("Bạn vừa yêu cầu mã OTP. Vui lòng chờ " + Math.max(wait, 1) + " giây rồi thử lại.");
+        // compute() khóa theo key: 2 yêu cầu gửi cùng lúc không thể cùng vượt qua thời gian chờ
+        long[] wait = {0};
+        lastIssued.compute(key, (k, last) -> {
+            if (last != null && last.plusSeconds(cooldownSeconds).isAfter(now)) {
+                wait[0] = Math.max(cooldownSeconds - (now.getEpochSecond() - last.getEpochSecond()), 1);
+                return last;
+            }
+            return now;
+        });
+        if (wait[0] > 0) {
+            throw new IllegalArgumentException("Bạn vừa yêu cầu mã OTP. Vui lòng chờ " + wait[0] + " giây rồi thử lại.");
         }
-        lastIssued.put(key, now);
         removeExpired(now);
     }
 

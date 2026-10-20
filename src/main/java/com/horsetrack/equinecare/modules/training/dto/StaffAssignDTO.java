@@ -13,4 +13,5 @@ public class StaffAssignDTO {
     private Integer userId;
     private String fullName;
     private String roleName;
+    private String barnZone; // Khu chuồng Groom phụ trách (trùng khu chuồng của ngựa trong giáo án)
 }

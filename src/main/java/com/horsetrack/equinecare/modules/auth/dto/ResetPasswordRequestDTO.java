@@ -1,9 +1,9 @@
 package com.horsetrack.equinecare.modules.auth.dto;
 
+import com.horsetrack.equinecare.common.validation.StrongPassword;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -22,7 +22,7 @@ public class ResetPasswordRequestDTO {
     private String otp;
 
     @NotBlank(message = "Mật khẩu mới là bắt buộc")
-    @Size(min = 6, message = "Mật khẩu mới phải có ít nhất 6 ký tự")
+    @StrongPassword
     private String newPassword;
 
     @NotBlank(message = "Xác nhận mật khẩu mới là bắt buộc")

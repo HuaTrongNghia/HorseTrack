@@ -58,7 +58,19 @@ Auth (1) → Account (2) → Stall (4) → Horse (3) → Nutrition (5)
 
 ---
 
-### 0.5 Cấu hình gửi email (OTP, tài khoản nhân viên)
+### 0.5 Quy tắc tên đăng nhập và mật khẩu
+
+Áp dụng khi **tạo tài khoản mới** (1.1, 1.3) và khi **đặt mật khẩu mới** (1.7, 2.2):
+
+| | Quy tắc | Ví dụ hợp lệ | Ví dụ không hợp lệ |
+|---|---|---|---|
+| Tên đăng nhập | 4–30 ký tự; chỉ chữ không dấu, chữ số, dấu chấm `.`, gạch dưới `_` | `owner01`, `nguyen.van_a` | `abc`, `toàn`, `Toan ne`, `user-01` |
+| Mật khẩu | 8–64 ký tự; ít nhất 1 chữ cái và 1 chữ số; không có khoảng trắng | `owner123`, `Owner@123` | `123456`, `abcdefgh`, `abc 12345` |
+
+- **Đăng nhập (1.2) không áp quy tắc này**, nên các tài khoản tạo trước đó (ví dụ username có dấu, mật khẩu `123456`) vẫn đăng nhập được bình thường.
+- Khi đổi mật khẩu, `oldPassword` không bị kiểm tra theo quy tắc mới.
+
+### 0.6 Cấu hình gửi email (OTP, tài khoản nhân viên)
 
 Server đọc tài khoản email từ **biến môi trường**, không ghi trong code:
 
@@ -83,7 +95,7 @@ Server đọc tài khoản email từ **biến môi trường**, không ghi tron
 ```json
 {
   "username": "owner01",
-  "password": "123456",
+  "password": "owner123",
   "fullName": "Nguyen Van Owner",
   "email": "owner01@test.com",
   "phone": "0901234567"
@@ -95,11 +107,13 @@ Server đọc tài khoản email từ **biến môi trường**, không ghi tron
   - Gửi lại y hệt → `400` "Tên đăng nhập đã tồn tại."
   - Đổi username nhưng giữ email → `400` "Email đã được sử dụng."
   - Bỏ trống `fullName` hoặc `email: "abc"` → `400`, `data` chỉ ra field lỗi.
+  - Mật khẩu yếu: dưới 8 ký tự (`"abc1234"`), không có số (`"abcdefgh"`), không có chữ (`"12345678"`), hoặc có dấu cách → `400` "Mật khẩu phải dài 8–64 ký tự, có ít nhất 1 chữ cái và 1 chữ số, không chứa khoảng trắng".
+  - Tên đăng nhập không hợp lệ: dưới 4 hoặc trên 30 ký tự, có dấu tiếng Việt (`"toàn"`), có dấu cách (`"Toan ne"`), hoặc có ký tự khác ngoài chữ, số, `.`, `_` (`"user-01"`) → `400`.
 
 ### 1.2 `POST /api/v1/auth/login` — Đăng nhập
 
 ```json
-{ "username": "owner01", "password": "123456" }
+{ "username": "owner01", "password": "owner123" }
 ```
 
 - **Mong đợi:** `200`. `data` gồm `accessToken`, `refreshToken`, `expiresIn` (900), `role`, `userId`.
@@ -113,7 +127,7 @@ Cần **Authorize bằng token Club Manager**.
 ```json
 {
   "username": "groom01",
-  "password": "123456",
+  "password": "groom123",
   "fullName": "Tran Van Groom",
   "email": "groom01@test.com",
   "phone": "0907654321",
@@ -199,13 +213,13 @@ Không cần token.
 
 - Gửi mã OTP 6 số tới email của tài khoản đang đăng nhập.
 - **Mong đợi:** `200` "Đã gửi mã OTP tới gr*****@horsetrack.com. Mã có hiệu lực 120 giây." (email được che bớt).
-- Chế độ dev (chưa cấu hình SMTP, xem 0.5): lấy mã trong console server, ở khối `[DEV] EMAIL KHÔNG GỬI THẬT`.
+- Chế độ dev (chưa cấu hình SMTP, xem 0.6): lấy mã trong console server, ở khối `[DEV] EMAIL KHÔNG GỬI THẬT`.
 - Gọi lại trong vòng 30 giây → `400` "Bạn vừa yêu cầu mã OTP. Vui lòng chờ ... giây". Sau 30 giây gọi lại thì nhận mã mới, **mã cũ mất hiệu lực**.
 
 **Bước 2: `PUT /api/v1/account/change-password`**
 
 ```json
-{ "oldPassword": "123456", "newPassword": "654321", "confirmNewPassword": "654321", "otp": "482913" }
+{ "oldPassword": "owner123", "newPassword": "owner456", "confirmNewPassword": "owner456", "otp": "482913" }
 ```
 
 - **Mong đợi:** `200` "Đổi mật khẩu thành công. Các thiết bị khác sẽ phải đăng nhập lại." Sau đó login bằng mật khẩu mới phải được; refresh token cũ (1.4) không dùng được nữa.
@@ -462,31 +476,42 @@ Chỉ `Trainer` hoặc `Club Manager`.
 - **Mong đợi:** `200`, chi tiết giáo án và danh sách `sessions`.
 - **Test lỗi:** Groom gọi → `403`. `planId` sai → `500`.
 
-### 6.4 `GET /api/v1/training-plans/assignable-staff`
+### 6.4 `GET /api/v1/training-plans/assignable-staff?planId={planId}` — Groom có thể phân công
 
-Chỉ `Trainer`.
+Chỉ `Trainer`. Theo SRS: chọn khu chuồng → ngựa trong khu → **Groom của khu đó**.
 
-- **Mong đợi:** `200`, danh sách user có role `Groom` hoặc `Trainer` đang hoạt động.
-- **Ghi lại `userId`** của trainer01 hoặc groom01.
+- `planId` bắt buộc. Hệ thống lấy khu chuồng (`barn_zone`) của ngựa trong giáo án, rồi trả về **chỉ những Groom đang hoạt động phụ trách đúng khu đó**. Khu của Groom lấy từ `Groom_Profiles.assigned_barn_zone`; so khớp không phân biệt hoa thường.
+- **Mong đợi:** `200`, mỗi phần tử gồm `userId`, `fullName`, `roleName` (luôn là `Groom`), `barnZone`. **Ghi lại `userId`** để dùng ở 6.5.
+- Ví dụ với dữ liệu hiện tại: giáo án của ngựa "Chieu Da" (chuồng `A-02`, khu "Khu A") trả về NghiaNgu, QuocTruong, test_maphu.
+- **Test lỗi:**
+  - Thiếu `planId` → `400`. `planId` không tồn tại → `404`.
+  - Ngựa của giáo án chưa có chuồng → `400`.
+  - Khu không có Groom nào → `200` với danh sách rỗng.
 
-### 6.5 `POST /api/v1/training-plans/{planId}/sessions` — Thêm buổi tập
+### 6.5 `POST /api/v1/training-plans/{planId}/sessions` — Phân công buổi tập
 
 Chỉ `Trainer`.
 
 ```json
 {
-  "sessionDate": "2026-10-20T07:00:00",
+  "sessionDate": "2026-10-22T07:00:00",
   "activityType": "Chạy nước kiệu 2000m",
   "notes": "Tập nhẹ",
-  "assignedToId": 0
+  "assignedToId": 14
 }
 ```
 
-- Thay `assignedToId` bằng userId lấy ở 6.4.
+- `assignedToId` lấy từ 6.4. `sessionDate` phải nằm trong thời gian giáo án và không ở quá khứ.
 - **Mong đợi:** `201`. Buổi tập mới có trạng thái `PENDING`.
-- **Test lỗi:**
+- **Test lỗi** (đều trả `400` kèm thông báo rõ lý do):
+  - `assignedToId` là Trainer, bác sĩ, chủ ngựa… → "Chỉ được phân công buổi tập cho Groom".
+  - Groom khác khu với ngựa (ví dụ `groom_01`, khu "Vệ sinh chuồng trại") → "Groom ... phụ trách khu '...', không phải khu '...' của ngựa ...".
+  - Groom đã bị vô hiệu hóa → `400`.
+  - Ngựa đang VetLock (BR-03) → "Ngựa ... đang bị khóa huấn luyện (VetLock), không thể xếp lịch tập".
+  - `sessionDate` trước ngày bắt đầu hoặc sau ngày kết thúc giáo án → "Ngày tập ... nằm ngoài thời gian giáo án".
   - `sessionDate` ở quá khứ → `400`.
-  - Giáo án đã `COMPLETED` hoặc `CANCELLED` → `500` "Không thể thêm buổi tập...".
+  - Giáo án đã `COMPLETED` hoặc `CANCELLED` → `400`.
+  - `assignedToId` không tồn tại → `404`.
 
 ---
 
@@ -534,7 +559,7 @@ Luồng: **Trainer giao việc** (9.0) → **Groom xem việc hôm nay** (9.1) �
 
 ### 9.0 `POST /api/v1/care-tasks` — Trainer giao việc cho Groom
 
-Chỉ `Trainer` được gọi. Lấy `groomId` từ `GET /training-plans/assignable-staff` (6.4), chọn người có `roleName = "Groom"`.
+Chỉ `Trainer` được gọi. Lấy `groomId` từ `GET /training-plans/assignable-staff?planId=...` (6.4): danh sách đó chỉ gồm Groom cùng khu chuồng với ngựa.
 
 ```json
 {
@@ -792,7 +817,7 @@ Toàn bộ nhóm này chỉ dành cho **nhân viên kho**. Mọi role khác gọ
 ```json
 {
   "username": "kho01",
-  "password": "123456",
+  "password": "kho12345",
   "fullName": "Nguyen Van Kho",
   "email": "kho01@test.com",
   "roleName": "Warehouse Manager"

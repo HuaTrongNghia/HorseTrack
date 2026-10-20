@@ -3,7 +3,6 @@ package com.horsetrack.equinecare.modules.auth.service;
 import com.horsetrack.equinecare.modules.auth.dto.ForgotPasswordRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.ResetPasswordRequestDTO;
 import com.horsetrack.equinecare.modules.auth.security.OtpService;
-import com.horsetrack.equinecare.modules.notification.exception.EmailSendException;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.auth.dto.LoginDTO;
 import com.horsetrack.equinecare.modules.auth.dto.LoginResponseDTO;
@@ -58,13 +57,13 @@ public class AuthServiceImpl implements AuthService {
                 .filter(user -> !Boolean.FALSE.equals(user.getIsActive()))
                 .ifPresent(user -> {
                     String otp = otpService.issue(email, OtpService.Purpose.RESET_PASSWORD);
-                    try {
-                        emailService.sendOtp(user.getEmail(), user.getFullName(), otp, OtpService.Purpose.RESET_PASSWORD.getLabel());
-                    } catch (EmailSendException ex) {
-                        // Gửi không được thì hủy mã để người dùng thử lại ngay
-                        otpService.invalidate(email, OtpService.Purpose.RESET_PASSWORD);
-                        throw ex;
-                    }
+                    // Gửi ở nền, không chờ: email có hay không tồn tại đều phản hồi ngay và giống nhau.
+                    // Gửi không được thì hủy mã + thời gian chờ để người dùng thử lại ngay.
+                    emailService.sendOtp(user.getEmail(), user.getFullName(), otp, OtpService.Purpose.RESET_PASSWORD.getLabel())
+                            .exceptionally(ex -> {
+                                otpService.invalidate(email, OtpService.Purpose.RESET_PASSWORD);
+                                return null;
+                            });
                 });
     }
 

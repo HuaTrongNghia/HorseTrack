@@ -17,7 +17,8 @@ public interface TrainingPlanService {
     List<AvailableHorseDTO> getAvailableHorses();
     DashboardStatsDTO getDashboardStats();
     Page<TrainingPlanSummaryDTO> getTrainingPlans(String status, Pageable pageable);
-    List<StaffAssignDTO> getAssignableStaff();
+    /** Groom đang hoạt động cùng khu chuồng với ngựa của giáo án (SRS: chọn khu → ngựa → Groom của khu đó). */
+    List<StaffAssignDTO> getAssignableStaff(Integer planId);
     TrainingPlanDetailDTO getTrainingPlanDetail(Integer planId);
     void addTrainingSessionToPlan(Integer planId, TrainingSessionCreateRequestDTO request);
 

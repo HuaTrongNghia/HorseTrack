@@ -70,8 +70,9 @@ public class TrainingPlanController {
     // 2. Lấy danh sách Groom/Trainer đổ vào Dropdown gán việc
     @GetMapping("/assignable-staff")
     @PreAuthorize("hasAuthority('Trainer')")
-    public ResponseEntity<ApiResponse<List<StaffAssignDTO>>> getAssignableStaff() {
-        List<StaffAssignDTO> staffList = trainingPlanService.getAssignableStaff();
+    public ResponseEntity<ApiResponse<List<StaffAssignDTO>>> getAssignableStaff(@RequestParam Integer planId) {
+        // Chỉ Groom đang hoạt động cùng khu chuồng với ngựa của giáo án (SRS: khu → ngựa → Groom của khu)
+        List<StaffAssignDTO> staffList = trainingPlanService.getAssignableStaff(planId);
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách nhân sự phân công thành công", staffList));
     }
 

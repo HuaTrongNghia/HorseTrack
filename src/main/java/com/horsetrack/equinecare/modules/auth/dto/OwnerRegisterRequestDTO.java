@@ -1,5 +1,7 @@
 package com.horsetrack.equinecare.modules.auth.dto;
 
+import com.horsetrack.equinecare.common.validation.StrongPassword;
+import com.horsetrack.equinecare.common.validation.ValidUsername;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import lombok.AllArgsConstructor;
@@ -13,10 +15,12 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class OwnerRegisterRequestDTO {
 
-    @NotBlank(message = "Username is required")
+    @NotBlank(message = "Tên đăng nhập là bắt buộc")
+    @ValidUsername
     private String username;
 
-    @NotBlank(message = "Password is required")
+    @NotBlank(message = "Mật khẩu là bắt buộc")
+    @StrongPassword
     private String password;
 
     @NotBlank(message = "Full name is required")

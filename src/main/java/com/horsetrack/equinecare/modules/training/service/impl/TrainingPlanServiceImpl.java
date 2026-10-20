@@ -1,6 +1,7 @@
 package com.horsetrack.equinecare.modules.training.service.impl;
 
 import com.horsetrack.equinecare.modules.auth.entity.User;
+import com.horsetrack.equinecare.modules.auth.repository.GroomProfileRepository;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
 import com.horsetrack.equinecare.modules.horse.repository.HorseRepository;
@@ -20,7 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -32,6 +32,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     private final TrainingSessionRepository trainingSessionRepository;
     private final HorseRepository horseRepository;
     private final UserRepository userRepository;
+    private final GroomProfileRepository groomProfileRepository;
 
     @Override
     public List<AvailableHorseDTO> getAvailableHorses() {
@@ -97,15 +98,31 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<StaffAssignDTO> getAssignableStaff() {
-        List<User> staffList = userRepository.findByRoleNameInAndIsActiveTrue(Arrays.asList("Groom", "Trainer"));
-        return staffList.stream()
-                .map(user -> StaffAssignDTO.builder()
-                        .userId(user.getUserId())
-                        .fullName(user.getFullName())
-                        .roleName(user.getRoleName())
+    public List<StaffAssignDTO> getAssignableStaff(Integer planId) {
+        TrainingPlan plan = findPlan(planId);
+        String barnZone = horseBarnZone(plan);
+        return groomProfileRepository.findActiveGroomsInZone(barnZone).stream()
+                .map(gp -> StaffAssignDTO.builder()
+                        .userId(gp.getUser().getUserId())
+                        .fullName(gp.getUser().getFullName())
+                        .roleName(gp.getUser().getRoleName())
+                        .barnZone(gp.getAssignedBarnZone())
                         .build())
                 .collect(Collectors.toList());
+    }
+
+    private TrainingPlan findPlan(Integer planId) {
+        return trainingPlanRepository.findById(planId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giáo án với ID: " + planId));
+    }
+
+    // Khu chuồng của ngựa trong giáo án; ngựa chưa có chuồng thì không phân công được
+    private String horseBarnZone(TrainingPlan plan) {
+        Horse horse = plan.getHorse();
+        if (horse == null || horse.getStall() == null || horse.getStall().getBarnZone() == null) {
+            throw new IllegalArgumentException("Ngựa của giáo án chưa được cấp chuồng nên chưa xác định được khu để phân công Groom.");
+        }
+        return horse.getStall().getBarnZone().trim();
     }
 
     @Override
@@ -142,15 +159,41 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void addTrainingSessionToPlan(Integer planId, TrainingSessionCreateRequestDTO request) {
-        TrainingPlan plan = trainingPlanRepository.findById(planId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy Giáo án với ID: " + planId));
+        TrainingPlan plan = findPlan(planId);
 
         if ("CANCELLED".equalsIgnoreCase(plan.getStatus()) || "COMPLETED".equalsIgnoreCase(plan.getStatus())) {
-            throw new RuntimeException("Không thể thêm buổi tập vào giáo án đã hoàn thành hoặc bị hủy.");
+            throw new IllegalArgumentException("Không thể thêm buổi tập vào giáo án đã hoàn thành hoặc bị hủy.");
         }
 
+        // BR-03: ngựa đang khóa huấn luyện (VetLock) thì không được xếp lịch tập
+        Horse horse = plan.getHorse();
+        if (horse != null && Boolean.TRUE.equals(horse.getIsLocked())) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đang bị khóa huấn luyện (VetLock), không thể xếp lịch tập.");
+        }
+
+        // Ngày tập phải nằm trong thời gian của giáo án
+        LocalDate day = request.getSessionDate().toLocalDate();
+        if (day.isBefore(plan.getStartDate()) || day.isAfter(plan.getEndDate())) {
+            throw new IllegalArgumentException("Ngày tập " + day + " nằm ngoài thời gian giáo án (" + plan.getStartDate() + " đến " + plan.getEndDate() + ").");
+        }
+
+        // Người được gán phải là Groom đang hoạt động, phụ trách đúng khu chuồng của ngựa
+        String barnZone = horseBarnZone(plan);
         User assignee = userRepository.findById(request.getAssignedToId())
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy nhân viên được phân công."));
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên với ID: " + request.getAssignedToId()));
+        if (!"Groom".equals(assignee.getRoleName())) {
+            throw new IllegalArgumentException("Chỉ được phân công buổi tập cho Groom (người được chọn có vai trò " + assignee.getRoleName() + ").");
+        }
+        if (Boolean.FALSE.equals(assignee.getIsActive())) {
+            throw new IllegalArgumentException("Tài khoản Groom " + assignee.getFullName() + " đã bị vô hiệu hóa.");
+        }
+        String groomZone = groomProfileRepository.findById(assignee.getUserId())
+                .map(gp -> gp.getAssignedBarnZone())
+                .orElse(null);
+        if (groomZone == null || !groomZone.trim().equalsIgnoreCase(barnZone)) {
+            throw new IllegalArgumentException("Groom " + assignee.getFullName() + " phụ trách khu '" + (groomZone == null ? "chưa có" : groomZone)
+                    + "', không phải khu '" + barnZone + "' của ngựa " + (horse != null ? horse.getHorseName() : "") + ".");
+        }
 
         TrainingSession session = TrainingSession.builder()
                 .sessionDate(request.getSessionDate())

@@ -18,6 +18,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.concurrent.CompletableFuture;
+
 @Service
 @RequiredArgsConstructor
 public class AccountServiceImpl implements AccountService {
@@ -69,14 +71,20 @@ public class AccountServiceImpl implements AccountService {
             throw new IllegalArgumentException("Tài khoản chưa có email để nhận mã OTP.");
         }
         otpService.checkAndMarkCooldown(user.getEmail(), OtpService.Purpose.CHANGE_PASSWORD);
-        String otp = otpService.issue(user.getEmail(), OtpService.Purpose.CHANGE_PASSWORD);
-        try {
-            emailService.sendOtp(user.getEmail(), user.getFullName(), otp, OtpService.Purpose.CHANGE_PASSWORD.getLabel());
-        } catch (EmailSendException ex) {
-            otpService.invalidate(user.getEmail(), OtpService.Purpose.CHANGE_PASSWORD);
-            throw ex;
+        String email = user.getEmail();
+        String otp = otpService.issue(email, OtpService.Purpose.CHANGE_PASSWORD);
+        // Gửi ở nền; gửi lỗi (kể cả sau khi đã trả lời) thì hủy mã để người dùng gửi lại ngay
+        CompletableFuture<Void> sending = emailService.sendOtp(email, user.getFullName(), otp, OtpService.Purpose.CHANGE_PASSWORD.getLabel())
+                .whenComplete((ok, ex) -> {
+                    if (ex != null) {
+                        otpService.invalidate(email, OtpService.Purpose.CHANGE_PASSWORD);
+                    }
+                });
+        // Người dùng đang chờ mã: đợi tối đa app.mail.wait-seconds để báo lỗi gửi nếu có
+        if (emailService.await(sending) == EmailService.Delivery.FAILED) {
+            throw new EmailSendException("Không gửi được mã OTP tới " + maskEmail(email) + ". Vui lòng thử lại sau.", null);
         }
-        return maskEmail(user.getEmail());
+        return maskEmail(email);
     }
 
     @Override
