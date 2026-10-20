@@ -7,6 +7,8 @@ import com.horsetrack.equinecare.modules.medical.dto.VetActionRequestDTO;
 import com.horsetrack.equinecare.modules.medical.dto.VetLockRequestDTO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,6 +20,11 @@ import java.util.List;
 public class MedicalService {
 
     private final HorseRepository horseRepository;
+
+    private boolean isCurrentUserVeterinarian() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream().anyMatch(a -> "Veterinarian".equals(a.getAuthority()));
+    }
 
     // 1. Hàm kích hoạt Khóa y tế (VetLock)
     @Transactional
@@ -31,13 +38,15 @@ public class MedicalService {
 
         horse.setIsLocked(true);
 
-        // Đặt health_status thành một giá trị hợp lệ mà DB chấp nhận (Ví dụ: "Injured" hoặc "Chấn thương")
-        // Tùy thuộc vào ràng buộc CHK_Horse_Health trong SQL Server của bạn
-        horse.setHealthStatus("Injured");
+        // Chỉ Bác sĩ thú y mới kết luận chấn thương (INJURED).
+        // Trainer/Groom bấm khẩn cấp thì chỉ khóa tập và chuyển sang WATCH để chờ bác sĩ khám.
+        boolean isVet = isCurrentUserVeterinarian();
+        horse.setHealthStatus(isVet ? "INJURED" : "WATCH");
 
         horseRepository.save(horse);
 
-        log.warn("EMERGENCY VETLOCK: Ngựa ID {} đã bị khóa! Lý do: {}", horse.getHorseId(), dto.getReason());
+        log.warn("EMERGENCY VETLOCK: Ngựa ID {} đã bị khóa bởi {} ({})! Lý do: {}", horse.getHorseId(),
+                SecurityContextHolder.getContext().getAuthentication().getName(), isVet ? "INJURED" : "WATCH", dto.getReason());
     }
 
     // 2. Hàm mở khóa y tế (Hồi phục)
@@ -46,10 +55,14 @@ public class MedicalService {
         Horse horse = horseRepository.findById(horseId)
                 .orElseThrow(() -> new Exception("Không tìm thấy ngựa!"));
 
+        if (!Boolean.TRUE.equals(horse.getIsLocked())) {
+            throw new Exception("Ngựa này hiện không bị khóa y tế, không cần mở khóa!");
+        }
+
         horse.setIsLocked(false);
 
         // Đặt lại health_status về trạng thái khỏe mạnh hợp lệ của DB (Ví dụ: "Healthy" hoặc "Khỏe mạnh")
-        horse.setHealthStatus("Healthy");
+        horse.setHealthStatus("HEALTHY");
 
         horseRepository.save(horse);
     }
