@@ -2,8 +2,9 @@ package com.horsetrack.equinecare.common.enums;
 
 public enum UserRole {
     CLUB_MANAGER,
-    HEAD_TRAINER,
+    TRAINER,
     VETERINARIAN,
     GROOM,
-    HORSE_OWNER
+    HORSE_OWNER,
+    WAREHOUSE_MANAGER
 }
