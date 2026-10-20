@@ -1,6 +1,7 @@
 package com.horsetrack.equinecare.modules.auth.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
@@ -19,4 +20,9 @@ public class ChangePasswordRequestDTO {
 
     @NotBlank(message = "Confirm new password is required")
     private String confirmNewPassword;
+
+    // Mã OTP gửi tới email qua POST /api/v1/account/change-password/otp
+    @NotBlank(message = "Mã OTP là bắt buộc")
+    @Pattern(regexp = "^\\d{6}$", message = "Mã OTP gồm đúng 6 chữ số")
+    private String otp;
 }
