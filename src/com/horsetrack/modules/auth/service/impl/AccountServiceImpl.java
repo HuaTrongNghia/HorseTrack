@@ -37,7 +37,7 @@ public class AccountServiceImpl implements AccountService {
                 .isActive(user.getIsActive())
                 .build();
 
-        if ("TRAINER".equalsIgnoreCase(user.getRoleName()) || "HEAD_TRAINER".equalsIgnoreCase(user.getRoleName())) {
+        if ("Trainer".equalsIgnoreCase(user.getRoleName())) {
             TrainerProfile trainer = user.getTrainerProfile();
             if (trainer != null) {
                 dto.setLicenseNumber(trainer.getLicenseNumber());
