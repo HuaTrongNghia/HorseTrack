@@ -9,6 +9,9 @@ import com.horsetrack.equinecare.modules.horse.repository.StallRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +29,28 @@ public class HorseServiceImpl implements HorseService {
         this.horseRepository = horseRepository;
         this.userRepository = userRepository;
         this.stallRepository = stallRepository;
+    }
+
+    private static final String ROLE_OWNER = "Horse Owner";
+    private static final String ROLE_VET = "Veterinarian";
+
+    private boolean currentUserHasRole(String role) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream().anyMatch(a -> role.equals(a.getAuthority()));
+    }
+
+    private Integer currentUserId() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new RuntimeException("User not found"))
+                .getUserId();
+    }
+
+    // Chủ ngựa chỉ được thao tác trên dữ liệu của chính mình; nhân viên CLB không bị giới hạn
+    private void checkOwnerAccess(Integer ownerId, String message) {
+        if (currentUserHasRole(ROLE_OWNER) && !currentUserId().equals(ownerId)) {
+            throw new AccessDeniedException(message);
+        }
     }
 
     private HorseResponseDTO mapToResponseDTO(Horse horse) {
@@ -48,6 +73,7 @@ public class HorseServiceImpl implements HorseService {
 
     @Override
     public List<HorseResponseDTO> getMyHorses(Integer ownerId) {
+        checkOwnerAccess(ownerId, "Bạn chỉ được xem danh sách ngựa của chính mình");
         if (!userRepository.existsById(ownerId)) {
             throw new RuntimeException("Owner not found");
         }
@@ -76,6 +102,7 @@ public class HorseServiceImpl implements HorseService {
     public HorseResponseDTO getHorseDetail(Integer horseId) {
         Horse horse = horseRepository.findById(horseId)
                 .orElseThrow(() -> new RuntimeException("ResourceNotFoundException: Horse not found"));
+        checkOwnerAccess(horse.getOwner().getUserId(), "Bạn không phải chủ của ngựa này");
         return mapToResponseDTO(horse);
     }
 
@@ -109,10 +136,18 @@ public class HorseServiceImpl implements HorseService {
         if (request.getWeightKg() != null) {
             horse.setWeightKg(request.getWeightKg());
         }
-        if (request.getHealthStatus() != null) {
-            horse.setHealthStatus(request.getHealthStatus());
+        if (request.getHealthStatus() != null && !request.getHealthStatus().equalsIgnoreCase(horse.getHealthStatus())) {
+            // Đánh giá sức khỏe là chuyên môn y tế, chỉ Bác sĩ thú y được thay đổi
+            if (!currentUserHasRole(ROLE_VET)) {
+                throw new AccessDeniedException("Chỉ Bác sĩ thú y mới được thay đổi trạng thái sức khỏe (healthStatus)");
+            }
+            horse.setHealthStatus(request.getHealthStatus().toUpperCase());
         }
-        if (request.getIsLocked() != null) {
+        if (request.getIsLocked() != null && !request.getIsLocked().equals(horse.getIsLocked())) {
+            // Khóa/mở khóa huấn luyện là quyết định y tế, chỉ Bác sĩ thú y được thay đổi
+            if (!currentUserHasRole(ROLE_VET)) {
+                throw new AccessDeniedException("Chỉ Bác sĩ thú y mới được thay đổi trạng thái khóa huấn luyện (isLocked)");
+            }
             horse.setIsLocked(request.getIsLocked());
         }
         
@@ -131,6 +166,7 @@ public class HorseServiceImpl implements HorseService {
     @Override
     @Transactional
     public HorseResponseDTO registerHorse(HorseRegistrationRequestDTO request) {
+        checkOwnerAccess(request.getOwnerId(), "Chủ ngựa chỉ được đăng ký ngựa cho chính mình (ownerId phải là userId của bạn)");
         if (horseRepository.existsByHorseNameAndOwner_UserId(request.getHorseName(), request.getOwnerId())) {
             throw new RuntimeException("Horse with this name already exists for the owner");
         }
