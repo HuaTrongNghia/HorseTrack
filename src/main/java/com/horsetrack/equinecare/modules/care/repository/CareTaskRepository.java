@@ -11,4 +11,6 @@ import java.util.List;
 public interface CareTaskRepository extends JpaRepository<CareTask, Integer> {
 
     List<CareTask> findByGroom_UserIdAndTaskDateOrderByScheduledTimeAsc(Integer groomId, LocalDate taskDate);
+
+    long countByGroom_UserIdAndStatusNot(Integer groomId, String status);
 }

@@ -219,6 +219,63 @@ Không cần token.
 
 ---
 
+## 2B. User Management — `/api/v1/users` & `/api/v1/audit-logs` (Chỉ `Club Manager`)
+
+Phục vụ màn hình **Người dùng & phân quyền** của FE (5.1, 5.2, 5.3, BR_06, BR_10).
+
+### 2B.1 `GET /api/v1/users?page=0&size=20&search=&role=&status=` — Danh sách người dùng (phân trang & lọc)
+- **Tham số tùy chọn:**
+  - `search`: tìm kiếm không phân biệt hoa thường theo họ tên, username, email.
+  - `role`: lọc theo vai trò (`Club Manager`, `Trainer`, `Veterinarian`, `Groom`, `Warehouse Manager`, `Horse Owner` hoặc dạng FE `HeadTrainer`, `WarehouseManager`...).
+  - `status`: `ACTIVE` (hoạt động) hoặc `LOCKED` (bị khóa).
+- **Mong đợi:** `200`, trả về danh sách `users` kèm `currentPage`, `totalPages`, `totalElements`. Mỗi user có đầy đủ: `id`, `username`, `fullName`, `email`, `role`, `status`, `openTasks`, `horsesOwned`, `specialization`, `licenseNumber`.
+
+### 2B.2 `GET /api/v1/users/all` — Danh sách toàn bộ người dùng (không phân trang)
+- **Mong đợi:** `200`, danh sách phẳng tất cả user để FE nạp nhanh vào bảng dữ liệu.
+
+### 2B.3 `GET /api/v1/users/{id}` — Chi tiết người dùng theo ID
+- **Mong đợi:** `200`, thông tin tài khoản và profile chuyên môn tương ứng.
+
+### 2B.4 `PUT /api/v1/users/{id}/lock` — Khóa tài khoản người dùng (BR_10)
+```json
+{
+  "reason": "Vi phạm quy định an toàn chuồng trại nhiều lần"
+}
+```
+- **Quy tắc:**
+  - Lý do tối thiểu 10 ký tự.
+  - Không được tự khóa tài khoản của chính mình (Club Manager hiện tại).
+  - Không thể khóa tài khoản Club Manager khác.
+  - Tự động thu hồi phiên làm việc (thu hồi refresh tokens) và ghi `Audit_Logs`.
+- **Mong đợi:** `200`, `status = "LOCKED"`.
+
+### 2B.5 `PUT /api/v1/users/{id}/unlock` — Mở khóa tài khoản (BR_10)
+```json
+{
+  "reason": "Đã hoàn thành kiểm điểm và cam kết tuân thủ quy chế"
+}
+```
+- **Mong đợi:** `200`, `status = "ACTIVE"`, ghi `Audit_Logs`.
+
+### 2B.6 `PUT /api/v1/users/{id}/role` — Đổi vai trò người dùng (BR_06)
+```json
+{
+  "roleName": "Trainer",
+  "reason": "Bổ nhiệm Huấn luyện viên phụ trách nhóm ngựa khu B"
+}
+```
+- **Quy tắc BR_06:**
+  - Nếu chuyển từ `Horse Owner` sang vai trò nhân sự: chặn nếu người này đang sở hữu ngựa trong CLB (`horsesOwned > 0`).
+  - Nếu chuyển từ nhân sự sang `Horse Owner`: chặn do xung đột lợi ích.
+  - Tự động tạo hồ sơ profile tương ứng (`TrainerProfile`, `VeterinarianProfile`...) nếu chưa có.
+  - Thu hồi refresh token để người dùng đăng nhập lại nhận vai trò mới và ghi `Audit_Logs`.
+- **Mong đợi:** `200`, `roleName` và `role` được cập nhật.
+
+### 2B.7 `GET /api/v1/audit-logs` — Xem nhật ký kiểm toán hệ thống (BR_10)
+- **Mong đợi:** `200`, danh sách các hành động gần nhất trên hệ thống (ai thực hiện, thao tác gì, bảng nào, giá trị cũ/mới, IP, thời gian).
+
+---
+
 ## 3. Horse — `/api/v1/horses`
 
 Mỗi API có phân quyền riêng, xem bảng ở mục 18.
