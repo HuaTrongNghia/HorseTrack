@@ -3,16 +3,22 @@ package com.horsetrack.equinecare.modules.auth.service;
 import com.horsetrack.equinecare.modules.auth.dto.LoginDTO;
 import com.horsetrack.equinecare.modules.auth.dto.LoginResponseDTO;
 import com.horsetrack.equinecare.modules.auth.dto.OwnerRegisterRequestDTO;
+import com.horsetrack.equinecare.modules.auth.dto.RefreshTokenRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.StaffCreateRequestDTO;
 import com.horsetrack.equinecare.modules.auth.entity.*;
 import com.horsetrack.equinecare.modules.auth.repository.*;
 import com.horsetrack.equinecare.modules.auth.security.JwtTokenProvider;
+import com.horsetrack.equinecare.modules.auth.security.TokenBlacklistService;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
 
@@ -27,6 +33,8 @@ public class AuthServiceImpl implements AuthService {
     private final VeterinarianProfileRepository vetRepo;
     private final GroomProfileRepository groomRepo;
     private final JwtTokenProvider jwtTokenProvider;
+    private final RefreshTokenService refreshTokenService;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -51,10 +59,11 @@ public class AuthServiceImpl implements AuthService {
 
         User savedUser = userRepository.save(newUser);
 
+        // Đăng ký không còn thu mã số thuế và địa chỉ hóa đơn.
+        // Cột billing_address trên DB đang NOT NULL nên tạm lưu chuỗi rỗng.
         HorseOwnerProfile ownerProfile = HorseOwnerProfile.builder()
                 .user(savedUser)
-                .taxCode(request.getTaxCode())
-                .billingAddress(request.getBillingAddress())
+                .billingAddress("")
                 .build();
 
         horseOwnerRepo.save(ownerProfile);
@@ -85,7 +94,6 @@ public class AuthServiceImpl implements AuthService {
 
         switch (request.getRoleName()) {
             case "Trainer":
-            case "Head Trainer":
                 TrainerProfile trainerProfile = TrainerProfile.builder()
                 .user(savedUser)
                 .licenseNumber(request.getLicenseNumber() != null ? request.getLicenseNumber() : "N/A")
@@ -108,13 +116,16 @@ public class AuthServiceImpl implements AuthService {
                 .build();
                 groomRepo.save(groomProfile);
                 break;
+            case "Warehouse Manager":
+                // Nhân viên kho chưa có bảng profile riêng, chỉ cần tài khoản Users
+                break;
             default:
                 throw new IllegalArgumentException("Vai trò không hợp lệ: " + request.getRoleName());
         }
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional(rollbackFor = Exception.class)
     public LoginResponseDTO login(LoginDTO request) {
         // Bước 1: Lấy thông tin user từ DB dựa trên username từ LoginDTO
         User user = userRepository.findByUsername(request.getUsername().trim())
@@ -130,10 +141,47 @@ public class AuthServiceImpl implements AuthService {
             throw new BadCredentialsException("Tên đăng nhập hoặc mật khẩu không chính xác");
         }
 
-        // Bước 3, 4 & 5: Sinh JWT Token (chứa sub, userId, role) và trả về kèm thông tin hạn dùng
+        // Bước 3, 4 & 5: Sinh JWT Token (chứa sub, userId, role) + refresh token và trả về kèm thông tin hạn dùng
+        return buildLoginResponse(user);
+    }
+
+    @Override
+    // Không rollback khi lỗi xác thực để giữ lại việc thu hồi token bị dùng lại
+    @Transactional(noRollbackFor = AuthenticationException.class)
+    public LoginResponseDTO refreshToken(RefreshTokenRequestDTO request) {
+        // Refresh token cũ bị thu hồi ngay, client phải dùng refresh token mới trả về
+        RefreshToken oldToken = refreshTokenService.verifyAndRevoke(request.getRefreshToken());
+        User user = oldToken.getUser();
+
+        if (Boolean.FALSE.equals(user.getIsActive())) {
+            throw new DisabledException("Tài khoản đã bị vô hiệu hóa hoặc chưa được kích hoạt");
+        }
+
+        return buildLoginResponse(user);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void logout(RefreshTokenRequestDTO request, String accessToken) {
+        refreshTokenService.revoke(request.getRefreshToken());
+
+        // Chặn luôn access token hiện tại; token sai hoặc đã hết hạn thì không cần chặn
+        if (StringUtils.hasText(accessToken)) {
+            try {
+                Claims claims = jwtTokenProvider.getClaims(accessToken);
+                tokenBlacklistService.revoke(claims.getId(), claims.getExpiration());
+            } catch (JwtException | IllegalArgumentException ignored) {
+                // Bỏ qua: token không còn dùng được nữa
+            }
+        }
+    }
+
+    private LoginResponseDTO buildLoginResponse(User user) {
         return LoginResponseDTO.builder()
                 .accessToken(jwtTokenProvider.generateToken(user))
                 .expiresIn(jwtTokenProvider.getExpirationSeconds())
+                .refreshToken(refreshTokenService.createRefreshToken(user))
+                .refreshExpiresIn(refreshTokenService.getRefreshExpirationSeconds())
                 .role(user.getRoleName())
                 .userId(user.getUserId())
                 .build();
