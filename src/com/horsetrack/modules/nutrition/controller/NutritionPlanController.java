@@ -22,10 +22,10 @@ public class NutritionPlanController {
 
     /**
      * API 2: Khởi tạo/Cập nhật Thực đơn Dinh dưỡng (Cốt lõi BR_03)
-     * Quyền: @PreAuthorize("hasAnyAuthority('Head Trainer', 'Veterinarian')")
+     * Quyền: @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian')")
      */
     @PostMapping("/nutrition-plans")
-    @PreAuthorize("hasAnyAuthority('Head Trainer', 'Veterinarian')")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian')")
     public ResponseEntity<ApiResponse<Integer>> createNutritionPlan(
             @Valid @RequestBody NutritionPlanCreateRequestDTO request) {
         Integer planId = nutritionPlanService.createNutritionPlan(request);
