@@ -1,5 +1,10 @@
 package com.horsetrack.equinecare.modules.auth.service;
 
+import com.horsetrack.equinecare.modules.auth.dto.ForgotPasswordRequestDTO;
+import com.horsetrack.equinecare.modules.auth.dto.ResetPasswordRequestDTO;
+import com.horsetrack.equinecare.modules.auth.security.OtpService;
+import com.horsetrack.equinecare.modules.notification.exception.EmailSendException;
+import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.auth.dto.LoginDTO;
 import com.horsetrack.equinecare.modules.auth.dto.LoginResponseDTO;
 import com.horsetrack.equinecare.modules.auth.dto.OwnerRegisterRequestDTO;
@@ -35,6 +40,51 @@ public class AuthServiceImpl implements AuthService {
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final TokenBlacklistService tokenBlacklistService;
+    private final RefreshTokenRepository refreshTokenRepository;
+    private final OtpService otpService;
+    private final EmailService emailService;
+
+    // ==========================================
+    // QUÊN MẬT KHẨU (OTP qua email)
+    // ==========================================
+
+    @Override
+    public void forgotPassword(ForgotPasswordRequestDTO request) {
+        String email = request.getEmail().trim();
+        // Áp thời gian chờ cho mọi email (kể cả không tồn tại) để phản hồi giống nhau, không lộ email nào đã đăng ký
+        otpService.checkAndMarkCooldown(email, OtpService.Purpose.RESET_PASSWORD);
+
+        userRepository.findByEmail(email)
+                .filter(user -> !Boolean.FALSE.equals(user.getIsActive()))
+                .ifPresent(user -> {
+                    String otp = otpService.issue(email, OtpService.Purpose.RESET_PASSWORD);
+                    try {
+                        emailService.sendOtp(user.getEmail(), user.getFullName(), otp, OtpService.Purpose.RESET_PASSWORD.getLabel());
+                    } catch (EmailSendException ex) {
+                        // Gửi không được thì hủy mã để người dùng thử lại ngay
+                        otpService.invalidate(email, OtpService.Purpose.RESET_PASSWORD);
+                        throw ex;
+                    }
+                });
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void resetPassword(ResetPasswordRequestDTO request) {
+        if (!request.getNewPassword().equals(request.getConfirmNewPassword())) {
+            throw new IllegalArgumentException("Mật khẩu mới và xác nhận mật khẩu không khớp.");
+        }
+        String email = request.getEmail().trim();
+        // Mã chỉ được cấp cho email có tài khoản, nên kiểm tra mã trước (dùng 1 lần)
+        otpService.verify(email, OtpService.Purpose.RESET_PASSWORD, request.getOtp());
+
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new IllegalArgumentException("Mã OTP không hợp lệ."));
+        user.setPasswordHash(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+        // Đăng xuất mọi thiết bị: thu hồi toàn bộ refresh token
+        refreshTokenRepository.revokeAllByUserId(user.getUserId());
+    }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
