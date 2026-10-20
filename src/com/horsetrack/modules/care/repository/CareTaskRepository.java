@@ -2,9 +2,13 @@ package com.horsetrack.equinecare.modules.care.repository;
 
 import com.horsetrack.equinecare.modules.care.entity.CareTask;
 import org.springframework.data.jpa.repository.JpaRepository;
-import java.time.LocalDateTime;
+import org.springframework.stereotype.Repository;
+
+import java.time.LocalDate;
 import java.util.List;
 
+@Repository
 public interface CareTaskRepository extends JpaRepository<CareTask, Integer> {
-    List<CareTask> findByAssignedTo_UserIdAndDueDateBetweenOrderByDueDateAsc(Integer userId, LocalDateTime start, LocalDateTime end);
+
+    List<CareTask> findByGroom_UserIdAndTaskDateOrderByScheduledTimeAsc(Integer groomId, LocalDate taskDate);
 }
