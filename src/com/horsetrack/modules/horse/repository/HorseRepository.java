@@ -9,6 +9,7 @@ import java.util.List;
 @Repository
 public interface HorseRepository extends JpaRepository<Horse, Integer> {
     List<Horse> findByOwnerUserId(Integer ownerId);
+    long countByOwnerUserId(Integer ownerId);
     List<Horse> findByIsLockedTrue();
     boolean existsByHorseNameAndOwner_UserId(String horseName, Integer ownerId);
     
