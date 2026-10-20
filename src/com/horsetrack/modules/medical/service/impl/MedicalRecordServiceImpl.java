@@ -54,23 +54,25 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                 InventoryItem invItem = inventoryItemRepository.findById(itemDto.getItemId())
                         .orElseThrow(() -> new RuntimeException("Inventory item not found for ID: " + itemDto.getItemId()));
                 
-                int currentStock = invItem.getCurrentStock() != null ? invItem.getCurrentStock() : 0;
-                Integer incomingStock = purchaseOrderRepository.getIncomingQuantity(itemDto.getItemId(), request.getVisitDate());
-                if (incomingStock == null) incomingStock = 0;
-                
-                int totalAvailable = currentStock + incomingStock;
-                
+                double currentStock = invItem.getCurrentStock() != null ? invItem.getCurrentStock() : 0;
+                Double incomingStock = purchaseOrderRepository.getIncomingQuantity(itemDto.getItemId(), request.getVisitDate());
+                if (incomingStock == null) incomingStock = 0.0;
+
+                double totalAvailable = currentStock + incomingStock;
+
                 if (totalAvailable < itemDto.getQuantityPrescribed()) {
                     throw new InvalidPrescriptionException(String.format(
-                            "Vật tư [%s] không đủ đáp ứng. Khả dụng (bao gồm lô hàng sắp về): [%d], Yêu cầu: [%d]. Vui lòng điều chỉnh phác đồ!",
-                            invItem.getItemName(), totalAvailable, itemDto.getQuantityPrescribed()));
+                            "Vật tư [%s] không đủ đáp ứng. Khả dụng (bao gồm lô hàng sắp về): [%s], Yêu cầu: [%d]. Vui lòng điều chỉnh phác đồ!",
+                            invItem.getItemName(), BigDecimal.valueOf(totalAvailable).stripTrailingZeros().toPlainString(),
+                            itemDto.getQuantityPrescribed()));
                 }
             }
         }
 
         if (Boolean.TRUE.equals(request.getIsLockoutOrdered())) {
+            // Bác sĩ chỉ định khóa tập => kết luận chấn thương (giá trị hợp lệ theo CHK_Horse_Health)
             horse.setIsLocked(true);
-            horse.setHealthStatus("VetLock = ACTIVE");
+            horse.setHealthStatus("INJURED");
             horseRepository.save(horse);
         }
 
@@ -114,6 +116,7 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
 
         return savedRecord.getRecordId();
     }
+
     // ==========================================
     // LUỒNG PHÊ DUYỆT VÀ THANH TOÁN (VNPay)
     // ==========================================
@@ -146,7 +149,7 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
         // Xác thực đúng chủ ngựa đang đăng nhập mới được thanh toán
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         User user = userRepository.findByUsername(username).orElseThrow();
-        if (!record.getHorse().getOwner().getUserId().equals(user.getUserId())) {
+        if (record.getHorse().getOwner() != null && !record.getHorse().getOwner().getUserId().equals(user.getUserId())) {
             throw new org.springframework.security.access.AccessDeniedException("Bạn không phải chủ của ngựa này");
         }
 
@@ -167,9 +170,9 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
 
         // Mở khóa VetLock cho ngựa
         Horse horse = record.getHorse();
-        if (Boolean.TRUE.equals(record.getIsLockoutOrdered())) {
+        if (Boolean.TRUE.equals(record.getIsLockoutOrdered()) && horse != null) {
             horse.setIsLocked(false);
-            horse.setHealthStatus("CLEARED");
+            horse.setHealthStatus("HEALTHY");
             horseRepository.save(horse);
         }
     }
