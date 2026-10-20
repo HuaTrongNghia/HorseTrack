@@ -75,6 +75,29 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.error(ex.getMessage()));
     }
 
+    // Bắt lỗi gửi email (SMTP sai cấu hình hoặc mất kết nối) (HTTP 503)
+    @ExceptionHandler(com.horsetrack.equinecare.modules.notification.exception.EmailSendException.class)
+    public ResponseEntity<ApiResponse<Void>> handleEmailSend(com.horsetrack.equinecare.modules.notification.exception.EmailSendException ex) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error(ex.getMessage()));
+    }
+
+    // Bắt lỗi nghiệp vụ RuntimeException (ResourceNotFoundException -> 404, BusinessException -> 400)
+    @ExceptionHandler(RuntimeException.class)
+    public ResponseEntity<ApiResponse<Void>> handleRuntimeException(RuntimeException ex) {
+        String msg = ex.getMessage();
+        if (msg != null && msg.contains("ResourceNotFoundException")) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(ApiResponse.error(msg.replace("ResourceNotFoundException:", "").trim()));
+        }
+        if (msg != null && msg.contains("BusinessException")) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(ApiResponse.error(msg.replace("BusinessException:", "").trim()));
+        }
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body(ApiResponse.error("Lỗi máy chủ: " + ex.getMessage()));
+    }
+
     // Bắt lỗi hệ thống ngoài dự kiến
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
