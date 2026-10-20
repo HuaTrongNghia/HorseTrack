@@ -61,7 +61,8 @@ public class SecurityConfig {
 
                         // 2. Cấp quyền cho API Xác thực
                         .requestMatchers("/api/v1/auth/register-owner", "/api/v1/auth/login",
-                                "/api/v1/auth/refresh", "/api/v1/auth/logout").permitAll()
+                                "/api/v1/auth/refresh", "/api/v1/auth/logout",
+                                "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password").permitAll()
                         .requestMatchers("/api/v1/auth/staff/**").hasAuthority("Club Manager")
 
                         // 3. Mở quyền cho các API khác trong giai đoạn kiểm thử nếu cần hoặc yêu cầu xác thực
