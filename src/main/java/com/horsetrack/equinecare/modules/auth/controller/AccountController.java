@@ -22,9 +22,17 @@ public class AccountController {
         return ResponseEntity.ok(ApiResponse.ok("Fetched profile successfully", profile));
     }
 
+    // Bước 1: gửi mã OTP đổi mật khẩu tới email của tài khoản đang đăng nhập
+    @PostMapping("/change-password/otp")
+    public ResponseEntity<ApiResponse<String>> requestChangePasswordOtp() {
+        String maskedEmail = accountService.requestChangePasswordOtp();
+        return ResponseEntity.ok(ApiResponse.ok("Đã gửi mã OTP tới " + maskedEmail + ". Mã có hiệu lực 120 giây.", maskedEmail));
+    }
+
+    // Bước 2: đổi mật khẩu với mật khẩu cũ + mã OTP
     @PutMapping("/change-password")
     public ResponseEntity<ApiResponse<Void>> changePassword(@Valid @RequestBody ChangePasswordRequestDTO request) {
         accountService.changePassword(request);
-        return ResponseEntity.ok(ApiResponse.ok("Password changed successfully", null));
+        return ResponseEntity.ok(ApiResponse.ok("Đổi mật khẩu thành công. Các thiết bị khác sẽ phải đăng nhập lại.", null));
     }
 }

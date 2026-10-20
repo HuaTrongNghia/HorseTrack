@@ -3,11 +3,17 @@ package com.horsetrack.equinecare.modules.training.dto;
 import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
 @Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
 public class TrainingSessionCreateRequestDTO {
 
     @NotNull(message = "Ngày và giờ của buổi tập là bắt buộc")

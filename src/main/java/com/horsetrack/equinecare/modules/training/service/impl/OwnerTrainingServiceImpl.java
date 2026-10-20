@@ -44,6 +44,9 @@ public class OwnerTrainingServiceImpl implements OwnerTrainingService {
                 .map(horse -> OwnerHorseListDTO.builder()
                         .horseId(horse.getHorseId())
                         .horseName(horse.getHorseName())
+                        .approvalStatus(horse.getApprovalStatus())
+                        .stallId(horse.getStall() != null ? horse.getStall().getStallId() : null)
+                        .stallCode(horse.getStall() != null ? horse.getStall().getStallCode() : null)
                         .build())
                 .collect(Collectors.toList());
     }

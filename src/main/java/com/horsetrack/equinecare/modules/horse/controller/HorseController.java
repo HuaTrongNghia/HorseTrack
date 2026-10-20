@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,6 +27,7 @@ public class HorseController {
     }
 
     @PostMapping("/register")
+    @PreAuthorize("hasAnyAuthority('Horse Owner', 'Club Manager')")
     public ResponseEntity<ApiResponse<HorseResponseDTO>> registerHorse(@Valid @RequestBody HorseRegistrationRequestDTO request) {
         HorseResponseDTO response = horseService.registerHorse(request);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -33,18 +35,21 @@ public class HorseController {
     }
 
     @GetMapping("/my-horses/{ownerId}")
+    @PreAuthorize("hasAnyAuthority('Horse Owner', 'Club Manager')")
     public ResponseEntity<ApiResponse<List<HorseResponseDTO>>> getMyHorses(@PathVariable Integer ownerId) {
         List<HorseResponseDTO> response = horseService.getMyHorses(ownerId);
         return ResponseEntity.ok(ApiResponse.ok("Fetched my horses successfully", response));
     }
 
     @GetMapping("/available-for-training")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Club Manager')")
     public ResponseEntity<ApiResponse<List<AvailableHorseDTO>>> getAvailableHorsesForTraining() {
         List<AvailableHorseDTO> response = trainingPlanService.getAvailableHorses();
         return ResponseEntity.ok(ApiResponse.ok("Fetched available horses successfully", response));
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Veterinarian', 'Groom')")
     public ResponseEntity<ApiResponse<HorsePageResponseDTO>> getAllHorses(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
@@ -62,12 +67,14 @@ public class HorseController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Veterinarian', 'Groom', 'Horse Owner')")
     public ResponseEntity<ApiResponse<HorseResponseDTO>> getHorseDetail(@PathVariable Integer id) {
         HorseResponseDTO response = horseService.getHorseDetail(id);
         return ResponseEntity.ok(ApiResponse.ok("Fetched horse details successfully", response));
     }
 
     @PutMapping("/{id}/approve")
+    @PreAuthorize("hasAuthority('Club Manager')")
     public ResponseEntity<ApiResponse<HorseResponseDTO>> approveHorse(
             @PathVariable Integer id,
             @Valid @RequestBody HorseApprovalRequestDTO request) {
@@ -76,6 +83,7 @@ public class HorseController {
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Veterinarian')")
     public ResponseEntity<ApiResponse<HorseResponseDTO>> updateHorse(
             @PathVariable Integer id,
             @Valid @RequestBody HorseUpdateRequestDTO request) {

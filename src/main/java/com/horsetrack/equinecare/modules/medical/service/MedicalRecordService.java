@@ -3,4 +3,7 @@ import com.horsetrack.equinecare.modules.medical.dto.MedicalRecordCreateRequestD
 
 public interface MedicalRecordService {
     Integer createMedicalRecord(MedicalRecordCreateRequestDTO request);
+    void approveMedicalRecord(Integer recordId);
+    void processPayment(Integer recordId, String paymentMethod);
+    void confirmRecovery(Integer recordId);
 }

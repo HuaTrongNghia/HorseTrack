@@ -14,4 +14,6 @@ public interface TrainingPlanRepository extends JpaRepository<TrainingPlan, Inte
     Page<TrainingPlan> findByStatus(String status, Pageable pageable);
     long countByStatus(String status);
     Optional<TrainingPlan> findFirstByHorse_HorseIdAndStatusOrderByCreatedAtDesc(Integer horseId, String status);
+
+    boolean existsByHorse_HorseIdAndStatus(Integer horseId, String status);
 }

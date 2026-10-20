@@ -9,11 +9,17 @@ import java.util.Optional;
 
 @Repository
 public interface UserRepository extends JpaRepository<User, Integer> {
+
+    // Kiểm tra trùng Email
     boolean existsByEmail(String email);
+
+    // Kiểm tra trùng Username
     boolean existsByUsername(String username);
+
+    // Tìm kiếm phục vụ đăng nhập sau này
     Optional<User> findByEmail(String email);
     Optional<User> findByUsername(String username);
 
-    // THÊM HÀM NÀY ĐỂ LẤY DANH SÁCH GROOM/TRAINER CHO DROPDOWN
+    // Lấy danh sách nhân sự theo vai trò và đang hoạt động
     List<User> findByRoleNameInAndIsActiveTrue(List<String> roleNames);
 }

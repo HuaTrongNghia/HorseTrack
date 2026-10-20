@@ -27,5 +27,7 @@ public class HorseResponseDTO {
     private BigDecimal prizeSharePct;
     private Integer ownerId;
     private Integer stallId;
+    private String stallCode;
+    private String approvalStatus; // PENDING: chờ Club Manager duyệt; APPROVED: đã duyệt và cấp chuồng
     private LocalDateTime createdAt;
 }

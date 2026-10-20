@@ -1,5 +1,8 @@
 package com.horsetrack.equinecare.modules.auth.security;
 
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.ExpiredJwtException;
+import io.jsonwebtoken.JwtException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -23,7 +26,11 @@ import java.util.Collections;
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    // Tên attribute lưu lý do token lỗi để JwtAuthenticationEntryPoint trả về cho client
+    public static final String JWT_ERROR_ATTRIBUTE = "jwt_error";
+
     private final JwtTokenProvider jwtTokenProvider;
+    private final TokenBlacklistService tokenBlacklistService;
 
     @Override
     protected void doFilterInternal(
@@ -33,9 +40,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String jwt = getJwtFromRequest(request);
 
-            if (StringUtils.hasText(jwt) && jwtTokenProvider.validateToken(jwt)) {
-                String username = jwtTokenProvider.getUsernameFromToken(jwt);
-                String role = jwtTokenProvider.getRoleFromToken(jwt);
+            if (StringUtils.hasText(jwt)) {
+                Claims claims = jwtTokenProvider.getClaims(jwt);
+
+                // Token đã đăng xuất thì không xác thực, để EntryPoint trả về 401
+                if (tokenBlacklistService.isRevoked(claims.getId())) {
+                    request.setAttribute(JWT_ERROR_ATTRIBUTE, "Token đã bị thu hồi do đăng xuất, vui lòng đăng nhập lại");
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+
+                String username = claims.getSubject();
+                String role = claims.get("role", String.class);
 
                 // Cấp quyền theo role đã được đóng gói trong Claim JWT
                 SimpleGrantedAuthority authority = new SimpleGrantedAuthority(role != null ? role : "ROLE_USER");
@@ -45,6 +61,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 SecurityContextHolder.getContext().setAuthentication(authentication);
             }
+        } catch (ExpiredJwtException ex) {
+            log.warn("JWT Token đã hết hạn: {}", ex.getMessage());
+            request.setAttribute(JWT_ERROR_ATTRIBUTE, "Token đã hết hạn, vui lòng đăng nhập lại");
+        } catch (JwtException | IllegalArgumentException ex) {
+            log.warn("JWT Token không hợp lệ: {}", ex.getMessage());
+            request.setAttribute(JWT_ERROR_ATTRIBUTE, "Token không hợp lệ");
         } catch (Exception ex) {
             log.error("Không thể thiết lập xác thực người dùng từ JWT Token: {}", ex.getMessage());
         }

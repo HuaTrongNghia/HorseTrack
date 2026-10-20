@@ -10,4 +10,7 @@ import lombok.*;
 public class OwnerHorseListDTO {
     private Integer horseId;
     private String horseName;
+    private String approvalStatus; // PENDING: chờ Club Manager duyệt; APPROVED: đã duyệt và cấp chuồng
+    private Integer stallId;
+    private String stallCode;
 }

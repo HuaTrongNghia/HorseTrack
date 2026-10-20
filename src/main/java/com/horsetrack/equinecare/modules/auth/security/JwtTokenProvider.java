@@ -12,6 +12,7 @@ import org.springframework.stereotype.Component;
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.util.Date;
+import java.util.UUID;
 
 @Slf4j
 @Component
@@ -22,7 +23,7 @@ public class JwtTokenProvider {
 
     public JwtTokenProvider(
             @Value("${jwt.secret}") String secret,
-            @Value("${jwt.expiration-ms:86400000}") long jwtExpirationMs) {
+            @Value("${jwt.expiration-ms:900000}") long jwtExpirationMs) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.jwtExpirationMs = jwtExpirationMs;
     }
@@ -31,13 +32,14 @@ public class JwtTokenProvider {
      * Sinh chuỗi JWT Token chứa các thông tin Claims bắt buộc:
      * - sub (Subject): username của người dùng
      * - userId: ID của người dùng
-     * - role: Tên chức danh/vai trò của người dùng (VD: "Club Manager", "Head Trainer", "Groom"...)
+     * - role: Tên chức danh/vai trò của người dùng (VD: "Club Manager", "Trainer", "Groom"...)
      */
     public String generateToken(User user) {
         Date now = new Date();
         Date expiryDate = new Date(now.getTime() + jwtExpirationMs);
 
         return Jwts.builder()
+                .id(UUID.randomUUID().toString()) // jti: mã định danh riêng để thu hồi token khi đăng xuất
                 .subject(user.getUsername())
                 .claim("userId", user.getUserId())
                 .claim("role", user.getRoleName())
@@ -45,6 +47,13 @@ public class JwtTokenProvider {
                 .expiration(expiryDate)
                 .signWith(key) // Tự động sử dụng thuật toán HMAC-SHA256 (HS256) tương ứng với SecretKey
                 .compact();
+    }
+
+    /**
+     * Thời gian sống của token (giây), dùng cho trường expiresIn khi đăng nhập
+     */
+    public long getExpirationSeconds() {
+        return jwtExpirationMs / 1000;
     }
 
     /**

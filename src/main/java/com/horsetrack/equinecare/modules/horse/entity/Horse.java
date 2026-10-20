@@ -58,4 +58,12 @@ public class Horse {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    // Trạng thái duyệt: Club Manager duyệt ngựa bằng cách cấp chuồng
+    public static final String APPROVAL_PENDING = "PENDING";
+    public static final String APPROVAL_APPROVED = "APPROVED";
+
+    public String getApprovalStatus() {
+        return stall != null ? APPROVAL_APPROVED : APPROVAL_PENDING;
+    }
 }
