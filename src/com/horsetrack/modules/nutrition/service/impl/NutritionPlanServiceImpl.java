@@ -68,9 +68,9 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
 
         // - Nếu Horse.getIsLocked() == false VÀ roleName LÀ "Veterinarian":
         //   Throw AccessDeniedException (HTTP 403) với message:
-        //   "Ngựa khỏe mạnh. Quyền lên thực đơn thuộc về HLV Trưởng." (Chặn chéo bảo vệ dữ liệu).
+        //   "Ngựa khỏe mạnh. Quyền lên thực đơn thuộc về Huấn luyện viên (Trainer)." (Chặn chéo bảo vệ dữ liệu).
         if (!Boolean.TRUE.equals(horse.getIsLocked()) && "Veterinarian".equalsIgnoreCase(roleName)) {
-            throw new AccessDeniedException("Ngựa khỏe mạnh. Quyền lên thực đơn thuộc về HLV Trưởng.");
+            throw new AccessDeniedException("Ngựa khỏe mạnh. Quyền lên thực đơn thuộc về Huấn luyện viên (Trainer).");
         }
 
         if (request.getEndDate() != null && request.getStartDate() != null && request.getEndDate().isBefore(request.getStartDate())) {
