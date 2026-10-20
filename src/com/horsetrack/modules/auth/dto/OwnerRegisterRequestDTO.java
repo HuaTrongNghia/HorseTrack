@@ -27,10 +27,4 @@ public class OwnerRegisterRequestDTO {
     private String email;
 
     private String phone;
-
-    @NotBlank(message = "Tax code is required")
-    private String taxCode;
-
-    @NotBlank(message = "Billing address is required")
-    private String billingAddress;
 }
