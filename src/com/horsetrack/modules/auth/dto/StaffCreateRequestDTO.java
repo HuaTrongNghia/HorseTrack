@@ -30,7 +30,7 @@ public class StaffCreateRequestDTO {
     private String phone;
 
     @NotBlank(message = "Role name is required")
-    @Pattern(regexp = "^(Trainer|Veterinarian|Groom)$", message = "Role must be Trainer, Veterinarian, or Groom")
+    @Pattern(regexp = "^(Trainer|Veterinarian|Groom|Warehouse Manager)$", message = "Role must be Trainer, Veterinarian, Groom, or Warehouse Manager")
     private String roleName;
 
     // Optional fields for specific roles
