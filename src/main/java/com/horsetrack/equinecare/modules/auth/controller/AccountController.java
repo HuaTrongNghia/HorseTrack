@@ -3,6 +3,7 @@ package com.horsetrack.equinecare.modules.auth.controller;
 import com.horsetrack.equinecare.common.base.ApiResponse;
 import com.horsetrack.equinecare.modules.auth.dto.ChangePasswordRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.UserProfileResponseDTO;
+import com.horsetrack.equinecare.modules.auth.security.OtpService;
 import com.horsetrack.equinecare.modules.auth.service.AccountService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 public class AccountController {
 
     private final AccountService accountService;
+    private final OtpService otpService;
 
     @GetMapping("/my-profile")
     public ResponseEntity<ApiResponse<UserProfileResponseDTO>> getMyProfile() {
@@ -26,7 +28,7 @@ public class AccountController {
     @PostMapping("/change-password/otp")
     public ResponseEntity<ApiResponse<String>> requestChangePasswordOtp() {
         String maskedEmail = accountService.requestChangePasswordOtp();
-        return ResponseEntity.ok(ApiResponse.ok("Đã gửi mã OTP tới " + maskedEmail + ". Mã có hiệu lực 120 giây.", maskedEmail));
+        return ResponseEntity.ok(ApiResponse.ok("Đã gửi mã OTP tới " + maskedEmail + ". Mã có hiệu lực " + otpService.ttlText() + ".", maskedEmail));
     }
 
     // Bước 2: đổi mật khẩu với mật khẩu cũ + mã OTP

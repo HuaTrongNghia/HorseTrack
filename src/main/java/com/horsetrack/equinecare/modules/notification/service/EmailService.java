@@ -1,5 +1,6 @@
 package com.horsetrack.equinecare.modules.notification.service;
 
+import com.horsetrack.equinecare.modules.auth.security.OtpService;
 import com.horsetrack.equinecare.modules.notification.exception.EmailSendException;
 import jakarta.annotation.PreDestroy;
 import jakarta.mail.internet.InternetAddress;
@@ -51,7 +52,7 @@ public class EmailService {
                         @Value("${spring.mail.username:}") String smtpUsername,
                         @Value("${app.mail.from:}") String fromAddress,
                         @Value("${app.mail.from-name:HorseTrack EquineCare}") String fromName,
-                        @Value("${app.otp.ttl-seconds:120}") long otpTtlSeconds,
+                        @Value("${app.otp.ttl-seconds:300}") long otpTtlSeconds,
                         @Value("${app.mail.wait-seconds:8}") long waitSeconds) {
         this.mailSender = mailSender;
         this.smtpUsername = smtpUsername;
@@ -78,9 +79,9 @@ public class EmailService {
                 <p>Xin chào <b>%s</b>,</p>
                 <p>Mã xác thực (OTP) để <b>%s</b> tài khoản HorseTrack của bạn là:</p>
                 <p style="font-size:28px;font-weight:bold;letter-spacing:6px;margin:16px 0">%s</p>
-                <p>Mã có hiệu lực trong <b>%d giây</b> và chỉ dùng được <b>một lần</b>.</p>
+                <p>Mã có hiệu lực trong <b>%s</b> và chỉ dùng được <b>một lần</b>.</p>
                 <p>Nếu bạn không yêu cầu, hãy bỏ qua email này; mật khẩu của bạn không thay đổi.</p>
-                """.formatted(esc(fullName), esc(purposeLabel), esc(otp), otpTtlSeconds);
+                """.formatted(esc(fullName), esc(purposeLabel), esc(otp), OtpService.formatDuration(otpTtlSeconds));
         return sendAsync(to, "[HorseTrack] Mã OTP " + purposeLabel, wrap(body));
     }
 

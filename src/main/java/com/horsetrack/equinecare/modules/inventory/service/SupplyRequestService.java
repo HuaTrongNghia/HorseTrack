@@ -8,6 +8,8 @@ public interface SupplyRequestService {
     // Groom
     SupplyRequestDTO createRequest(SupplyRequestCreateDTO request);
     List<SupplyRequestDTO> getMyRequests();
+    /** Vật tư Groom được phép yêu cầu (mọi nhóm trừ thuốc và vaccine), kèm khả dụng hiện tại. */
+    List<InventoryItemDTO> getRequestableItems();
     SupplyRequestDTO cancelMyRequest(Integer requisitionId);
 
     // Nhân viên kho

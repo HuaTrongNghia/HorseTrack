@@ -2,7 +2,7 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **91 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **97 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 ---
 
@@ -84,7 +84,7 @@ Server đọc tài khoản email từ **biến môi trường**, không ghi tron
 - **Tạo App Password Gmail:** tài khoản Google → Bảo mật → bật **Xác minh 2 bước** → mục **Mật khẩu ứng dụng** → tạo mật khẩu cho "Mail".
 - **Đặt biến trong IntelliJ:** Run → Edit Configurations… → `EquineCareApplication` → Environment variables: `MAIL_USERNAME=xxx@gmail.com;MAIL_PASSWORD=abcdefghijklmnop`.
 - **Chế độ dev** (khi chưa đặt `MAIL_USERNAME`): không gửi email thật. Nội dung email, kể cả mã OTP, được in trong console server ở khối `===== [DEV] EMAIL KHÔNG GỬI THẬT =====`. Chỉ dùng để test, không dùng khi triển khai.
-- **Quy tắc OTP:** 6 chữ số, hiệu lực **120 giây**, **dùng 1 lần**; yêu cầu mã mới thì mã cũ mất hiệu lực; nhập sai **5 lần** thì mã bị hủy; giữa 2 lần yêu cầu phải chờ **30 giây**. Mã lưu trong RAM nên **restart server thì mã cũ mất**.
+- **Quy tắc OTP:** 6 chữ số, hiệu lực **5 phút (300 giây)**, **dùng 1 lần**; yêu cầu mã mới thì mã cũ mất hiệu lực; nhập sai **5 lần** thì mã bị hủy; giữa 2 lần yêu cầu phải chờ **30 giây**. Mã lưu trong RAM nên **restart server thì mã cũ mất**.
 
 ---
 
@@ -177,7 +177,7 @@ Không cần token.
 { "email": "groom01@horsetrack.com" }
 ```
 
-- **Mong đợi:** `200` "Nếu email đã đăng ký, mã OTP đã được gửi tới email đó. Mã có hiệu lực 120 giây."
+- **Mong đợi:** `200` "Nếu email đã đăng ký, mã OTP đã được gửi tới email đó. Mã có hiệu lực 5 phút."
 - Thông báo **giống hệt** cho email có và không có tài khoản, để không lộ email nào đã đăng ký. Email không tồn tại thì không có email nào được gửi.
 - Gửi lại trong vòng 30 giây → `400` "Vui lòng chờ ... giây". Sau đó gửi lại thì có **mã mới**, mã cũ mất hiệu lực.
 - Chế độ dev: lấy mã trong console server.
@@ -194,7 +194,7 @@ Không cần token.
 - **Mong đợi:** `200` "Đặt lại mật khẩu thành công...". Login bằng mật khẩu mới được; **mọi refresh token cũ bị thu hồi** (đăng xuất mọi thiết bị).
 - **Test lỗi:**
   - Sai OTP → `400` kèm số lần thử còn lại; sai 5 lần → mã bị hủy.
-  - Quá 120 giây → `400` "Mã OTP đã hết hạn".
+  - Quá 5 phút → `400` "Mã OTP đã hết hạn".
   - Dùng lại cùng mã lần 2 → `400` "Mã OTP không tồn tại hoặc đã được sử dụng".
   - `confirmNewPassword` không khớp, hoặc `newPassword` dưới 6 ký tự → `400`.
 
@@ -212,7 +212,7 @@ Không cần token.
 **Bước 1: `POST /api/v1/account/change-password/otp`** (không có body)
 
 - Gửi mã OTP 6 số tới email của tài khoản đang đăng nhập.
-- **Mong đợi:** `200` "Đã gửi mã OTP tới gr*****@horsetrack.com. Mã có hiệu lực 120 giây." (email được che bớt).
+- **Mong đợi:** `200` "Đã gửi mã OTP tới gr*****@horsetrack.com. Mã có hiệu lực 5 phút." (email được che bớt).
 - Chế độ dev (chưa cấu hình SMTP, xem 0.6): lấy mã trong console server, ở khối `[DEV] EMAIL KHÔNG GỬI THẬT`.
 - Gọi lại trong vòng 30 giây → `400` "Bạn vừa yêu cầu mã OTP. Vui lòng chờ ... giây". Sau 30 giây gọi lại thì nhận mã mới, **mã cũ mất hiệu lực**.
 
@@ -228,7 +228,7 @@ Không cần token.
   - Sai mật khẩu cũ → `400` "Mật khẩu cũ không đúng." (mã OTP **chưa bị dùng**, sửa mật khẩu cũ rồi gửi lại là được).
   - Mật khẩu mới trùng mật khẩu cũ, hoặc xác nhận không khớp → `400`.
   - Sai OTP → `400` "Mã OTP không đúng. Bạn còn N lần thử."; sai 5 lần → mã bị hủy.
-  - Quá 120 giây → `400` "Mã OTP đã hết hạn".
+  - Quá 5 phút → `400` "Mã OTP đã hết hạn".
   - Dùng lại mã đã đổi thành công → `400` (mã chỉ dùng 1 lần).
 
 ---
@@ -344,17 +344,63 @@ Nhân viên xem được mọi ngựa. Horse Owner xem ngựa của người kh�
 - **Mong đợi:** `200`, chi tiết ngựa.
 - `id` không tồn tại → `500` "Horse not found".
 
-### 3.5 `PUT /api/v1/horses/{id}/approve` — Duyệt ngựa và cấp chuồng (`Club Manager`)
+### 3.5 Hồ sơ đăng ký ngựa: duyệt, từ chối, nộp lại
+
+Mỗi lần chủ ngựa nộp (3.1) hoặc nộp lại tạo một **hồ sơ** trong bảng `Horse_Registrations`, mã `REG-0001`. Luồng: `PENDING` → `APPROVED` (cấp chuồng), hoặc `REJECTED` (kèm lý do, có thể cho nộp lại) → nộp lại → `PENDING` …
+
+Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (màu lông), `heightHands` (chiều cao, đơn vị hand, ví dụ `15.2`), `passportNo` (số hộ chiếu, không được trùng giữa các ngựa), `healthCertIssuer`, `healthCertExpiry`, `note`.
+
+**a) `PUT /api/v1/horses/{id}/approve`: duyệt và cấp chuồng (`Club Manager`)**
 
 ```json
-{ "stallId": 1 }
+{
+  "stallId": 1,
+  "checks": [
+    { "checkKey": "IDENTITY", "passed": true },
+    { "checkKey": "HEALTH", "passed": true, "detail": "Giấy còn hạn đến 2027" },
+    { "checkKey": "OWNERSHIP", "passed": true }
+  ],
+  "note": "Hồ sơ đầy đủ"
+}
 ```
 
-- Lấy một `stallId` có `currentHorseId = null` từ mục 4.1.
-- **Mong đợi:** `200`, `stallId` của ngựa được cập nhật.
+- `checks` tùy chọn. Nếu gửi thì phải đủ 3 mục `IDENTITY`, `HEALTH`, `OWNERSHIP` và **tất cả đều đạt** (SRS). Có mục `passed: false` → `400`, hãy từ chối thay vì duyệt.
+- Lấy `stallId` có `currentHorseId = null` từ mục 4.1.
+- **Mong đợi:** `200`, `approvalStatus = "APPROVED"`, có `stallCode`.
+- **Test lỗi:** hồ sơ không ở trạng thái chờ duyệt (đã duyệt hoặc đã từ chối) → `400`; chuồng đã có ngựa → `400`.
+
+**b) `PUT /api/v1/horses/{id}/reject`: từ chối (`Club Manager`)**
+
+```json
+{
+  "reason": "Thiếu giấy chứng nhận sức khỏe còn hiệu lực",
+  "allowResubmit": true,
+  "checks": [ { "checkKey": "HEALTH", "passed": false, "detail": "Giấy hết hạn" } ]
+}
+```
+
+- `reason` bắt buộc, dài 10–500 ký tự (SRS). `allowResubmit: true` thì chủ ngựa được sửa và nộp lại.
+- **Mong đợi:** `200`, `approvalStatus = "REJECTED"`, `rejectReason`, `allowResubmit`. Chủ ngựa thấy trạng thái này ở "Ngựa của tôi" (3.2, 8.1).
+- **Test lỗi:** `reason` dưới 10 ký tự → `400`.
+
+**c) `PUT /api/v1/horses/{id}/resubmit`: chủ ngựa nộp lại (`Horse Owner`, chỉ ngựa của mình)**
+
+```json
+{ "healthCertIssuer": "Chi cục Thú y TP.HCM", "healthCertExpiry": "2027-06-30", "note": "Đã bổ sung giấy sức khỏe mới" }
+```
+
+- Field nào gửi lên mới được cập nhật: `weightKg`, `pedigree`, `color`, `heightHands`, `passportNo`, `healthCertIssuer`, `healthCertExpiry`.
+- **Mong đợi:** `200`, `approvalStatus` quay về `"PENDING"`, có hồ sơ mới (`registrationCode` mới).
 - **Test lỗi:**
-  - Duyệt lại lần nữa → `500` "Ngựa này đã được duyệt và cấp chuồng".
-  - Dùng chuồng đã có ngựa → `500` "Chuồng không hợp lệ hoặc đã được sử dụng".
+  - Hồ sơ bị từ chối với `allowResubmit: false` → `400` "Quản lý CLB không cho phép nộp lại hồ sơ này".
+  - Hồ sơ đang chờ duyệt hoặc đã duyệt → `400`.
+  - Nộp lại ngựa của người khác → `403`.
+
+**d) `GET /api/v1/horses/{id}/registrations`: lịch sử hồ sơ (`Club Manager`, `Horse Owner` chỉ ngựa của mình)**
+
+- **Mong đợi:** `200`, mỗi lần nộp gồm `registrationCode`, `submittedAt`, `status`, `ownerNote`, `decisionNote`, `decidedByName`, `decidedAt` và `checks`, mới nhất trước.
+
+**e) Lọc danh sách (3.3):** `GET /api/v1/horses?status=PENDING | APPROVED | REJECTED`.
 
 ### 3.6 `PUT /api/v1/horses/{id}` — Cập nhật ngựa
 
@@ -631,20 +677,47 @@ Nhân viên trực tiếp chăm sóc hoặc huấn luyện được bấm khi ph
   - Groom, Trainer, Owner hoặc Club Manager gọi → `403`.
   - Mở khóa ngựa đang không bị khóa → `400` "Ngựa này hiện không bị khóa y tế, không cần mở khóa!".
 
-### 10.3 `GET /api/v1/medical/cases?status=ALL`
+### 10.3 Ca khám / sự cố (bảng `Vet_Cases`)
 
-- Hiện **luôn trả `data: []`**, vì chức năng chưa được làm.
+Luồng: Groom hoặc Trainer **báo sự cố** → ca `NEW` vào hộp thư bác sĩ → bác sĩ **ghi kết quả khám** (`MONITORING`) → **đóng ca** (`CLOSED`).
 
-### 10.4 `POST /api/v1/medical/cases/action?vetId=1`
-
-Chỉ `Veterinarian` được gọi (10.3 và 10.4).
+**a) `POST /api/v1/medical/cases`: báo sự cố (`Groom`, `Trainer`)**
 
 ```json
-{ "caseId": "C-0011", "vetNotes": "Sưng nhẹ khớp", "treatmentDirection": "Chườm đá 3 ngày" }
+{ "horseId": 1, "caseType": "Đi khập khiễng", "severity": "HIGH", "description": "Chân trước phải sưng sau buổi tập", "imageUrl": null }
 ```
 
-- Hiện **chỉ ghi log**, không lưu gì. Luôn `200` nếu đủ field.
-- Thiếu `caseId` hoặc `vetNotes` → `400`.
+- `severity`: `LOW`, `MEDIUM` (mặc định), `HIGH` hoặc `CRITICAL`. `imageUrl` là đường dẫn ảnh đã tải lên (không gửi ảnh base64).
+- Groom chỉ báo được cho **ngựa thuộc khu mình phụ trách**. Trainer báo được cho mọi ngựa.
+- **Mong đợi:** `201` "Đã gửi ca C-0001 cho Bác sĩ thú y". `source` là `GROOM_REPORT` hoặc `TRAINER_REQUEST`, `status = "NEW"`.
+- **Test lỗi:** Groom báo cho ngựa khác khu → `403`; `horseId` không tồn tại → `404`; thiếu `caseType` hoặc `description` → `400`.
+
+**b) `GET /api/v1/medical/cases?status=ALL`: hộp thư ca khám (`Veterinarian`, `Groom`, `Trainer`)**
+
+- **Bác sĩ** thấy mọi ca. **Groom / Trainer** chỉ thấy **ca do chính mình báo**, kèm kết quả khám (`vetResult`) khi bác sĩ đã xử lý.
+- `status`: `ALL` (mặc định), `NEW`, `IN_EXAM`, `MONITORING`, `CLOSED`, `CANCELLED`.
+- Mỗi ca có `caseId` (mã `C-0001`), `id`, `horseName`, `source`, `issueType`, `severity`, `status`, `description`, `reportedByName`, `assignedVetName`, `vetResult`, `createdAt`, `closedAt`.
+
+### 10.4 Bác sĩ xử lý ca (`Veterinarian`)
+
+**a) `POST /api/v1/medical/cases/action`: ghi kết quả khám**
+
+```json
+{ "caseId": "C-0001", "vetNotes": "Viêm gân nhẹ", "treatmentDirection": "Chườm đá 3 ngày, nghỉ tập" }
+```
+
+- `caseId` nhận mã `C-0001` hoặc ID số. Tham số `?vetId=` cũ vẫn được chấp nhận nhưng bỏ qua: bác sĩ là người đang đăng nhập.
+- **Mong đợi:** `200`, ca chuyển `MONITORING`, có `assignedVetName` và `vetResult`.
+- **Test lỗi:** ca đã đóng → `400`; mã ca không tồn tại → `404`; thiếu `caseId` hoặc `vetNotes` → `400`.
+- Cần điều trị bằng thuốc thì lập phác đồ (12.2) với `caseId` là **ID số** của ca.
+
+**b) `PUT /api/v1/medical/cases/{caseId}/close`: đóng ca**
+
+```json
+{ "outcome": "Đã hồi phục, cho tập lại nhẹ" }
+```
+
+- **Mong đợi:** `200`, `status = "CLOSED"`, có `closedAt`. Groom báo ca sẽ thấy kết luận này ở 10.3b.
 
 ---
 
@@ -1011,6 +1084,11 @@ Luồng: **thêm nhà cung cấp** → **tạo đơn** → (đổi ngày về / 
 
 Luồng trạng thái: `SUBMITTED` → `ISSUED`. Nếu thiếu hàng: `SUBMITTED` → `WAITING_RESTOCK` → (hàng về) `CHECKING_STOCK` → `ISSUED`. Có thể kết thúc bằng `REJECTED` (kho từ chối) hoặc `CANCELLED` (Groom hủy).
 
+### 12C.0 `GET /api/v1/supply-requests/items`: danh mục vật tư được yêu cầu (`Groom`)
+
+- Vật tư **thật trong kho**, mọi nhóm trừ `MEDICINE` và `VACCINE`, kèm `availableStock`. Dùng cho ô chọn vật tư khi gửi yêu cầu (12C.1), thay cho dữ liệu mẫu.
+- **Mong đợi:** `200`, mỗi vật tư có `itemId`, `itemCode`, `itemName`, `category`, `unit`, `availableStock`.
+
 ### 12C.1 `POST /api/v1/supply-requests` — Groom gửi yêu cầu (`Groom`)
 
 ```json
@@ -1204,11 +1282,15 @@ Sau khi test chức năng chính, thử gọi mỗi API sau bằng **sai role** 
 | `POST /medical-management/protocols` và các thao tác trên phác đồ (confirm, wait-restock, new-version, progress-notes, complete, cancel) | Veterinarian |
 | `GET /medical-management/medications`, `GET /medical-management/protocols/**` | Veterinarian, Club Manager (chỉ xem) |
 | `POST /medical/vet-lock` | Veterinarian, Trainer, Groom |
-| `GET /medical/cases`, `POST /medical/cases/action` | Veterinarian |
+| `GET /medical/cases` | Veterinarian (mọi ca), Groom và Trainer (ca của mình) |
+| `POST /medical/cases` | Groom, Trainer |
+| `POST /medical/cases/action`, `PUT /medical/cases/{caseId}/close` | Veterinarian |
 | `POST /horses/register`, `GET /horses/my-horses/{ownerId}` | Horse Owner (chỉ của mình), Club Manager |
 | `GET /horses` | Club Manager, Trainer, Veterinarian, Groom |
 | `GET /horses/{id}` | Nhân viên, và Horse Owner (chỉ ngựa của mình) |
-| `PUT /horses/{id}/approve` | Club Manager |
+| `PUT /horses/{id}/approve`, `PUT /horses/{id}/reject` | Club Manager |
+| `PUT /horses/{id}/resubmit` | Horse Owner (chỉ ngựa của mình) |
+| `GET /horses/{id}/registrations` | Club Manager, Horse Owner (chỉ ngựa của mình) |
 | `PUT /horses/{id}` | Club Manager, Trainer, Veterinarian (đổi `isLocked` hoặc `healthStatus`: chỉ Veterinarian) |
 | `GET /horses/available-for-training` | Trainer, Club Manager |
 | `POST /care-tasks` | Trainer |
