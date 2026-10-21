@@ -83,6 +83,16 @@ public class HorseController {
     }
 
     // Club Manager từ chối hồ sơ (lý do tối thiểu 10 ký tự, có thể cho phép nộp lại)
+    // Club Manager phân công HLV phụ trách ngựa; giáo án đang chạy được bàn giao cho HLV mới
+    @PutMapping("/{id}/assign-trainer")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    public ResponseEntity<ApiResponse<HorseResponseDTO>> assignTrainer(
+            @PathVariable Integer id,
+            @Valid @RequestBody com.horsetrack.equinecare.modules.horse.dto.HorseAssignTrainerRequestDTO request) {
+        HorseResponseDTO response = horseService.assignTrainer(id, request);
+        return ResponseEntity.ok(ApiResponse.ok("Đã phân công HLV " + response.getAssignedTrainerName() + " phụ trách ngựa " + response.getHorseName(), response));
+    }
+
     @PutMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('Club Manager')")
     public ResponseEntity<ApiResponse<HorseResponseDTO>> rejectHorse(
