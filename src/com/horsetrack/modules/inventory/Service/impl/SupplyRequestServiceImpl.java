@@ -11,6 +11,7 @@ import com.horsetrack.equinecare.modules.inventory.entity.PurchaseOrder;
 import com.horsetrack.equinecare.modules.inventory.repository.InventoryItemRepository;
 import com.horsetrack.equinecare.modules.inventory.repository.MaterialRequisitionRepository;
 import com.horsetrack.equinecare.modules.inventory.repository.PurchaseOrderRepository;
+import com.horsetrack.equinecare.modules.inventory.service.InventoryMapper;
 import com.horsetrack.equinecare.modules.inventory.service.StockLedgerService;
 import com.horsetrack.equinecare.modules.inventory.service.SupplyRequestService;
 import jakarta.persistence.EntityManager;
@@ -85,6 +86,14 @@ public class SupplyRequestServiceImpl implements SupplyRequestService {
         User groom = stockLedger.currentUser();
         return requisitionRepository.findByRequestedBy_UserIdOrderByRequestedAtDesc(groom.getUserId()).stream()
                 .map(this::toDTO).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<InventoryItemDTO> getRequestableItems() {
+        return itemRepository.findByCategoryNotInOrderByItemNameAsc(MEDICAL_CATEGORIES).stream()
+                .map(item -> InventoryMapper.toItemDTO(item, null))
+                .collect(Collectors.toList());
     }
 
     @Override
