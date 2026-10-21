@@ -10,6 +10,9 @@ public interface HorseService {
     
     org.springframework.data.domain.Page<com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO> getAllHorses(int page, int size, String status);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO getHorseDetail(Integer horseId);
+
+    // Club Manager phân công HLV phụ trách ngựa
+    com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO assignTrainer(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseAssignTrainerRequestDTO request);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO approveHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseApprovalRequestDTO request);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO updateHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseUpdateRequestDTO request);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO rejectHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseRejectRequestDTO request);
