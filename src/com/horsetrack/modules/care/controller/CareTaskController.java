@@ -29,6 +29,13 @@ public class CareTaskController {
                 .body(ApiResponse.ok("Đã giao việc chăm sóc cho Groom thành công", task));
     }
 
+    // Club Manager xem các việc chăm sóc bị cảnh báo trễ quá 45 phút mà chưa xong (BR_05)
+    @GetMapping("/overdue")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    public ResponseEntity<ApiResponse<List<CareTaskDTO>>> getOverdueTasks() {
+        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách việc trễ hạn thành công", careTaskService.getOverdueTasks()));
+    }
+
     @GetMapping("/my-tasks")
     @PreAuthorize("hasAuthority('Groom')")
     public ResponseEntity<ApiResponse<List<CareTaskDTO>>> getMyTasks() {
