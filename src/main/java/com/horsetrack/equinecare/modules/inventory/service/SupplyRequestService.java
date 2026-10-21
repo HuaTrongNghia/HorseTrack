@@ -11,6 +11,7 @@ public interface SupplyRequestService {
     /** Vật tư Groom được phép yêu cầu (mọi nhóm trừ thuốc và vaccine), kèm khả dụng hiện tại. */
     List<InventoryItemDTO> getRequestableItems();
     SupplyRequestDTO cancelMyRequest(Integer requisitionId);
+    SupplyRequestDTO confirmReceived(Integer requisitionId);
 
     // Nhân viên kho
     List<SupplyRequestDTO> getRequests(String status, String barnZone);

@@ -44,6 +44,15 @@ public class NutritionPlan {
     @Column(name = "notes", columnDefinition = "NVARCHAR(MAX)")
     private String notes;
 
+    @Column(name = "plan_type", length = 30)
+    private String planType;
+
+    @Column(name = "status", length = 30)
+    private String status;
+
+    @Column(name = "special_instructions", columnDefinition = "NVARCHAR(MAX)")
+    private String specialInstructions;
+
     @Builder.Default
     @OneToMany(mappedBy = "nutritionPlan", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<NutritionPlanDetail> details = new ArrayList<>();

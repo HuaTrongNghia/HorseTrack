@@ -22,4 +22,9 @@ public interface NutritionPlanRepository extends JpaRepository<NutritionPlan, In
 
     List<NutritionPlan> findByHorse_HorseIdOrderByCreatedDateDesc(Integer horseId);
 
+    List<NutritionPlan> findAllByOrderByCreatedDateDesc();
+
+    List<NutritionPlan> findByStatusOrderByCreatedDateDesc(String status);
+
+    List<NutritionPlan> findByHorse_HorseIdAndStatusOrderByCreatedDateDesc(Integer horseId, String status);
 }

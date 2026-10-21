@@ -163,13 +163,23 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         TrainingPlan plan = session.getTrainingPlan();
         com.horsetrack.equinecare.modules.horse.entity.Horse horse = plan != null ? plan.getHorse() : null;
 
-        // HLV phụ trách ngựa hoặc Groom được giao buổi tập
-        if ("Trainer".equals(user.getRoleName())) {
+        // HLV phụ trách ngựa, Quản lý CLB hoặc Groom được giao buổi tập
+        boolean isTrainer = "Trainer".equalsIgnoreCase(user.getRoleName());
+        boolean isManager = "Club Manager".equalsIgnoreCase(user.getRoleName());
+        boolean isAssignedGroom = session.getAssignedTo() != null && session.getAssignedTo().getUserId().equals(user.getUserId());
+        if (isTrainer) {
             horseAccessGuard.checkAssigned(horse);
-        } else if (session.getAssignedTo() == null || !session.getAssignedTo().getUserId().equals(user.getUserId())) {
+        } else if (!isManager && !isAssignedGroom) {
             throw new AccessDeniedException("Bạn không được phân công buổi tập này");
         }
-        if (!TrainingPlanActivator.OPEN_SESSION_STATUSES.contains(String.valueOf(session.getStatus()).toUpperCase())) {
+        java.util.List<String> stoppableStatuses = java.util.List.of(
+                TrainingPlanActivator.SESSION_PENDING,
+                TrainingPlanActivator.SESSION_CONFIRMED,
+                "IN_PROGRESS",
+                "PAUSED",
+                "PAUSED_PENDING_TRAINER"
+        );
+        if (!stoppableStatuses.contains(String.valueOf(session.getStatus()).toUpperCase())) {
             throw new IllegalArgumentException("Chỉ dừng được buổi tập chưa kết thúc (hiện tại: " + session.getStatus() + ").");
         }
 
@@ -198,6 +208,10 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
             caseCode = vetCase.getCaseCode() != null ? vetCase.getCaseCode() : "#" + vetCase.getCaseId();
         } else {
             session.setStatus(TrainingPlanActivator.SESSION_STOPPED);
+        }
+        if (plan != null && (TrainingPlanActivator.PLAN_ACTIVE.equalsIgnoreCase(plan.getStatus()) || TrainingPlanActivator.PLAN_PENDING.equalsIgnoreCase(plan.getStatus()))) {
+            plan.setStatus("PAUSED");
+            trainingPlanRepository.save(plan);
         }
         trainingSessionRepository.save(session);
         auditTrail.record("STOP_SESSION", "training_sessions", "status=OPEN",

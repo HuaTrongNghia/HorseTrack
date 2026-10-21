@@ -102,6 +102,23 @@ public class SupplyRequestServiceImpl implements SupplyRequestService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
+    public SupplyRequestDTO confirmReceived(Integer requisitionId) {
+        User groom = stockLedger.currentUser();
+        MaterialRequisition req = requisitionRepository.findById(requisitionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Khong tim thay yeu cau vat tu voi ID: " + requisitionId));
+        if (!req.getRequestedBy().getUserId().equals(groom.getUserId())) {
+            throw new AccessDeniedException("Ban khong the xac nhan yeu cau cua nguoi khac.");
+        }
+        if (!"ISSUED".equalsIgnoreCase(req.getStatus())) {
+            throw new IllegalArgumentException("Chi xac nhan duoc khi kho da cap phat (hien tai: " + req.getStatus() + ").");
+        }
+        req.setStatus("CLOSED");
+        MaterialRequisition saved = requisitionRepository.save(req);
+        return toDTO(saved);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public SupplyRequestDTO cancelMyRequest(Integer requisitionId) {
         User groom = stockLedger.currentUser();
         MaterialRequisition req = findRequest(requisitionId);
