@@ -37,7 +37,7 @@ public class TrainingPlan {
     private String goal;
 
     @Column(name = "status", nullable = false, length = 20)
-    private String status; // ACTIVE, PAUSED (ngựa bị VetLock), COMPLETED, CANCELLED
+    private String status; // PENDING (chờ Groom xác nhận / chờ tới ngày bắt đầu), ACTIVE, PAUSED (ngựa bị VetLock), COMPLETED, CANCELLED
 
     // Lý do tạm dừng giáo án (VD: ngựa bị khóa huấn luyện)
     @Column(name = "paused_reason", length = 500)

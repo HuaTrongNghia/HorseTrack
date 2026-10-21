@@ -31,6 +31,8 @@ public class MedicalController {
         try {
             medicalService.applyVetLock(dto);
             return ResponseEntity.ok(ApiResponse.ok("Đã khóa huấn luyện (VetLock) thành công!", null));
+        } catch (org.springframework.security.access.AccessDeniedException e) {
+            throw e; // ngựa không thuộc phạm vi phụ trách → 403
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
         }

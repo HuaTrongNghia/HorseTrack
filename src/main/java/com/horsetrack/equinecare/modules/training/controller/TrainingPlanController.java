@@ -28,13 +28,16 @@ public class TrainingPlanController {
 
     private final TrainingPlanService trainingPlanService;
 
+    // Trainer chỉ nhận số liệu và giáo án của các ngựa được phân công
     @GetMapping("/dashboard-stats")
+    @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Groom', 'Veterinarian')")
     public ResponseEntity<ApiResponse<DashboardStatsDTO>> getDashboardStats() {
         DashboardStatsDTO stats = trainingPlanService.getDashboardStats();
         return ResponseEntity.ok(ApiResponse.ok("Fetched dashboard stats successfully", stats));
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Groom', 'Veterinarian')")
     public ResponseEntity<ApiResponse<Page<TrainingPlanSummaryDTO>>> getTrainingPlans(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,

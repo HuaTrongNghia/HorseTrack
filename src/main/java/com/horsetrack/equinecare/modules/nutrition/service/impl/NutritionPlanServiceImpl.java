@@ -36,6 +36,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
     private final NutritionPlanRepository nutritionPlanRepository;
     private final NutritionPlanDetailRepository nutritionPlanDetailRepository;
     private final HorseRepository horseRepository;
+    private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final UserRepository userRepository;
     private final InventoryItemRepository inventoryItemRepository;
 
@@ -57,6 +58,8 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         // 2. Dùng horseId từ Request để tìm Horse trong DB. Nếu không thấy, throw ResourceNotFoundException
         Horse horse = horseRepository.findById(request.getHorseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Horse not found with id: " + request.getHorseId()));
+        // Trainer chỉ lập khẩu phần cho ngựa được Club Manager phân công cho mình
+        horseAccessGuard.checkAssigned(horse);
 
         // 3. Kiểm tra BR_03:
         // - Nếu Horse.getIsLocked() == true VÀ roleName KHÔNG PHẢI LÀ "Veterinarian":
@@ -116,9 +119,9 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
     @Transactional(readOnly = true)
     public List<NutritionTodayItemDTO> getTodayNutritionPlan(Integer horseId) {
         // Kiểm tra xem ngựa có tồn tại không
-        if (!horseRepository.existsById(horseId)) {
-            throw new ResourceNotFoundException("Horse not found with id: " + horseId);
-        }
+        Horse horse = horseRepository.findById(horseId)
+                .orElseThrow(() -> new ResourceNotFoundException("Horse not found with id: " + horseId));
+        horseAccessGuard.checkAssigned(horse);
 
         // Truy vấn NutritionPlan mới nhất của ngựa thỏa mãn điều kiện: startDate <= TODAY và endDate >= TODAY
         LocalDate today = LocalDate.now();

@@ -56,6 +56,11 @@ public class Horse {
     @JoinColumn(name = "stall_id", unique = true)
     private Stall stall;
 
+    // Huấn luyện viên được Club Manager phân công phụ trách; Trainer chỉ xem và lập giáo án cho ngựa của mình
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "assigned_trainer_id")
+    private User assignedTrainer;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

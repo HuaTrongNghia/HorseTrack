@@ -40,6 +40,7 @@ public class CareTaskServiceImpl implements CareTaskService {
     private final HorseRepository horseRepository;
     private final EntityManager entityManager;
     private final GroomProfileRepository groomProfileRepository;
+    private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
 
     // Việc chưa xong (còn có thể bị cảnh báo trễ)
     static final List<String> OPEN_STATUSES = List.of("TODO", "IN_PROGRESS");
@@ -130,6 +131,8 @@ public class CareTaskServiceImpl implements CareTaskService {
     public CareTaskDTO createTask(CareTaskCreateRequestDTO request) {
         Horse horse = horseRepository.findById(request.getHorseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngựa với ID: " + request.getHorseId()));
+        // Trainer chỉ giao việc chăm sóc cho ngựa được Club Manager phân công cho mình
+        horseAccessGuard.checkAssigned(horse);
 
         // Ngựa chưa được duyệt (chưa có chuồng) thì chưa thuộc CLB chăm sóc
         if (horse.getStall() == null) {

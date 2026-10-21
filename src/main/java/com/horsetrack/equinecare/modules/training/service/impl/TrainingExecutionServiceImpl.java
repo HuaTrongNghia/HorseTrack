@@ -9,6 +9,7 @@ import com.horsetrack.equinecare.modules.training.entity.TrainingSession;
 import com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository;
 import com.horsetrack.equinecare.modules.training.repository.TrainingSessionRepository;
 import com.horsetrack.equinecare.modules.training.service.TrainingExecutionService;
+import com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -27,6 +28,7 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
     private final TrainingSessionRepository trainingSessionRepository;
     private final TrainingPlanRepository trainingPlanRepository;
     private final UserRepository userRepository;
+    private final com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator planActivator;
 
     private User getLoggedInUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -82,8 +84,12 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
             throw new AccessDeniedException("You are not assigned to this session");
         }
 
-        if (!"PENDING".equalsIgnoreCase(session.getStatus())) {
-            throw new RuntimeException("Cannot update session. Current status is " + session.getStatus());
+        if (!TrainingPlanActivator.OPEN_SESSION_STATUSES.contains(String.valueOf(session.getStatus()).toUpperCase())) {
+            throw new IllegalArgumentException("Không thể cập nhật buổi tập đang ở trạng thái " + session.getStatus() + ".");
+        }
+        // Buổi tập phải được Groom xác nhận (PUT /{sessionId}/confirm) trước khi thực hiện
+        if ("COMPLETED".equalsIgnoreCase(request.getStatus()) && TrainingPlanActivator.SESSION_PENDING.equalsIgnoreCase(session.getStatus())) {
+            throw new IllegalArgumentException("Buổi tập chưa được xác nhận. Hãy xác nhận buổi tập trước khi hoàn thành.");
         }
 
         if ("CANCELLED".equalsIgnoreCase(request.getStatus()) && (request.getNotes() == null || request.getNotes().trim().isEmpty())) {
@@ -97,19 +103,61 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
                     + " đang bị khóa huấn luyện (VetLock), không thể thực hiện buổi tập. Hãy hủy buổi tập.");
         }
 
+        if ("COMPLETED".equalsIgnoreCase(request.getStatus())) {
+            // Phòng khi tác vụ định kỳ chưa kịp chạy: giáo án đủ điều kiện thì kích hoạt trước khi ghi nhận kết quả
+            planActivator.tryActivate(session.getTrainingPlan(), LocalDate.now());
+            TrainingPlan plan = session.getTrainingPlan();
+            if (plan != null && !TrainingPlanActivator.PLAN_ACTIVE.equalsIgnoreCase(plan.getStatus())) {
+                throw new IllegalArgumentException("Giáo án '" + plan.getPlanName() + "' đang ở trạng thái " + plan.getStatus()
+                        + " (chưa tới ngày bắt đầu " + plan.getStartDate() + "), chưa thể hoàn thành buổi tập.");
+            }
+        }
+
         session.setStatus(request.getStatus().toUpperCase());
         session.setNotes(request.getNotes());
         trainingSessionRepository.save(session);
 
         if ("COMPLETED".equalsIgnoreCase(request.getStatus())) {
             TrainingPlan plan = session.getTrainingPlan();
-            if (plan != null) {
-                long pendingCount = trainingSessionRepository.countByTrainingPlan_PlanIdAndStatus(plan.getPlanId(), "PENDING");
-                if (pendingCount == 0) {
+            if (plan != null && TrainingPlanActivator.PLAN_ACTIVE.equalsIgnoreCase(plan.getStatus())) {
+                long openCount = trainingSessionRepository.countByTrainingPlan_PlanIdAndStatusIn(plan.getPlanId(), TrainingPlanActivator.OPEN_SESSION_STATUSES);
+                if (openCount == 0) {
                     plan.setStatus("COMPLETED");
                     trainingPlanRepository.save(plan);
                 }
             }
         }
+    }
+
+    @Override
+    @Transactional
+    public String confirmSession(Integer sessionId) {
+        User user = getLoggedInUser();
+        TrainingSession session = trainingSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new com.horsetrack.equinecare.common.exception.ResourceNotFoundException("Không tìm thấy buổi tập với ID: " + sessionId));
+
+        if (session.getAssignedTo() == null || !session.getAssignedTo().getUserId().equals(user.getUserId())) {
+            throw new AccessDeniedException("Bạn không được phân công buổi tập này");
+        }
+        if (!TrainingPlanActivator.SESSION_PENDING.equalsIgnoreCase(session.getStatus())) {
+            throw new IllegalArgumentException("Chỉ xác nhận được buổi tập đang chờ xác nhận (hiện tại: " + session.getStatus() + ").");
+        }
+        if (session.getSessionDate() != null && session.getSessionDate().isBefore(LocalDateTime.now())) {
+            throw new IllegalArgumentException("Buổi tập lúc " + session.getSessionDate() + " đã qua giờ, không thể xác nhận. Hãy báo HLV xếp lại lịch.");
+        }
+        TrainingPlan plan = session.getTrainingPlan();
+        if (plan != null && plan.getHorse() != null && Boolean.TRUE.equals(plan.getHorse().getIsLocked())) {
+            throw new IllegalArgumentException("Ngựa " + plan.getHorse().getHorseName() + " đang bị khóa huấn luyện (VetLock), không thể xác nhận buổi tập.");
+        }
+        if (plan != null && ("CANCELLED".equalsIgnoreCase(plan.getStatus()) || "COMPLETED".equalsIgnoreCase(plan.getStatus()))) {
+            throw new IllegalArgumentException("Giáo án đã " + plan.getStatus() + ", không thể xác nhận buổi tập.");
+        }
+
+        session.setStatus(TrainingPlanActivator.SESSION_CONFIRMED);
+        trainingSessionRepository.saveAndFlush(session);
+
+        // Đã có Groom xác nhận: giáo án chạy ngay nếu đã tới ngày bắt đầu, nếu chưa thì tác vụ định kỳ sẽ kích hoạt đúng ngày
+        planActivator.tryActivate(plan, LocalDate.now());
+        return plan != null ? plan.getStatus() : null;
     }
 }

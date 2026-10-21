@@ -41,4 +41,7 @@ public class HorseResponseDTO {
     private String registrationCode;
     private String rejectReason;       // Có khi approvalStatus = REJECTED
     private Boolean allowResubmit;     // true: chủ ngựa được nộp lại
+
+    private Integer assignedTrainerId;   // HLV được Club Manager phân công
+    private String assignedTrainerName;
 }

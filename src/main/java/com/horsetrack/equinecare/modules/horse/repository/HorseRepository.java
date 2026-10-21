@@ -34,6 +34,15 @@ public interface HorseRepository extends JpaRepository<Horse, Integer> {
 
     long countByHealthStatus(String healthStatus);
 
-    @org.springframework.data.jpa.repository.Query("SELECT h FROM Horse h WHERE h.isLocked = false AND h.horseId NOT IN (SELECT tp.horse.horseId FROM TrainingPlan tp WHERE tp.status = 'ACTIVE')")
+    @org.springframework.data.jpa.repository.Query("SELECT h FROM Horse h WHERE h.isLocked = false AND h.stall IS NOT NULL AND h.horseId NOT IN (SELECT tp.horse.horseId FROM TrainingPlan tp WHERE tp.status IN ('PENDING', 'ACTIVE', 'PAUSED'))")
     List<Horse> findAvailableHorses();
+
+    // Phạm vi của Trainer: chỉ ngựa được Club Manager phân công
+    org.springframework.data.domain.Page<Horse> findByAssignedTrainer_UserId(Integer trainerId, org.springframework.data.domain.Pageable pageable);
+
+    long countByAssignedTrainer_UserIdAndHealthStatus(Integer trainerId, String healthStatus);
+
+    @org.springframework.data.jpa.repository.Query("SELECT h FROM Horse h WHERE h.assignedTrainer.userId = :trainerId AND h.isLocked = false " +
+            "AND h.horseId NOT IN (SELECT tp.horse.horseId FROM TrainingPlan tp WHERE tp.status IN ('PENDING', 'ACTIVE', 'PAUSED'))")
+    List<Horse> findAvailableHorsesForTrainer(Integer trainerId);
 }

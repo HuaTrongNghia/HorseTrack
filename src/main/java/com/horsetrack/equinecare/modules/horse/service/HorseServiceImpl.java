@@ -43,11 +43,17 @@ public class HorseServiceImpl implements HorseService {
     private final EntityManager entityManager;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler;
+    private final HorseAccessGuard horseAccessGuard;
+    private final com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository;
+    private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
 
     public HorseServiceImpl(HorseRepository horseRepository, UserRepository userRepository, StallRepository stallRepository,
                             HorseRegistrationRepository registrationRepository, EntityManager entityManager,
                             com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail,
-                            com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler) {
+                            com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler,
+                            HorseAccessGuard horseAccessGuard,
+                            com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository,
+                            com.horsetrack.equinecare.modules.notification.service.EmailService emailService) {
         this.horseRepository = horseRepository;
         this.userRepository = userRepository;
         this.stallRepository = stallRepository;
@@ -55,6 +61,9 @@ public class HorseServiceImpl implements HorseService {
         this.entityManager = entityManager;
         this.auditTrail = auditTrail;
         this.trainingLockHandler = trainingLockHandler;
+        this.horseAccessGuard = horseAccessGuard;
+        this.trainingPlanRepository = trainingPlanRepository;
+        this.emailService = emailService;
     }
 
     private boolean currentUserHasRole(String role) {
@@ -113,6 +122,8 @@ public class HorseServiceImpl implements HorseService {
                 .registrationCode(latest != null ? latest.getRegistrationCode() : null)
                 .rejectReason(rejected ? latest.getDecisionNote() : null)
                 .allowResubmit(rejected ? latest.getAllowResubmit() : null)
+                .assignedTrainerId(horse.getAssignedTrainer() != null ? horse.getAssignedTrainer().getUserId() : null)
+                .assignedTrainerName(horse.getAssignedTrainer() != null ? horse.getAssignedTrainer().getFullName() : null)
                 .build();
     }
 
@@ -137,6 +148,14 @@ public class HorseServiceImpl implements HorseService {
     public Page<HorseResponseDTO> getAllHorses(int page, int size, String status) {
         Pageable pageable = PageRequest.of(page, size);
         Page<Horse> horsePage;
+        Integer trainerId = horseAccessGuard.trainerScopeId();
+        if (trainerId != null) {
+            // Trainer chỉ thấy ngựa được phân công (đều là ngựa đã duyệt), không thấy hồ sơ chờ duyệt / bị từ chối
+            if ("PENDING".equalsIgnoreCase(status) || "REJECTED".equalsIgnoreCase(status)) {
+                return Page.empty(pageable);
+            }
+            return horseRepository.findByAssignedTrainer_UserId(trainerId, pageable).map(this::mapToResponseDTO);
+        }
         if ("PENDING".equalsIgnoreCase(status)) {
             horsePage = horseRepository.findPendingApproval(pageable);
         } else if ("APPROVED".equalsIgnoreCase(status)) {
@@ -154,6 +173,60 @@ public class HorseServiceImpl implements HorseService {
     public HorseResponseDTO getHorseDetail(Integer horseId) {
         Horse horse = findHorse(horseId);
         checkOwnerAccess(horse.getOwner().getUserId(), "Bạn không phải chủ của ngựa này");
+        horseAccessGuard.checkAssigned(horse);
+        return mapToResponseDTO(horse);
+    }
+
+    @Override
+    @Transactional
+    public HorseResponseDTO assignTrainer(Integer horseId, HorseAssignTrainerRequestDTO request) {
+        Horse horse = findHorse(horseId);
+        if (horse.getStall() == null) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được duyệt và cấp chuồng, chưa thể phân công HLV.");
+        }
+        User trainer = userRepository.findById(request.getTrainerId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên với ID: " + request.getTrainerId()));
+        if (!HorseAccessGuard.ROLE_TRAINER.equals(trainer.getRoleName())) {
+            throw new IllegalArgumentException("Chỉ được phân công nhân viên có vai trò Trainer (người được chọn có vai trò " + trainer.getRoleName() + ").");
+        }
+        if (Boolean.FALSE.equals(trainer.getIsActive())) {
+            throw new IllegalArgumentException("Tài khoản Trainer " + trainer.getFullName() + " đã bị vô hiệu hóa.");
+        }
+
+        User previous = horse.getAssignedTrainer();
+        if (previous != null && previous.getUserId().equals(trainer.getUserId())) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đã được phân công cho " + trainer.getFullName() + ".");
+        }
+        horse.setAssignedTrainer(trainer);
+        horseRepository.save(horse);
+
+        // Giáo án chưa kết thúc (PENDING / ACTIVE / PAUSED) của ngựa được bàn giao cho HLV mới
+        int handedOver = 0;
+        for (String st : com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES) {
+            for (var plan : trainingPlanRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), st)) {
+                plan.setHeadTrainer(trainer);
+                trainingPlanRepository.save(plan);
+                handedOver++;
+            }
+        }
+
+        auditTrail.record("ASSIGN_TRAINER", "Horses",
+                previous != null ? "assigned_trainer_id=" + previous.getUserId() : "assigned_trainer_id=null",
+                "assigned_trainer_id=" + trainer.getUserId() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId()
+                        + ") | bàn giao " + handedOver + " giáo án");
+
+        if (StringUtils.hasText(trainer.getEmail())) {
+            try {
+                emailService.sendAsync(trainer.getEmail(), "[HorseTrack] Bạn được phân công phụ trách ngựa " + horse.getHorseName(),
+                        "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(trainer.getFullName()) + "</b>,</p>"
+                                + "<p>Club Manager đã phân công bạn phụ trách huấn luyện ngựa <b>"
+                                + org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName()) + "</b>"
+                                + (horse.getStall() != null ? " (chuồng " + horse.getStall().getStallCode() + ")" : "") + ".</p>"
+                                + (handedOver > 0 ? "<p>Bạn tiếp nhận " + handedOver + " giáo án đang chạy của ngựa này.</p>" : ""));
+            } catch (Exception ignored) {
+                // Email chỉ là thông báo, không làm hỏng việc phân công
+            }
+        }
         return mapToResponseDTO(horse);
     }
 
@@ -407,6 +480,7 @@ public class HorseServiceImpl implements HorseService {
     @Transactional
     public HorseResponseDTO updateHorse(Integer horseId, HorseUpdateRequestDTO request) {
         Horse horse = findHorse(horseId);
+        horseAccessGuard.checkAssigned(horse);
         if (request.getWeightKg() != null) {
             horse.setWeightKg(request.getWeightKg());
         }

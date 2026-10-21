@@ -30,6 +30,17 @@ public class TrainingExecutionController {
         return ResponseEntity.ok(ApiResponse.ok("Fetched my schedule successfully", schedule));
     }
 
+    // Groom xác nhận nhận buổi tập; giáo án chuyển sang ACTIVE khi đã có buổi được xác nhận và tới ngày bắt đầu
+    @PutMapping("/{sessionId}/confirm")
+    @PreAuthorize("hasAuthority('Groom')")
+    public ResponseEntity<ApiResponse<String>> confirmSession(@PathVariable Integer sessionId) {
+        String planStatus = trainingExecutionService.confirmSession(sessionId);
+        String message = "ACTIVE".equalsIgnoreCase(planStatus)
+                ? "Đã xác nhận buổi tập. Giáo án đang chạy."
+                : "Đã xác nhận buổi tập. Giáo án sẽ chạy khi tới ngày bắt đầu.";
+        return ResponseEntity.ok(ApiResponse.ok(message, planStatus));
+    }
+
     @PutMapping("/{sessionId}/execute")
     public ResponseEntity<ApiResponse<Void>> executeSession(
             @PathVariable Integer sessionId,

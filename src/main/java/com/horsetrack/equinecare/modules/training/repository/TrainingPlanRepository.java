@@ -22,4 +22,16 @@ public interface TrainingPlanRepository extends JpaRepository<TrainingPlan, Inte
     java.util.List<TrainingPlan> findByHorse_HorseIdAndStatus(Integer horseId, String status);
 
     Optional<TrainingPlan> findFirstByHorse_HorseIdAndStatusInOrderByCreatedAtDesc(Integer horseId, java.util.Collection<String> statuses);
+
+    // Phạm vi của Trainer: giáo án của các ngựa được phân công cho Trainer đó
+    Page<TrainingPlan> findByHorse_AssignedTrainer_UserId(Integer trainerId, Pageable pageable);
+
+    Page<TrainingPlan> findByHorse_AssignedTrainer_UserIdAndStatus(Integer trainerId, String status, Pageable pageable);
+
+    long countByHorse_AssignedTrainer_UserIdAndStatus(Integer trainerId, String status);
+
+    // Giáo án đang chờ, đã có buổi tập được Groom xác nhận và đã tới ngày bắt đầu
+    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT s.trainingPlan FROM TrainingSession s WHERE s.status = 'CONFIRMED' " +
+            "AND s.trainingPlan.status = 'PENDING' AND s.trainingPlan.startDate <= :today")
+    java.util.List<TrainingPlan> findReadyToActivate(@org.springframework.data.repository.query.Param("today") java.time.LocalDate today);
 }
