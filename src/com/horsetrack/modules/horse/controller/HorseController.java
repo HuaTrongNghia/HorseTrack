@@ -79,7 +79,32 @@ public class HorseController {
             @PathVariable Integer id,
             @Valid @RequestBody HorseApprovalRequestDTO request) {
         HorseResponseDTO response = horseService.approveHorse(id, request);
-        return ResponseEntity.ok(ApiResponse.ok("Horse approved and assigned to stall successfully", response));
+        return ResponseEntity.ok(ApiResponse.ok("Đã duyệt hồ sơ và cấp chuồng cho ngựa", response));
+    }
+
+    // Club Manager từ chối hồ sơ (lý do tối thiểu 10 ký tự, có thể cho phép nộp lại)
+    @PutMapping("/{id}/reject")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    public ResponseEntity<ApiResponse<HorseResponseDTO>> rejectHorse(
+            @PathVariable Integer id,
+            @Valid @RequestBody HorseRejectRequestDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã từ chối hồ sơ ngựa", horseService.rejectHorse(id, request)));
+    }
+
+    // Chủ ngựa sửa thông tin và nộp lại hồ sơ đã bị từ chối (khi được cho phép)
+    @PutMapping("/{id}/resubmit")
+    @PreAuthorize("hasAuthority('Horse Owner')")
+    public ResponseEntity<ApiResponse<HorseResponseDTO>> resubmitHorse(
+            @PathVariable Integer id,
+            @Valid @RequestBody HorseResubmitRequestDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã nộp lại hồ sơ, chờ Quản lý CLB duyệt", horseService.resubmitHorse(id, request)));
+    }
+
+    // Lịch sử hồ sơ (mỗi lần nộp / quyết định), mới nhất trước
+    @GetMapping("/{id}/registrations")
+    @PreAuthorize("hasAnyAuthority('Club Manager', 'Horse Owner')")
+    public ResponseEntity<ApiResponse<List<RegistrationHistoryDTO>>> getRegistrationHistory(@PathVariable Integer id) {
+        return ResponseEntity.ok(ApiResponse.ok("Lấy lịch sử hồ sơ thành công", horseService.getRegistrationHistory(id)));
     }
 
     @PutMapping("/{id}")
