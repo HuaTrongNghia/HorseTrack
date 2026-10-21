@@ -40,6 +40,7 @@ public class MedicalService {
     private final EntityManager entityManager;
     private final com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
+    private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
 
     private boolean isCurrentUserVeterinarian() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -51,6 +52,8 @@ public class MedicalService {
     public void applyVetLock(VetLockRequestDTO dto) throws Exception {
         Horse horse = horseRepository.findById(dto.getHorseId())
                 .orElseThrow(() -> new Exception("Không tìm thấy ngựa với ID: " + dto.getHorseId()));
+        // Trainer chỉ khóa khẩn cấp ngựa được phân công cho mình
+        horseAccessGuard.checkAssigned(horse);
 
         if (Boolean.TRUE.equals(horse.getIsLocked())) {
             throw new Exception("Ngựa này hiện đang bị khóa y tế rồi!");
@@ -117,6 +120,8 @@ public class MedicalService {
         Horse horse = horseRepository.findById(dto.getHorseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngựa với ID: " + dto.getHorseId()));
 
+        // Trainer chỉ báo sự cố cho ngựa được phân công cho mình
+        horseAccessGuard.checkAssigned(horse);
         boolean isGroom = "Groom".equals(reporter.getRoleName());
         if (isGroom) {
             String horseZone = horse.getStall() != null ? horse.getStall().getBarnZone() : null;
