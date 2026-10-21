@@ -42,6 +42,7 @@ public class AuthServiceImpl implements AuthService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final OtpService otpService;
     private final EmailService emailService;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
 
     // ==========================================
     // QUÊN MẬT KHẨU (OTP qua email)
@@ -94,6 +95,9 @@ public class AuthServiceImpl implements AuthService {
         if (userRepository.existsByEmail(request.getEmail().trim())) {
             throw new IllegalArgumentException("Email đã được sử dụng.");
         }
+        if (StringUtils.hasText(request.getPhone()) && userRepository.existsByPhone(request.getPhone().trim())) {
+            throw new IllegalArgumentException("Số điện thoại đã được sử dụng.");
+        }
 
         User newUser = User.builder()
                 .username(request.getUsername().trim())
@@ -126,6 +130,9 @@ public class AuthServiceImpl implements AuthService {
         }
         if (userRepository.existsByEmail(request.getEmail().trim())) {
             throw new IllegalArgumentException("Email đã được sử dụng.");
+        }
+        if (StringUtils.hasText(request.getPhone()) && userRepository.existsByPhone(request.getPhone().trim())) {
+            throw new IllegalArgumentException("Số điện thoại đã được sử dụng.");
         }
 
         User newUser = User.builder()
@@ -171,6 +178,8 @@ public class AuthServiceImpl implements AuthService {
             default:
                 throw new IllegalArgumentException("Vai trò không hợp lệ: " + request.getRoleName());
         }
+        auditTrail.record("CREATE_STAFF", "Users", null,
+                "Tạo tài khoản " + savedUser.getUsername() + " (user_id=" + savedUser.getUserId() + ", vai trò " + request.getRoleName() + ")");
     }
 
     @Override

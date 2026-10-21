@@ -2,7 +2,7 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **97 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **98 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 ---
 
@@ -106,6 +106,7 @@ Server đọc tài khoản email từ **biến môi trường**, không ghi tron
 - **Test lỗi:**
   - Gửi lại y hệt → `400` "Tên đăng nhập đã tồn tại."
   - Đổi username nhưng giữ email → `400` "Email đã được sử dụng."
+  - Số điện thoại đã có tài khoản khác dùng (GEN-01) → `400` "Số điện thoại đã được sử dụng." (áp dụng cả khi tạo nhân viên ở 1.3).
   - Bỏ trống `fullName` hoặc `email: "abc"` → `400`, `data` chỉ ra field lỗi.
   - Mật khẩu yếu: dưới 8 ký tự (`"abc1234"`), không có số (`"abcdefgh"`), không có chữ (`"12345678"`), hoặc có dấu cách → `400` "Mật khẩu phải dài 8–64 ký tự, có ít nhất 1 chữ cái và 1 chữ số, không chứa khoảng trắng".
   - Tên đăng nhập không hợp lệ: dưới 4 hoặc trên 30 ký tự, có dấu tiếng Việt (`"toàn"`), có dấu cách (`"Toan ne"`), hoặc có ký tự khác ngoài chữ, số, `.`, `_` (`"user-01"`) → `400`.
@@ -368,6 +369,7 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 - Lấy `stallId` có `currentHorseId = null` từ mục 4.1.
 - **Mong đợi:** `200`, `approvalStatus = "APPROVED"`, có `stallCode`.
 - **Test lỗi:** hồ sơ không ở trạng thái chờ duyệt (đã duyệt hoặc đã từ chối) → `400`; chuồng đã có ngựa → `400`.
+- **Chuồng phải `CLEAN` (F1-05):** chuồng `NEEDS_CLEANING` hoặc `MAINTENANCE` → `400` "Chỉ xếp ngựa vào chuồng CLEAN". Duyệt và từ chối hồ sơ đều được ghi Audit Log (`APPROVE_HORSE`, `REJECT_HORSE`).
 
 **b) `PUT /api/v1/horses/{id}/reject`: từ chối (`Club Manager`)**
 
@@ -558,6 +560,7 @@ Chỉ `Trainer`.
   - `sessionDate` ở quá khứ → `400`.
   - Giáo án đã `COMPLETED` hoặc `CANCELLED` → `400`.
   - `assignedToId` không tồn tại → `404`.
+  - Groom đã có buổi tập khác trong khoảng ±60 phút (F21-05, BR34) → `400` "Groom ... đã có buổi tập lúc ..., trùng khung giờ 60 phút". Thời lượng chỉnh bằng `app.training.session-duration-minutes`.
 
 ---
 
@@ -580,7 +583,8 @@ Chỉ `Trainer`.
 - **Test lỗi:**
   - Thực hiện lại cùng buổi → `500` "Cannot update session. Current status is COMPLETED".
   - Nhân viên khác (không được gán) gọi → `403`.
-  - `"status": "CANCELLED"` mà không có `notes` → `500` "Notes are required...".
+  - `"status": "CANCELLED"` mà không có `notes` → `400` "Phải ghi lý do (notes) khi hủy buổi tập".
+  - `"status": "COMPLETED"` khi ngựa đang VetLock (F22-01) → `400`. Chỉ được hủy buổi tập.
 
 ---
 
@@ -631,11 +635,18 @@ Chỉ `Trainer` được gọi. Lấy `groomId` từ `GET /training-plans/assign
 | `horseId` hoặc `groomId` không tồn tại | `404` |
 | Ngựa chưa được duyệt (chưa có chuồng) | `400` "Ngựa chưa được duyệt và cấp chuồng..." |
 | `groomId` là id của Trainer hoặc Vet | `400` "Chỉ được giao việc chăm sóc cho nhân viên có vai trò Groom." |
+| `groomId` là Groom phụ trách khu khác với khu chuồng của ngựa (F4-03) | `400` "Groom ... phụ trách khu ..., không phải khu ... của ngựa ..." |
 
 ### 9.1 `GET /api/v1/care-tasks/my-tasks` (`Groom`)
 
 - Login bằng đúng Groom được giao ở 9.0.
 - **Mong đợi:** `200`, danh sách việc có `taskDate` là hôm nay, sắp theo `scheduledTime`. **Ghi lại `taskId`**.
+
+### 9.3 `GET /api/v1/care-tasks/overdue`: việc trễ hạn (`Club Manager`, BR_05)
+
+- Hệ thống quét **mỗi 5 phút**. Việc chưa xong (`TODO` hoặc `IN_PROGRESS`) quá **45 phút** sau giờ hẹn thì được đánh dấu trễ (`warningNote`, `overdue = true`), và các Club Manager nhận **một email tổng hợp**. Mỗi việc chỉ bị cảnh báo một lần.
+- **Mong đợi:** `200`, danh sách việc đang trễ. `GET /care-tasks/my-tasks` của Groom cũng có `overdue` và `warningNote`.
+- **Cách test nhanh:** giao việc (9.0) với `taskDate` là hôm nay và `scheduledTime` sớm hơn hiện tại ít nhất 45 phút, chờ tối đa 5 phút rồi gọi API này.
 
 ### 9.2 `PUT /api/v1/care-tasks/{taskId}/complete` (`Groom`)
 
@@ -660,6 +671,8 @@ Nhân viên trực tiếp chăm sóc hoặc huấn luyện được bấm khi ph
 ```
 
 - **Mong đợi:** `200`. Kiểm tra bằng 3.4: ngựa có `isLocked = true`, và `healthStatus` tùy người bấm:
+- **Tự động khi khóa (F3-03):** mọi buổi tập đang chờ của ngựa chuyển `CANCELLED` (ghi chú "Hủy tự động do ngựa bị khóa huấn luyện…"), giáo án đang chạy chuyển **`PAUSED`**, HLV phụ trách và chủ ngựa nhận email. Thao tác được ghi Audit Log (`VET_LOCK`).
+- **Khi bác sĩ mở khóa (10.2):** giáo án `PAUSED` trở lại `ACTIVE`, HLV và chủ ngựa nhận email, ghi Audit Log (`VET_UNLOCK`).
 
 | Người bấm | `healthStatus` sau khi khóa |
 |---|---|
@@ -1295,6 +1308,7 @@ Sau khi test chức năng chính, thử gọi mỗi API sau bằng **sai role** 
 | `GET /horses/available-for-training` | Trainer, Club Manager |
 | `POST /care-tasks` | Trainer |
 | `GET /care-tasks/my-tasks`, `PUT /care-tasks/{id}/complete` | Groom |
+| `GET /care-tasks/overdue` | Club Manager |
 | `/training-sessions/**` | Trainer, Groom |
 | `/owner/training/**`, `/owner/payments/**` | Horse Owner |
 

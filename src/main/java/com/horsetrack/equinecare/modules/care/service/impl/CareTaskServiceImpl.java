@@ -1,7 +1,9 @@
 package com.horsetrack.equinecare.modules.care.service.impl;
 
 import com.horsetrack.equinecare.common.exception.ResourceNotFoundException;
+import com.horsetrack.equinecare.modules.auth.entity.GroomProfile;
 import com.horsetrack.equinecare.modules.auth.entity.User;
+import com.horsetrack.equinecare.modules.auth.repository.GroomProfileRepository;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.care.dto.CareTaskCreateRequestDTO;
 import com.horsetrack.equinecare.modules.care.dto.CareTaskDTO;
@@ -37,6 +39,17 @@ public class CareTaskServiceImpl implements CareTaskService {
     private final UserRepository userRepository;
     private final HorseRepository horseRepository;
     private final EntityManager entityManager;
+    private final GroomProfileRepository groomProfileRepository;
+
+    // Việc chưa xong (còn có thể bị cảnh báo trễ)
+    static final List<String> OPEN_STATUSES = List.of("TODO", "IN_PROGRESS");
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CareTaskDTO> getOverdueTasks() {
+        return careTaskRepository.findByWarningNoteIsNotNullAndStatusInOrderByTaskDateAscScheduledTimeAsc(OPEN_STATUSES).stream()
+                .map(this::mapToDTO).collect(Collectors.toList());
+    }
 
     private User getLoggedInUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -62,6 +75,8 @@ public class CareTaskServiceImpl implements CareTaskService {
                 .stallZone(task.getStall() != null ? task.getStall().getBarnZone() : null)
                 .groomId(task.getGroom() != null ? task.getGroom().getUserId() : null)
                 .groomName(task.getGroom() != null ? task.getGroom().getFullName() : null)
+                .warningNote(task.getWarningNote())
+                .overdue(task.getWarningNote() != null && OPEN_STATUSES.contains(task.getStatus()))
                 .build();
     }
 
@@ -129,6 +144,14 @@ public class CareTaskServiceImpl implements CareTaskService {
         }
         if (Boolean.FALSE.equals(groom.getIsActive())) {
             throw new IllegalArgumentException("Tài khoản Groom này đã bị vô hiệu hóa.");
+        }
+
+        // F4-03 (BR35): Groom chỉ chăm sóc ngựa thuộc khu chuồng mình phụ trách
+        String horseZone = horse.getStall().getBarnZone();
+        String groomZone = groomProfileRepository.findById(groom.getUserId()).map(GroomProfile::getAssignedBarnZone).orElse(null);
+        if (horseZone == null || groomZone == null || !horseZone.trim().equalsIgnoreCase(groomZone.trim())) {
+            throw new IllegalArgumentException("Groom " + groom.getFullName() + " phụ trách khu '" + (groomZone == null ? "chưa có" : groomZone)
+                    + "', không phải khu '" + horseZone + "' của ngựa " + horse.getHorseName() + ".");
         }
 
         CareTask task = CareTask.builder()

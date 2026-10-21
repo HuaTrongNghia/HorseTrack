@@ -16,4 +16,10 @@ public interface TrainingPlanRepository extends JpaRepository<TrainingPlan, Inte
     Optional<TrainingPlan> findFirstByHorse_HorseIdAndStatusOrderByCreatedAtDesc(Integer horseId, String status);
 
     boolean existsByHorse_HorseIdAndStatus(Integer horseId, String status);
+
+    boolean existsByHorse_HorseIdAndStatusIn(Integer horseId, java.util.Collection<String> statuses);
+
+    java.util.List<TrainingPlan> findByHorse_HorseIdAndStatus(Integer horseId, String status);
+
+    Optional<TrainingPlan> findFirstByHorse_HorseIdAndStatusInOrderByCreatedAtDesc(Integer horseId, java.util.Collection<String> statuses);
 }

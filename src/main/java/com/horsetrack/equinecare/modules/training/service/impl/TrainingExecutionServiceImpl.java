@@ -87,7 +87,14 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         }
 
         if ("CANCELLED".equalsIgnoreCase(request.getStatus()) && (request.getNotes() == null || request.getNotes().trim().isEmpty())) {
-            throw new RuntimeException("Notes are required when cancelling a session");
+            throw new IllegalArgumentException("Phải ghi lý do (notes) khi hủy buổi tập.");
+        }
+
+        // F22-01 (BR_01): ngựa đang khóa huấn luyện thì không được tập / hoàn thành buổi tập (chỉ được hủy)
+        if ("COMPLETED".equalsIgnoreCase(request.getStatus()) && session.getTrainingPlan() != null
+                && session.getTrainingPlan().getHorse() != null && Boolean.TRUE.equals(session.getTrainingPlan().getHorse().getIsLocked())) {
+            throw new IllegalArgumentException("Ngựa " + session.getTrainingPlan().getHorse().getHorseName()
+                    + " đang bị khóa huấn luyện (VetLock), không thể thực hiện buổi tập. Hãy hủy buổi tập.");
         }
 
         session.setStatus(request.getStatus().toUpperCase());

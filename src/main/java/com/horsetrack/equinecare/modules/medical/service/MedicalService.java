@@ -38,6 +38,8 @@ public class MedicalService {
     private final UserRepository userRepository;
     private final GroomProfileRepository groomProfileRepository;
     private final EntityManager entityManager;
+    private final com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
 
     private boolean isCurrentUserVeterinarian() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -63,6 +65,11 @@ public class MedicalService {
 
         horseRepository.save(horse);
 
+        int cancelled = trainingLockHandler.onHorseLocked(horse, dto.getReason());
+        auditTrail.record("VET_LOCK", "Horses", "isLocked=false",
+                "isLocked=true, health=" + horse.getHealthStatus() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId()
+                        + ") | hủy " + cancelled + " buổi tập | Lý do: " + dto.getReason());
+
         log.warn("EMERGENCY VETLOCK: Ngựa ID {} đã bị khóa bởi {} ({})! Lý do: {}", horse.getHorseId(),
                 SecurityContextHolder.getContext().getAuthentication().getName(), isVet ? "INJURED" : "WATCH", dto.getReason());
     }
@@ -83,6 +90,9 @@ public class MedicalService {
         horse.setHealthStatus("HEALTHY");
 
         horseRepository.save(horse);
+        trainingLockHandler.onHorseUnlocked(horse);
+        auditTrail.record("VET_UNLOCK", "Horses", "isLocked=true",
+                "isLocked=false, health=HEALTHY | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ")");
     }
 
     // ==========================================

@@ -34,6 +34,10 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     private final UserRepository userRepository;
     private final GroomProfileRepository groomProfileRepository;
 
+    // Thời lượng mặc định một buổi tập (bảng chỉ lưu giờ bắt đầu), dùng để kiểm tra trùng giờ
+    @org.springframework.beans.factory.annotation.Value("${app.training.session-duration-minutes:60}")
+    private long sessionDurationMinutes;
+
     @Override
     public List<AvailableHorseDTO> getAvailableHorses() {
         List<Horse> availableHorses = horseRepository.findAvailableHorses();
@@ -204,6 +208,17 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .assignedTo(assignee)
                 .build();
 
+        // F21-05 (BR34): một Groom không được có 2 buổi tập giao nhau về khung giờ
+        LocalDateTime start = request.getSessionDate();
+        List<TrainingSession> clashes = trainingSessionRepository.findOverlapping(assignee.getUserId(),
+                start.minusMinutes(sessionDurationMinutes), start.plusMinutes(sessionDurationMinutes));
+        if (!clashes.isEmpty()) {
+            TrainingSession c = clashes.get(0);
+            throw new IllegalArgumentException("Groom " + assignee.getFullName() + " đã có buổi tập lúc " + c.getSessionDate()
+                    + " (ngựa " + (c.getTrainingPlan().getHorse() != null ? c.getTrainingPlan().getHorse().getHorseName() : "?")
+                    + "), trùng khung giờ " + sessionDurationMinutes + " phút với buổi mới.");
+        }
+
         trainingSessionRepository.save(session);
     }
 
@@ -229,9 +244,9 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         if (Boolean.TRUE.equals(horse.getIsLocked())) {
             throw new IllegalArgumentException("Ngựa đang bị khóa y tế (VetLock), không thể lập giáo án huấn luyện.");
         }
-        // Mỗi ngựa chỉ có tối đa một giáo án ACTIVE tại một thời điểm
-        if (trainingPlanRepository.existsByHorse_HorseIdAndStatus(horse.getHorseId(), "ACTIVE")) {
-            throw new IllegalArgumentException("Ngựa này đang có một giáo án ACTIVE. Hãy hoàn thành hoặc hủy giáo án cũ trước.");
+        // Mỗi ngựa chỉ có tối đa một giáo án đang chạy (ACTIVE hoặc PAUSED do VetLock) tại một thời điểm
+        if (trainingPlanRepository.existsByHorse_HorseIdAndStatusIn(horse.getHorseId(), java.util.List.of("ACTIVE", "PAUSED"))) {
+            throw new IllegalArgumentException("Ngựa này đang có một giáo án ACTIVE hoặc PAUSED. Hãy hoàn thành hoặc hủy giáo án cũ trước.");
         }
 
         TrainingPlan plan = TrainingPlan.builder()

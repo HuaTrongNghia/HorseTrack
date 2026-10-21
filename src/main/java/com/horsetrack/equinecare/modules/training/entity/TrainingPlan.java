@@ -37,7 +37,11 @@ public class TrainingPlan {
     private String goal;
 
     @Column(name = "status", nullable = false, length = 20)
-    private String status;
+    private String status; // ACTIVE, PAUSED (ngựa bị VetLock), COMPLETED, CANCELLED
+
+    // Lý do tạm dừng giáo án (VD: ngựa bị khóa huấn luyện)
+    @Column(name = "paused_reason", length = 500)
+    private String pausedReason;
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;

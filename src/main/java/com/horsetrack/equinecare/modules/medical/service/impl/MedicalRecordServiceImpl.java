@@ -38,6 +38,8 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     private final UserRepository userRepository;
     private final InventoryItemRepository inventoryItemRepository;
     private final PurchaseOrderRepository purchaseOrderRepository;
+    private final com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -74,6 +76,9 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
             horse.setIsLocked(true);
             horse.setHealthStatus("INJURED");
             horseRepository.save(horse);
+            int cancelled = trainingLockHandler.onHorseLocked(horse, "Chỉ định khóa tập trong bệnh án: " + request.getDiagnosis());
+            auditTrail.record("VET_LOCK", "Horses", "isLocked=false", "isLocked=true, health=INJURED | ngựa " + horse.getHorseName()
+                    + " (horse_id=" + horse.getHorseId() + ") | hủy " + cancelled + " buổi tập | Bệnh án: " + request.getDiagnosis());
         }
 
         MedicalRecord record = MedicalRecord.builder()
@@ -174,6 +179,7 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
             horse.setIsLocked(false);
             horse.setHealthStatus("HEALTHY");
             horseRepository.save(horse);
+            trainingLockHandler.onHorseUnlocked(horse);
         }
     }
 }
