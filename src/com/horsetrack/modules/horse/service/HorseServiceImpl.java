@@ -41,14 +41,20 @@ public class HorseServiceImpl implements HorseService {
     private final StallRepository stallRepository;
     private final HorseRegistrationRepository registrationRepository;
     private final EntityManager entityManager;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
+    private final com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler;
 
     public HorseServiceImpl(HorseRepository horseRepository, UserRepository userRepository, StallRepository stallRepository,
-                            HorseRegistrationRepository registrationRepository, EntityManager entityManager) {
+                            HorseRegistrationRepository registrationRepository, EntityManager entityManager,
+                            com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail,
+                            com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler) {
         this.horseRepository = horseRepository;
         this.userRepository = userRepository;
         this.stallRepository = stallRepository;
         this.registrationRepository = registrationRepository;
         this.entityManager = entityManager;
+        this.auditTrail = auditTrail;
+        this.trainingLockHandler = trainingLockHandler;
     }
 
     private boolean currentUserHasRole(String role) {
@@ -231,6 +237,11 @@ public class HorseServiceImpl implements HorseService {
         }
         Stall stall = stallRepository.findById(request.getStallId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chuồng với ID: " + request.getStallId()));
+        // F1-05 (BR_18/BR28): chỉ xếp ngựa vào chuồng đã vệ sinh sạch
+        if (!"CLEAN".equalsIgnoreCase(stall.getCleanStatus())) {
+            throw new IllegalArgumentException("Chuồng " + stall.getStallCode() + " đang ở trạng thái " + stall.getCleanStatus()
+                    + ". Chỉ xếp ngựa vào chuồng CLEAN.");
+        }
         horse.setStall(stall);
         horseRepository.save(horse);
 
@@ -242,6 +253,8 @@ public class HorseServiceImpl implements HorseService {
         reg.setDecidedBy(manager);
         reg.setDecidedAt(LocalDateTime.now());
         registrationRepository.saveAndFlush(reg);
+        auditTrail.record("APPROVE_HORSE", "Horse_Registrations", "PENDING_REVIEW",
+                "APPROVED " + reg.getRegistrationCode() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ") | chuồng " + stall.getStallCode());
         entityManager.refresh(horse);
         return mapToResponseDTO(horse);
     }
@@ -262,6 +275,9 @@ public class HorseServiceImpl implements HorseService {
         reg.setDecidedBy(manager);
         reg.setDecidedAt(LocalDateTime.now());
         registrationRepository.saveAndFlush(reg);
+        auditTrail.record("REJECT_HORSE", "Horse_Registrations", "PENDING_REVIEW",
+                "REJECTED " + reg.getRegistrationCode() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ") | cho nộp lại: "
+                        + reg.getAllowResubmit() + " | Lý do: " + reg.getDecisionNote());
         entityManager.refresh(horse);
         return mapToResponseDTO(horse);
     }
@@ -407,6 +423,15 @@ public class HorseServiceImpl implements HorseService {
                 throw new AccessDeniedException("Chỉ Bác sĩ thú y mới được thay đổi trạng thái khóa huấn luyện (isLocked)");
             }
             horse.setIsLocked(request.getIsLocked());
+            horseRepository.save(horse);
+            if (Boolean.TRUE.equals(request.getIsLocked())) {
+                int cancelled = trainingLockHandler.onHorseLocked(horse, "Bác sĩ thú y khóa huấn luyện");
+                auditTrail.record("VET_LOCK", "Horses", "isLocked=false", "isLocked=true | ngựa " + horse.getHorseName()
+                        + " (horse_id=" + horse.getHorseId() + ") | hủy " + cancelled + " buổi tập");
+            } else {
+                trainingLockHandler.onHorseUnlocked(horse);
+                auditTrail.record("VET_UNLOCK", "Horses", "isLocked=true", "isLocked=false | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ")");
+            }
         }
         return mapToResponseDTO(horseRepository.save(horse));
     }
