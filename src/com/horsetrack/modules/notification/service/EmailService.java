@@ -1,6 +1,8 @@
 package com.horsetrack.equinecare.modules.notification.service;
 
+import com.horsetrack.equinecare.modules.auth.security.OtpService;
 import com.horsetrack.equinecare.modules.notification.exception.EmailSendException;
+import jakarta.annotation.PreDestroy;
 import jakarta.mail.internet.InternetAddress;
 import jakarta.mail.internet.MimeMessage;
 import lombok.extern.slf4j.Slf4j;
@@ -12,10 +14,18 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.util.HtmlUtils;
 
 import java.nio.charset.StandardCharsets;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Gửi email HTML qua SMTP.
  * Chưa cấu hình MAIL_USERNAME thì chạy CHẾ ĐỘ DEV: không gửi thật, chỉ in nội dung ra console để test.
+ * Gửi BẤT ĐỒNG BỘ trên luồng riêng để SMTP chậm (tới ~30 giây) không giữ request của người dùng;
+ * nơi cần báo kết quả thì chờ tối đa app.mail.wait-seconds bằng {@link #await}.
  */
 @Slf4j
 @Service
@@ -26,17 +36,30 @@ public class EmailService {
     private final String fromAddress;
     private final String fromName;
     private final long otpTtlSeconds;
+    private final long waitSeconds;
+
+    /** Kết quả gửi sau khi chờ tối đa app.mail.wait-seconds. */
+    public enum Delivery { SENT, FAILED, PENDING }
+
+    // 2 luồng daemon riêng cho email: không chiếm luồng xử lý request, không chặn tắt server
+    private final ExecutorService executor = Executors.newFixedThreadPool(2, r -> {
+        Thread t = new Thread(r, "email-sender");
+        t.setDaemon(true);
+        return t;
+    });
 
     public EmailService(JavaMailSender mailSender,
                         @Value("${spring.mail.username:}") String smtpUsername,
                         @Value("${app.mail.from:}") String fromAddress,
                         @Value("${app.mail.from-name:HorseTrack EquineCare}") String fromName,
-                        @Value("${app.otp.ttl-seconds:120}") long otpTtlSeconds) {
+                        @Value("${app.otp.ttl-seconds:300}") long otpTtlSeconds,
+                        @Value("${app.mail.wait-seconds:8}") long waitSeconds) {
         this.mailSender = mailSender;
         this.smtpUsername = smtpUsername;
         this.fromAddress = StringUtils.hasText(fromAddress) ? fromAddress : smtpUsername;
         this.fromName = fromName;
         this.otpTtlSeconds = otpTtlSeconds;
+        this.waitSeconds = waitSeconds;
         if (!isConfigured()) {
             log.warn("EMAIL CHẠY CHẾ ĐỘ DEV: chưa đặt MAIL_USERNAME/MAIL_PASSWORD, email (kể cả OTP) chỉ được in ra console. KHÔNG dùng chế độ này khi triển khai thật.");
         }
@@ -51,19 +74,19 @@ public class EmailService {
     // ==========================================
 
     /** Gửi mã OTP; purposeLabel ví dụ "đặt lại mật khẩu". */
-    public void sendOtp(String to, String fullName, String otp, String purposeLabel) {
+    public CompletableFuture<Void> sendOtp(String to, String fullName, String otp, String purposeLabel) {
         String body = """
                 <p>Xin chào <b>%s</b>,</p>
                 <p>Mã xác thực (OTP) để <b>%s</b> tài khoản HorseTrack của bạn là:</p>
                 <p style="font-size:28px;font-weight:bold;letter-spacing:6px;margin:16px 0">%s</p>
-                <p>Mã có hiệu lực trong <b>%d giây</b> và chỉ dùng được <b>một lần</b>.</p>
+                <p>Mã có hiệu lực trong <b>%s</b> và chỉ dùng được <b>một lần</b>.</p>
                 <p>Nếu bạn không yêu cầu, hãy bỏ qua email này; mật khẩu của bạn không thay đổi.</p>
-                """.formatted(esc(fullName), esc(purposeLabel), esc(otp), otpTtlSeconds);
-        send(to, "[HorseTrack] Mã OTP " + purposeLabel, wrap(body));
+                """.formatted(esc(fullName), esc(purposeLabel), esc(otp), OtpService.formatDuration(otpTtlSeconds));
+        return sendAsync(to, "[HorseTrack] Mã OTP " + purposeLabel, wrap(body));
     }
 
     /** Gửi thông tin đăng nhập ban đầu cho nhân viên do Club Manager tạo. */
-    public void sendStaffAccount(String to, String fullName, String roleName, String username, String rawPassword) {
+    public CompletableFuture<Void> sendStaffAccount(String to, String fullName, String roleName, String username, String rawPassword) {
         String body = """
                 <p>Xin chào <b>%s</b>,</p>
                 <p>Quản lý CLB đã tạo tài khoản HorseTrack cho bạn với vai trò <b>%s</b>.</p>
@@ -73,12 +96,37 @@ public class EmailService {
                 </table>
                 <p>Vì lý do bảo mật, hãy <b>đăng nhập và đổi mật khẩu ngay</b> sau lần đăng nhập đầu tiên, và xóa email này.</p>
                 """.formatted(esc(fullName), esc(roleName), esc(username), esc(rawPassword));
-        send(to, "[HorseTrack] Tài khoản nhân viên của bạn", wrap(body));
+        return sendAsync(to, "[HorseTrack] Tài khoản nhân viên của bạn", wrap(body));
     }
 
     // ==========================================
     // GỬI
     // ==========================================
+
+    /** Gửi trên luồng email; lỗi gửi làm future hoàn tất với EmailSendException. */
+    public CompletableFuture<Void> sendAsync(String to, String subject, String html) {
+        return CompletableFuture.runAsync(() -> send(to, subject, html), executor);
+    }
+
+    /** Chờ kết quả gửi tối đa app.mail.wait-seconds; quá thời gian thì email vẫn tiếp tục gửi ở nền (PENDING). */
+    public Delivery await(CompletableFuture<Void> sending) {
+        try {
+            sending.get(waitSeconds, TimeUnit.SECONDS);
+            return Delivery.SENT;
+        } catch (TimeoutException ex) {
+            return Delivery.PENDING;
+        } catch (ExecutionException ex) {
+            return Delivery.FAILED;
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            return Delivery.PENDING;
+        }
+    }
+
+    @PreDestroy
+    void shutdown() {
+        executor.shutdown();
+    }
 
     public void send(String to, String subject, String html) {
         if (!isConfigured()) {
