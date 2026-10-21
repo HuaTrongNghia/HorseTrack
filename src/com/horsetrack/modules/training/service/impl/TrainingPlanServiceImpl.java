@@ -33,6 +33,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     private final HorseRepository horseRepository;
     private final UserRepository userRepository;
     private final GroomProfileRepository groomProfileRepository;
+    private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
 
     // Thời lượng mặc định một buổi tập (bảng chỉ lưu giờ bắt đầu), dùng để kiểm tra trùng giờ
     @org.springframework.beans.factory.annotation.Value("${app.training.session-duration-minutes:60}")
@@ -40,7 +41,11 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
 
     @Override
     public List<AvailableHorseDTO> getAvailableHorses() {
-        List<Horse> availableHorses = horseRepository.findAvailableHorses();
+        // Trainer chỉ thấy ngựa được Club Manager phân công cho mình
+        Integer trainerId = horseAccessGuard.trainerScopeId();
+        List<Horse> availableHorses = trainerId != null
+                ? horseRepository.findAvailableHorsesForTrainer(trainerId)
+                : horseRepository.findAvailableHorses();
         return availableHorses.stream()
                 .map(horse -> AvailableHorseDTO.builder()
                         .horseId(horse.getHorseId())
@@ -53,13 +58,20 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
 
     @Override
     public DashboardStatsDTO getDashboardStats() {
-        long totalActivePlans = trainingPlanRepository.countByStatus("ACTIVE");
-        
         LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
         LocalDateTime endOfDay = startOfDay.plusDays(1).minusNanos(1);
-        long todaysSessions = trainingSessionRepository.countBySessionDateBetween(startOfDay, endOfDay);
-        
-        long injuredHorses = horseRepository.countByHealthStatus("Injured");
+
+        // Trainer: chỉ thống kê trên các ngựa được phân công
+        Integer trainerId = horseAccessGuard.trainerScopeId();
+        long totalActivePlans = trainerId != null
+                ? trainingPlanRepository.countByHorse_AssignedTrainer_UserIdAndStatus(trainerId, "ACTIVE")
+                : trainingPlanRepository.countByStatus("ACTIVE");
+        long todaysSessions = trainerId != null
+                ? trainingSessionRepository.countByTrainingPlan_Horse_AssignedTrainer_UserIdAndSessionDateBetween(trainerId, startOfDay, endOfDay)
+                : trainingSessionRepository.countBySessionDateBetween(startOfDay, endOfDay);
+        long injuredHorses = trainerId != null
+                ? horseRepository.countByAssignedTrainer_UserIdAndHealthStatus(trainerId, "Injured")
+                : horseRepository.countByHealthStatus("Injured");
 
         return DashboardStatsDTO.builder()
                 .totalActivePlans(totalActivePlans)
@@ -71,7 +83,14 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     @Override
     public Page<TrainingPlanSummaryDTO> getTrainingPlans(String status, Pageable pageable) {
         Page<TrainingPlan> plansPage;
-        if (status != null && !status.trim().isEmpty()) {
+        boolean byStatus = status != null && !status.trim().isEmpty();
+        // Trainer chỉ thấy giáo án của các ngựa được phân công cho mình
+        Integer trainerId = horseAccessGuard.trainerScopeId();
+        if (trainerId != null) {
+            plansPage = byStatus
+                    ? trainingPlanRepository.findByHorse_AssignedTrainer_UserIdAndStatus(trainerId, status.trim(), pageable)
+                    : trainingPlanRepository.findByHorse_AssignedTrainer_UserId(trainerId, pageable);
+        } else if (byStatus) {
             plansPage = trainingPlanRepository.findByStatus(status, pageable);
         } else {
             plansPage = trainingPlanRepository.findAll(pageable);
@@ -104,6 +123,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     @Transactional(readOnly = true)
     public List<StaffAssignDTO> getAssignableStaff(Integer planId) {
         TrainingPlan plan = findPlan(planId);
+        horseAccessGuard.checkAssigned(plan.getHorse());
         String barnZone = horseBarnZone(plan);
         return groomProfileRepository.findActiveGroomsInZone(barnZone).stream()
                 .map(gp -> StaffAssignDTO.builder()
@@ -132,8 +152,8 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     @Override
     @Transactional(readOnly = true)
     public TrainingPlanDetailDTO getTrainingPlanDetail(Integer planId) {
-        TrainingPlan plan = trainingPlanRepository.findById(planId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy Giáo án với ID: " + planId));
+        TrainingPlan plan = findPlan(planId);
+        horseAccessGuard.checkAssigned(plan.getHorse());
 
         List<TrainingSessionDTO> sessionDTOs = plan.getSessions().stream()
                 .map(s -> TrainingSessionDTO.builder()
@@ -164,6 +184,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     @Transactional(rollbackFor = Exception.class)
     public void addTrainingSessionToPlan(Integer planId, TrainingSessionCreateRequestDTO request) {
         TrainingPlan plan = findPlan(planId);
+        horseAccessGuard.checkAssigned(plan.getHorse());
 
         if ("CANCELLED".equalsIgnoreCase(plan.getStatus()) || "COMPLETED".equalsIgnoreCase(plan.getStatus())) {
             throw new IllegalArgumentException("Không thể thêm buổi tập vào giáo án đã hoàn thành hoặc bị hủy.");
@@ -232,6 +253,8 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
 
         Horse horse = horseRepository.findById(request.getHorseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngựa với ID: " + request.getHorseId()));
+        // Trainer chỉ lập giáo án cho ngựa được Club Manager phân công cho mình
+        horseAccessGuard.checkAssigned(horse);
 
         if (request.getEndDate().isBefore(request.getStartDate())) {
             throw new IllegalArgumentException("Ngày kết thúc (endDate) không được nhỏ hơn ngày bắt đầu (startDate).");
@@ -244,9 +267,9 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         if (Boolean.TRUE.equals(horse.getIsLocked())) {
             throw new IllegalArgumentException("Ngựa đang bị khóa y tế (VetLock), không thể lập giáo án huấn luyện.");
         }
-        // Mỗi ngựa chỉ có tối đa một giáo án đang chạy (ACTIVE hoặc PAUSED do VetLock) tại một thời điểm
-        if (trainingPlanRepository.existsByHorse_HorseIdAndStatusIn(horse.getHorseId(), java.util.List.of("ACTIVE", "PAUSED"))) {
-            throw new IllegalArgumentException("Ngựa này đang có một giáo án ACTIVE hoặc PAUSED. Hãy hoàn thành hoặc hủy giáo án cũ trước.");
+        // Mỗi ngựa chỉ có tối đa một giáo án chưa kết thúc (PENDING, ACTIVE hoặc PAUSED do VetLock) tại một thời điểm
+        if (trainingPlanRepository.existsByHorse_HorseIdAndStatusIn(horse.getHorseId(), com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES)) {
+            throw new IllegalArgumentException("Ngựa này đang có một giáo án PENDING, ACTIVE hoặc PAUSED. Hãy hoàn thành hoặc hủy giáo án cũ trước.");
         }
 
         TrainingPlan plan = TrainingPlan.builder()
@@ -254,7 +277,8 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
                 .goal(request.getGoal())
-                .status("ACTIVE")
+                // Giáo án mới ở trạng thái chờ; chỉ chạy khi Groom xác nhận buổi tập và tới ngày bắt đầu
+                .status(com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.PLAN_PENDING)
                 .createdAt(LocalDateTime.now())
                 .horse(horse)
                 .headTrainer(trainer)
