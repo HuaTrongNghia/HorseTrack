@@ -44,6 +44,9 @@ public class OwnerTrainingServiceImpl implements OwnerTrainingService {
                 .map(horse -> OwnerHorseListDTO.builder()
                         .horseId(horse.getHorseId())
                         .horseName(horse.getHorseName())
+                        .approvalStatus(horse.getApprovalStatus())
+                        .stallId(horse.getStall() != null ? horse.getStall().getStallId() : null)
+                        .stallCode(horse.getStall() != null ? horse.getStall().getStallCode() : null)
                         .build())
                 .collect(Collectors.toList());
     }
@@ -59,7 +62,7 @@ public class OwnerTrainingServiceImpl implements OwnerTrainingService {
             throw new AccessDeniedException("You do not have permission to view this horse's training progress");
         }
 
-        TrainingPlan plan = trainingPlanRepository.findFirstByHorse_HorseIdAndStatusOrderByCreatedAtDesc(horseId, "ACTIVE")
+        TrainingPlan plan = trainingPlanRepository.findFirstByHorse_HorseIdAndStatusInOrderByCreatedAtDesc(horseId, java.util.List.of("ACTIVE", "PAUSED"))
                 .orElseThrow(() -> new RuntimeException("Ngựa hiện chưa có giáo án nào"));
 
         List<TrainingSession> sessions = plan.getSessions();
