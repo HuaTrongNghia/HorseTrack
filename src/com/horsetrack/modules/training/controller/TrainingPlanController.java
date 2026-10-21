@@ -28,13 +28,16 @@ public class TrainingPlanController {
 
     private final TrainingPlanService trainingPlanService;
 
+    // Trainer chỉ nhận số liệu và giáo án của các ngựa được phân công
     @GetMapping("/dashboard-stats")
+    @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Groom', 'Veterinarian')")
     public ResponseEntity<ApiResponse<DashboardStatsDTO>> getDashboardStats() {
         DashboardStatsDTO stats = trainingPlanService.getDashboardStats();
         return ResponseEntity.ok(ApiResponse.ok("Fetched dashboard stats successfully", stats));
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Groom', 'Veterinarian')")
     public ResponseEntity<ApiResponse<Page<TrainingPlanSummaryDTO>>> getTrainingPlans(
             @RequestParam(required = false) String status,
             @RequestParam(defaultValue = "0") int page,
@@ -70,8 +73,9 @@ public class TrainingPlanController {
     // 2. Lấy danh sách Groom/Trainer đổ vào Dropdown gán việc
     @GetMapping("/assignable-staff")
     @PreAuthorize("hasAuthority('Trainer')")
-    public ResponseEntity<ApiResponse<List<StaffAssignDTO>>> getAssignableStaff() {
-        List<StaffAssignDTO> staffList = trainingPlanService.getAssignableStaff();
+    public ResponseEntity<ApiResponse<List<StaffAssignDTO>>> getAssignableStaff(@RequestParam Integer planId) {
+        // Chỉ Groom đang hoạt động cùng khu chuồng với ngựa của giáo án (SRS: khu → ngựa → Groom của khu)
+        List<StaffAssignDTO> staffList = trainingPlanService.getAssignableStaff(planId);
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách nhân sự phân công thành công", staffList));
     }
 
