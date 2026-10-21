@@ -1,6 +1,7 @@
 package com.horsetrack.equinecare.modules.nutrition.controller;
 
 import com.horsetrack.equinecare.common.base.ApiResponse;
+import com.horsetrack.equinecare.modules.inventory.dto.InventoryItemDTO;
 import com.horsetrack.equinecare.modules.nutrition.dto.NutritionPlanCreateRequestDTO;
 import com.horsetrack.equinecare.modules.nutrition.dto.NutritionPlanResponseDTO;
 import com.horsetrack.equinecare.modules.nutrition.dto.NutritionTodayItemDTO;
@@ -48,6 +49,13 @@ public class NutritionPlanController {
             @RequestParam(required = false) String status) {
         List<NutritionPlanResponseDTO> plans = nutritionPlanService.getNutritionPlans(horseId, status);
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách thực đơn thành công", plans));
+    }
+
+    @GetMapping("/nutrition-plans/feed-items")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian', 'Groom', 'Club Manager')")
+    @Operation(summary = "Danh sách thức ăn / phụ gia trong kho để lên thực đơn")
+    public ResponseEntity<ApiResponse<List<InventoryItemDTO>>> getFeedItems() {
+        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách thức ăn thành công", nutritionPlanService.getFeedItems()));
     }
 
     /**

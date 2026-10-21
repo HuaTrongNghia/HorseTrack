@@ -1,5 +1,6 @@
 package com.horsetrack.equinecare.modules.nutrition.service;
 
+import com.horsetrack.equinecare.modules.inventory.dto.InventoryItemDTO;
 import com.horsetrack.equinecare.modules.nutrition.dto.NutritionPlanCreateRequestDTO;
 import com.horsetrack.equinecare.modules.nutrition.dto.NutritionPlanResponseDTO;
 import com.horsetrack.equinecare.modules.nutrition.dto.NutritionTodayItemDTO;
@@ -14,4 +15,5 @@ public interface NutritionPlanService {
     NutritionPlanResponseDTO updateNutritionPlan(Integer planId, NutritionPlanCreateRequestDTO request);
     void cancelNutritionPlan(Integer planId);
     void deleteNutritionPlan(Integer planId);
+    List<InventoryItemDTO> getFeedItems();
 }

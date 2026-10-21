@@ -5,7 +5,9 @@ import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
 import com.horsetrack.equinecare.modules.horse.repository.HorseRepository;
+import com.horsetrack.equinecare.modules.inventory.dto.InventoryItemDTO;
 import com.horsetrack.equinecare.modules.inventory.entity.InventoryItem;
+import com.horsetrack.equinecare.modules.inventory.service.InventoryMapper;
 import com.horsetrack.equinecare.modules.inventory.repository.InventoryItemRepository;
 import com.horsetrack.equinecare.modules.nutrition.dto.NutritionPlanCreateRequestDTO;
 import com.horsetrack.equinecare.modules.nutrition.dto.NutritionPlanDetailCreateDTO;
@@ -94,7 +96,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
                 NutritionPlanDetail detail = NutritionPlanDetail.builder()
                         .nutritionPlan(savedPlan)
                         .inventoryItem(item)
-                        .mealType(detailDTO.getMealType().toUpperCase())
+                        .mealType(normalizeMealType(detailDTO.getMealType()))
                         .quantity(detailDTO.getQuantity())
                         .build();
 
@@ -188,7 +190,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
                 NutritionPlanDetail detail = NutritionPlanDetail.builder()
                         .nutritionPlan(plan)
                         .inventoryItem(item)
-                        .mealType(d.getMealType().toUpperCase())
+                        .mealType(normalizeMealType(d.getMealType()))
                         .quantity(d.getQuantity())
                         .build();
                 newDetails.add(detail);
@@ -216,6 +218,33 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         NutritionPlan plan = nutritionPlanRepository.findById(planId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thực đơn với ID: " + planId));
         nutritionPlanRepository.delete(plan);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<InventoryItemDTO> getFeedItems() {
+        return inventoryItemRepository.findAll().stream()
+                .filter(this::isFeedItem)
+                .sorted((a, b) -> a.getItemName().compareToIgnoreCase(b.getItemName()))
+                .map(item -> InventoryMapper.toItemDTO(item, null))
+                .collect(Collectors.toList());
+    }
+
+    private String normalizeMealType(String mealType) {
+        String value = mealType.trim().toUpperCase();
+        return "AFTERNOON".equals(value) ? "NOON" : value;
+    }
+
+    private boolean isFeedItem(InventoryItem item) {
+        String category = item.getCategory() == null ? "" : item.getCategory().toLowerCase();
+        String group = item.getItemGroup() == null ? "" : item.getItemGroup().toLowerCase();
+        String route = item.getRoute() == null ? "" : item.getRoute().toLowerCase();
+        if (category.equals("thức ăn") || category.equals("feed") || category.equals("supplement")) {
+            return true;
+        }
+        boolean oral = route.isEmpty() || route.contains("uống");
+        boolean supplement = group.contains("bổ sung") || group.contains("tiêu hóa");
+        return oral && supplement && !Boolean.TRUE.equals(item.getRequiresPrescription());
     }
 
     private NutritionPlanResponseDTO toResponseDTO(NutritionPlan p) {

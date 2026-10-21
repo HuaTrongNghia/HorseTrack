@@ -17,7 +17,7 @@ public class NutritionPlanDetailCreateDTO {
     private Integer inventoryItemId;
 
     @NotBlank(message = "Loại bữa ăn (mealType) không được để trống")
-    @Pattern(regexp = "(?i)^(MORNING|AFTERNOON|EVENING)$", message = "mealType phải là MORNING, AFTERNOON hoặc EVENING")
+    @Pattern(regexp = "(?i)^(MORNING|NOON|AFTERNOON|EVENING)$", message = "mealType phải là MORNING, NOON (AFTERNOON) hoặc EVENING")
     private String mealType;
 
     @NotNull(message = "Định lượng (quantity) không được để trống")
