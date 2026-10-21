@@ -39,7 +39,7 @@ public class PurchaseOrderReceiveRequestDTO {
         @Digits(integer = 8, fraction = 2, message = "Số lượng tối đa 2 chữ số thập phân")
         private Double quantityReceived;
 
-        @NotBlank(message = "Số lô (lotNo) là bắt buộc khi nhận hàng")
+        // Tùy chọn: để trống thì hệ thống tự sinh số lô
         @Size(max = 50, message = "Số lô không được vượt quá 50 ký tự")
         private String lotNo;
 

@@ -94,7 +94,7 @@ public class PurchaseOrderController {
     }
 
     @PutMapping("/purchase-orders/{orderId}/receive")
-    @Operation(summary = "Nhận hàng và nhập kho", description = "Nhận từng dòng với số lượng, số lô, hạn dùng. Nhận đủ thì đơn RECEIVED, chưa đủ thì PARTIALLY_RECEIVED.")
+    @Operation(summary = "Nhận hàng và nhập kho", description = "Nhận từng dòng với số lượng và hạn dùng (số lô tùy chọn, để trống thì hệ thống tự sinh). Nhận đủ thì đơn RECEIVED, chưa đủ thì PARTIALLY_RECEIVED.")
     public ResponseEntity<ApiResponse<PurchaseOrderDTO>> receiveOrder(@PathVariable Integer orderId,
                                                                       @Valid @RequestBody PurchaseOrderReceiveRequestDTO request) {
         return ResponseEntity.ok(ApiResponse.ok("Nhận hàng và nhập kho thành công", purchaseOrderService.receiveOrder(orderId, request)));

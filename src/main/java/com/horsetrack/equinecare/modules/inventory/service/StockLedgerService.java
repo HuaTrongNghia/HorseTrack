@@ -44,10 +44,13 @@ public class StockLedgerService {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Số lượng nhập phải lớn hơn 0.");
         }
-        if (lotNo == null || lotNo.isBlank()) {
-            throw new IllegalArgumentException("Phải nhập số lô (lotNo) khi nhập kho.");
-        }
         InventoryItem item = lockItem(itemId);
+        // Không nhập số lô thì tự sinh (Inventory_Lots bắt buộc có số lô, duy nhất theo vật tư)
+        if (lotNo == null || lotNo.isBlank()) {
+            lotNo = autoLotNo(itemId);
+        } else {
+            lotNo = lotNo.trim();
+        }
 
         InventoryLot lot = lotRepository.findByItem_ItemIdAndLotNo(itemId, lotNo).orElse(null);
         if (lot != null) {
@@ -243,6 +246,16 @@ public class StockLedgerService {
     }
 
     // Gọi sau khi đã khóa vật tư; đọc lại lô để có số lượng mới nhất
+    // Số lô tự sinh: AUTO-yyMMdd-HHmmssSSS, thêm hậu tố nếu trùng
+    private String autoLotNo(Integer itemId) {
+        String base = "AUTO-" + LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyMMdd-HHmmssSSS"));
+        String lotNo = base;
+        for (int i = 2; lotRepository.findByItem_ItemIdAndLotNo(itemId, lotNo).isPresent(); i++) {
+            lotNo = base + "-" + i;
+        }
+        return lotNo;
+    }
+
     private InventoryLot findLot(InventoryItem item, String lotNo) {
         InventoryLot lot = lotRepository.findByItem_ItemIdAndLotNo(item.getItemId(), lotNo)
                 .orElseThrow(() -> new ResourceNotFoundException("Vật tư " + item.getItemName() + " không có lô " + lotNo + "."));

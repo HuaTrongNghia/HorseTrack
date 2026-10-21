@@ -71,7 +71,7 @@ public class InventoryController {
 
     @PostMapping("/stock-movements")
     @Operation(summary = "Nhập / xuất / điều chỉnh / hủy hàng",
-            description = "RECEIVE (bắt buộc lotNo), ISSUE, DISPOSE (bắt buộc note), ADJUST (quantity âm để giảm, bắt buộc note). Mỗi lần ghi một dòng nhật ký kho.")
+            description = "RECEIVE (lotNo tùy chọn, để trống thì tự sinh), ISSUE, DISPOSE (bắt buộc note), ADJUST (quantity âm để giảm, bắt buộc note). Mỗi lần ghi một dòng nhật ký kho.")
     public ResponseEntity<ApiResponse<StockMovementResponseDTO>> recordMovement(@Valid @RequestBody StockMovementRequestDTO request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Ghi nhận phát sinh kho thành công", inventoryService.recordMovement(request)));

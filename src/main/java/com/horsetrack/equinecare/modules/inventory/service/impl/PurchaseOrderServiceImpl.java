@@ -283,12 +283,13 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             }
 
             // Nhập kho qua sổ cái, gắn lô với dòng đơn hàng
-            stockLedger.receive(line.getItem().getItemId(), qty, r.getLotNo().trim(), r.getExpiryDate(),
+            // Số lô tùy chọn: để trống thì sổ cái tự sinh
+            var tx = stockLedger.receive(line.getItem().getItemId(), qty, r.getLotNo(), r.getExpiryDate(),
                     line.getPoLineId(), "PURCHASE_ORDER", order.getOrderId(),
                     note != null ? note : "Nhận hàng đơn " + order.getOrderCode());
 
             line.setQuantityReceived(round2((line.getQuantityReceived() != null ? line.getQuantityReceived() : 0) + qty));
-            line.setLotNo(r.getLotNo().trim());
+            line.setLotNo(tx.getLot() != null ? tx.getLot().getLotNo() : r.getLotNo());
             line.setExpiryDate(r.getExpiryDate());
         }
 
