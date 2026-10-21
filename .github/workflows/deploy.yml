@@ -1,0 +1,62 @@
+name: Deploy HorseTrack API
+
+on:
+  push:
+    branches:
+      - main
+      - deploy
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: horsetrack-test-deployment
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    name: Build and deploy
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 20
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        env:
+          IMAGE_TAG: horsetrack-api:${{ github.sha }}
+        run: docker build --pull --tag "$IMAGE_TAG" .
+
+      - name: Replace application container
+        env:
+          IMAGE_TAG: horsetrack-api:${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker rm --force horsetrack-service 2>/dev/null || true
+          docker run --detach \
+            --name horsetrack-service \
+            --restart unless-stopped \
+            --publish 8080:8080 \
+            "$IMAGE_TAG"
+
+          for attempt in {1..12}; do
+            if [[ "$(docker inspect --format '{{.State.Running}}' horsetrack-service)" != "true" ]]; then
+              docker logs horsetrack-service
+              exit 1
+            fi
+            sleep 5
+          done
+
+      - name: Prune old HorseTrack images
+        if: success()
+        run: |
+          docker image prune --force
+          docker images horsetrack-api --format '{{.Repository}}:{{.Tag}}' \
+            | grep -v '^horsetrack-api:${{ github.sha }}$' \
+            | xargs --no-run-if-empty docker image rm || true
