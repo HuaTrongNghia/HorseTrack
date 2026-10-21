@@ -15,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Mã OTP 6 chữ số gửi qua email.
  * - Dùng 1 lần: kiểm tra đúng là xóa ngay.
- * - Hết hạn sau app.otp.ttl-seconds (mặc định 120 giây).
+ * - Hết hạn sau app.otp.ttl-seconds (mặc định 300 giây = 5 phút).
  * - Yêu cầu mã mới thì mã cũ mất hiệu lực.
  * - Nhập sai quá app.otp.max-attempts lần thì mã bị hủy.
  * - Giữa 2 lần gửi phải cách app.otp.resend-cooldown-seconds để tránh spam email.
@@ -50,7 +50,7 @@ public class OtpService {
     private final int maxAttempts;
     private final long cooldownSeconds;
 
-    public OtpService(@Value("${app.otp.ttl-seconds:120}") long ttlSeconds,
+    public OtpService(@Value("${app.otp.ttl-seconds:300}") long ttlSeconds,
                       @Value("${app.otp.max-attempts:5}") int maxAttempts,
                       @Value("${app.otp.resend-cooldown-seconds:30}") long cooldownSeconds) {
         this.ttlSeconds = ttlSeconds;
@@ -65,12 +65,18 @@ public class OtpService {
     public void checkAndMarkCooldown(String email, Purpose purpose) {
         String key = key(email, purpose);
         Instant now = Instant.now();
-        Instant last = lastIssued.get(key);
-        if (last != null && last.plusSeconds(cooldownSeconds).isAfter(now)) {
-            long wait = cooldownSeconds - (now.getEpochSecond() - last.getEpochSecond());
-            throw new IllegalArgumentException("Bạn vừa yêu cầu mã OTP. Vui lòng chờ " + Math.max(wait, 1) + " giây rồi thử lại.");
+        // compute() khóa theo key: 2 yêu cầu gửi cùng lúc không thể cùng vượt qua thời gian chờ
+        long[] wait = {0};
+        lastIssued.compute(key, (k, last) -> {
+            if (last != null && last.plusSeconds(cooldownSeconds).isAfter(now)) {
+                wait[0] = Math.max(cooldownSeconds - (now.getEpochSecond() - last.getEpochSecond()), 1);
+                return last;
+            }
+            return now;
+        });
+        if (wait[0] > 0) {
+            throw new IllegalArgumentException("Bạn vừa yêu cầu mã OTP. Vui lòng chờ " + wait[0] + " giây rồi thử lại.");
         }
-        lastIssued.put(key, now);
         removeExpired(now);
     }
 
@@ -98,7 +104,7 @@ public class OtpService {
         }
         if (entry.expiresAt().isBefore(Instant.now())) {
             codes.remove(key);
-            throw new IllegalArgumentException("Mã OTP đã hết hạn (hiệu lực " + ttlSeconds + " giây). Hãy yêu cầu mã mới.");
+            throw new IllegalArgumentException("Mã OTP đã hết hạn (hiệu lực " + ttlText() + "). Hãy yêu cầu mã mới.");
         }
         boolean matches = otp != null && MessageDigest.isEqual(
                 entry.hash().getBytes(StandardCharsets.UTF_8), hash(key, otp.trim()).getBytes(StandardCharsets.UTF_8));
@@ -112,6 +118,22 @@ public class OtpService {
             throw new IllegalArgumentException("Mã OTP không đúng. Bạn còn " + (maxAttempts - attempts) + " lần thử.");
         }
         codes.remove(key);
+    }
+
+    public long getTtlSeconds() {
+        return ttlSeconds;
+    }
+
+    /** Thời hạn mã dạng chữ, ví dụ "5 phút" hoặc "90 giây". */
+    public String ttlText() {
+        return formatDuration(ttlSeconds);
+    }
+
+    public static String formatDuration(long seconds) {
+        if (seconds >= 60 && seconds % 60 == 0) {
+            return (seconds / 60) + " phút";
+        }
+        return seconds + " giây";
     }
 
     private void removeExpired(Instant now) {
