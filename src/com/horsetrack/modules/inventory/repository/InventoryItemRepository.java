@@ -25,4 +25,6 @@ public interface InventoryItemRepository extends JpaRepository<InventoryItem, In
     boolean existsByItemNameIgnoreCaseAndCategory(String itemName, String category);
 
     List<InventoryItem> findByCategoryInOrderByItemNameAsc(java.util.Collection<String> categories);
+
+    List<InventoryItem> findByCategoryNotInOrderByItemNameAsc(java.util.Collection<String> categories);
 }
