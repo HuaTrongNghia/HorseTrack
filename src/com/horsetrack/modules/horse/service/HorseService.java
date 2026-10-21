@@ -12,4 +12,7 @@ public interface HorseService {
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO getHorseDetail(Integer horseId);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO approveHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseApprovalRequestDTO request);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO updateHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseUpdateRequestDTO request);
+    com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO rejectHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseRejectRequestDTO request);
+    com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO resubmitHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseResubmitRequestDTO request);
+    java.util.List<com.horsetrack.equinecare.modules.horse.dto.RegistrationHistoryDTO> getRegistrationHistory(Integer horseId);
 }
