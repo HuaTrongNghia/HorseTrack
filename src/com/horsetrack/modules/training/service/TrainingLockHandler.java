@@ -23,8 +23,10 @@ import java.util.stream.Collectors;
 
 /**
  * Tác động của khóa huấn luyện (VetLock) lên giáo án (BR_01 / F3-03, F21-02):
- * - Khi khóa: hủy mọi buổi tập đang chờ, tạm dừng giáo án ACTIVE (PAUSED), gửi email báo HLV phụ trách và chủ ngựa.
- * - Khi mở khóa: kích hoạt lại giáo án đã tạm dừng vì khóa (ACTIVE), gửi email báo HLV và chủ ngựa.
+ * - Khi khóa: hủy mọi buổi tập chưa thực hiện (chờ xác nhận / đã xác nhận), tạm dừng giáo án ACTIVE (PAUSED),
+ *   gửi email báo HLV phụ trách và chủ ngựa. Giáo án PENDING giữ nguyên trạng thái chờ.
+ * - Khi mở khóa: giáo án tạm dừng quay về PENDING (các buổi tập cũ đã bị hủy), HLV phân công lại buổi tập
+ *   và giáo án chạy lại khi Groom xác nhận (xem TrainingPlanActivator). Gửi email báo HLV và chủ ngựa.
  * Chạy trong transaction của nghiệp vụ khóa / mở khóa. Email gửi nền, lỗi email không làm hỏng nghiệp vụ.
  */
 @Slf4j
@@ -57,16 +59,16 @@ public class TrainingLockHandler {
         }
         planRepository.saveAll(plans);
 
-        String sessionsHtml = pending.isEmpty() ? "<p>Không có buổi tập nào đang chờ.</p>"
+        String sessionsHtml = pending.isEmpty() ? "<p>Không có buổi tập nào chưa thực hiện.</p>"
                 : "<ul>" + pending.stream()
                     .map(s -> "<li>" + esc(s.getSessionDate().format(TIME)) + " · " + esc(s.getActivityType()) + "</li>")
                     .collect(Collectors.joining()) + "</ul>";
         String body = """
                 <p>Ngựa <b>%s</b> vừa bị <b>khóa huấn luyện (VetLock)</b>.</p>
                 <p>Lý do: %s</p>
-                <p>Hệ thống đã hủy <b>%d</b> buổi tập đang chờ và tạm dừng giáo án của ngựa:</p>
+                <p>Hệ thống đã hủy <b>%d</b> buổi tập chưa thực hiện và tạm dừng giáo án của ngựa:</p>
                 %s
-                <p>Giáo án sẽ được kích hoạt lại khi Bác sĩ thú y mở khóa.</p>
+                <p>Khi Bác sĩ thú y mở khóa, HLV phân công lại buổi tập để giáo án chạy tiếp.</p>
                 """.formatted(esc(horse.getHorseName()), esc(why), pending.size(), sessionsHtml);
         notify(horse, plans, "[HorseTrack] Ngựa " + horse.getHorseName() + " bị khóa huấn luyện", body);
 
@@ -74,11 +76,11 @@ public class TrainingLockHandler {
         return pending.size();
     }
 
-    /** Gọi ngay sau khi Bác sĩ thú y mở khóa huấn luyện. Trả về số giáo án được kích hoạt lại. */
+    /** Gọi ngay sau khi Bác sĩ thú y mở khóa huấn luyện. Trả về số giáo án được chuyển về trạng thái chờ. */
     public int onHorseUnlocked(Horse horse) {
         List<TrainingPlan> plans = planRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), "PAUSED");
         for (TrainingPlan p : plans) {
-            p.setStatus("ACTIVE");
+            p.setStatus(TrainingPlanActivator.PLAN_PENDING);
             p.setPausedReason(null);
         }
         planRepository.saveAll(plans);
@@ -86,7 +88,7 @@ public class TrainingLockHandler {
         if (!plans.isEmpty()) {
             String body = """
                     <p>Ngựa <b>%s</b> đã được Bác sĩ thú y <b>mở khóa huấn luyện</b>.</p>
-                    <p>Giáo án đã được kích hoạt lại. HLV có thể xếp lịch tập mới.</p>
+                    <p>Giáo án chuyển về trạng thái <b>đang chờ</b>. HLV phân công lại buổi tập; giáo án chạy lại khi Groom xác nhận buổi tập.</p>
                     """.formatted(esc(horse.getHorseName()));
             notify(horse, plans, "[HorseTrack] Ngựa " + horse.getHorseName() + " được mở khóa huấn luyện", body);
         }
