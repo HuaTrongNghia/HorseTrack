@@ -1,6 +1,7 @@
 package com.horsetrack.equinecare.modules.inventory.controller;
 
 import com.horsetrack.equinecare.common.base.ApiResponse;
+import com.horsetrack.equinecare.modules.inventory.dto.InventoryItemDTO;
 import com.horsetrack.equinecare.modules.inventory.dto.ReasonRequestDTO;
 import com.horsetrack.equinecare.modules.inventory.dto.SupplyRequestCreateDTO;
 import com.horsetrack.equinecare.modules.inventory.dto.SupplyRequestDTO;
@@ -35,6 +36,13 @@ public class SupplyRequestController {
     public ResponseEntity<ApiResponse<SupplyRequestDTO>> createRequest(@Valid @RequestBody SupplyRequestCreateDTO request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Đã gửi yêu cầu vật tư", supplyRequestService.createRequest(request)));
+    }
+
+    @GetMapping("/supply-requests/items")
+    @PreAuthorize("hasAuthority('Groom')")
+    @Operation(summary = "Danh mục vật tư Groom được yêu cầu", description = "Vật tư thật trong kho (trừ MEDICINE/VACCINE) kèm khả dụng; dùng cho ô chọn vật tư khi gửi yêu cầu.")
+    public ResponseEntity<ApiResponse<List<InventoryItemDTO>>> getRequestableItems() {
+        return ResponseEntity.ok(ApiResponse.ok("Lấy danh mục vật tư thành công", supplyRequestService.getRequestableItems()));
     }
 
     @GetMapping("/supply-requests/my")
