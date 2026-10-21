@@ -8,8 +8,8 @@ import com.horsetrack.equinecare.modules.auth.dto.RefreshTokenRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.StaffCreateRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.ForgotPasswordRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.ResetPasswordRequestDTO;
+import com.horsetrack.equinecare.modules.auth.security.OtpService;
 import com.horsetrack.equinecare.modules.auth.service.AuthService;
-import com.horsetrack.equinecare.modules.notification.exception.EmailSendException;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -27,10 +27,12 @@ public class AuthController {
 
     private final AuthService authService;
     private final EmailService emailService;
+    private final OtpService otpService;
 
-    public AuthController(AuthService authService, EmailService emailService) {
+    public AuthController(AuthService authService, EmailService emailService, OtpService otpService) {
         this.authService = authService;
         this.emailService = emailService;
+        this.otpService = otpService;
     }
 
     @PostMapping("/register-owner")
@@ -65,26 +67,28 @@ public class AuthController {
         }
 
         // Gửi email thất bại không hủy tài khoản đã tạo; báo để Club Manager gửi thông tin cho nhân viên theo cách khác
-        String message;
-        try {
-            emailService.sendStaffAccount(request.getEmail().trim(), request.getFullName().trim(), request.getRoleName(),
-                    request.getUsername().trim(), request.getPassword());
-            message = emailService.isConfigured()
-                    ? "Tạo tài khoản nhân viên thành công! Đã gửi tên đăng nhập và mật khẩu tới " + request.getEmail().trim() + "."
+        // Email gửi ở nền; chờ tối đa app.mail.wait-seconds để báo kết quả, quá hạn thì vẫn tiếp tục gửi
+        String email = request.getEmail().trim();
+        EmailService.Delivery delivery = emailService.await(emailService.sendStaffAccount(email, request.getFullName().trim(),
+                request.getRoleName(), request.getUsername().trim(), request.getPassword()));
+        String message = switch (delivery) {
+            case SENT -> emailService.isConfigured()
+                    ? "Tạo tài khoản nhân viên thành công! Đã gửi tên đăng nhập và mật khẩu tới " + email + "."
                     : "Tạo tài khoản nhân viên thành công! (Chế độ dev: email chưa gửi thật, xem nội dung trong console server.)";
-        } catch (EmailSendException ex) {
-            message = "Tạo tài khoản nhân viên thành công, nhưng KHÔNG gửi được email tới " + request.getEmail().trim()
+            case PENDING -> "Tạo tài khoản nhân viên thành công! Email tới " + email
+                    + " đang được gửi; nếu nhân viên không nhận được sau vài phút, hãy gửi thông tin đăng nhập theo cách khác.";
+            case FAILED -> "Tạo tài khoản nhân viên thành công, nhưng KHÔNG gửi được email tới " + email
                     + ". Hãy gửi thông tin đăng nhập cho nhân viên theo cách khác.";
-        }
+        };
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(message, null));
     }
 
     @PostMapping("/forgot-password")
-    @Operation(summary = "Quên mật khẩu: gửi OTP", description = "Gửi mã OTP 6 số (hiệu lực 120 giây, dùng 1 lần) tới email. Luôn trả cùng một thông báo dù email có tồn tại hay không.")
+    @Operation(summary = "Quên mật khẩu: gửi OTP", description = "Gửi mã OTP 6 số (hiệu lực 5 phút, dùng 1 lần) tới email. Luôn trả cùng một thông báo dù email có tồn tại hay không.")
     public ResponseEntity<ApiResponse<Void>> forgotPassword(@Valid @RequestBody ForgotPasswordRequestDTO request) {
         authService.forgotPassword(request);
         return ResponseEntity.ok(ApiResponse.ok(
-                "Nếu email đã đăng ký, mã OTP đã được gửi tới email đó. Mã có hiệu lực 120 giây.", null));
+                "Nếu email đã đăng ký, mã OTP đã được gửi tới email đó. Mã có hiệu lực " + otpService.ttlText() + ".", null));
     }
 
     @PostMapping("/reset-password")
