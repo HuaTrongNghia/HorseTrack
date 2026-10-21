@@ -1,179 +1,217 @@
-package com.horsetrack.equinecare.modules.medical.service.impl;
+package com.horsetrack.equinecare.modules.medical.service;
 
+import com.horsetrack.equinecare.common.exception.ResourceNotFoundException;
+import com.horsetrack.equinecare.modules.auth.entity.GroomProfile;
 import com.horsetrack.equinecare.modules.auth.entity.User;
+import com.horsetrack.equinecare.modules.auth.repository.GroomProfileRepository;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
 import com.horsetrack.equinecare.modules.horse.repository.HorseRepository;
-import com.horsetrack.equinecare.modules.inventory.entity.InventoryItem;
-import com.horsetrack.equinecare.modules.inventory.repository.InventoryItemRepository;
-import com.horsetrack.equinecare.modules.inventory.repository.PurchaseOrderRepository;
-import com.horsetrack.equinecare.modules.medical.dto.MedicalRecordCreateRequestDTO;
-import com.horsetrack.equinecare.modules.medical.dto.PrescriptionItemCreateDTO;
-import com.horsetrack.equinecare.modules.medical.entity.InjuryMark;
-import com.horsetrack.equinecare.modules.medical.entity.MedicalRecord;
-import com.horsetrack.equinecare.modules.medical.entity.PrescriptionItem;
-import com.horsetrack.equinecare.modules.medical.exception.InvalidPrescriptionException;
-import com.horsetrack.equinecare.modules.medical.repository.InjuryMarkRepository;
-import com.horsetrack.equinecare.modules.medical.repository.MedicalRecordRepository;
-import com.horsetrack.equinecare.modules.medical.repository.PrescriptionItemRepository;
-import com.horsetrack.equinecare.modules.medical.service.MedicalRecordService;
+import com.horsetrack.equinecare.modules.medical.dto.CaseReportRequestDTO;
+import com.horsetrack.equinecare.modules.medical.dto.MedicalCaseDTO;
+import com.horsetrack.equinecare.modules.medical.dto.VetActionRequestDTO;
+import com.horsetrack.equinecare.modules.medical.dto.VetLockRequestDTO;
+import com.horsetrack.equinecare.modules.medical.entity.VetCase;
+import com.horsetrack.equinecare.modules.medical.repository.VetCaseRepository;
+import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
-public class MedicalRecordServiceImpl implements MedicalRecordService {
+public class MedicalService {
 
-    private final MedicalRecordRepository medicalRecordRepository;
-    private final InjuryMarkRepository injuryMarkRepository;
-    private final PrescriptionItemRepository prescriptionItemRepository;
     private final HorseRepository horseRepository;
+    private final VetCaseRepository vetCaseRepository;
     private final UserRepository userRepository;
-    private final InventoryItemRepository inventoryItemRepository;
-    private final PurchaseOrderRepository purchaseOrderRepository;
+    private final GroomProfileRepository groomProfileRepository;
+    private final EntityManager entityManager;
+    private final com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public Integer createMedicalRecord(MedicalRecordCreateRequestDTO request) {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User vet = userRepository.findByUsername(username)
-                .orElseThrow(() -> new RuntimeException("Veterinarian not found"));
+    private boolean isCurrentUserVeterinarian() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        return auth != null && auth.getAuthorities().stream().anyMatch(a -> "Veterinarian".equals(a.getAuthority()));
+    }
 
-        Horse horse = horseRepository.findById(request.getHorseId())
-                .orElseThrow(() -> new RuntimeException("Horse not found"));
+    // 1. Hàm kích hoạt Khóa y tế (VetLock)
+    @Transactional
+    public void applyVetLock(VetLockRequestDTO dto) throws Exception {
+        Horse horse = horseRepository.findById(dto.getHorseId())
+                .orElseThrow(() -> new Exception("Không tìm thấy ngựa với ID: " + dto.getHorseId()));
 
-        if (request.getPrescriptionItems() != null) {
-            for (PrescriptionItemCreateDTO itemDto : request.getPrescriptionItems()) {
-                InventoryItem invItem = inventoryItemRepository.findById(itemDto.getItemId())
-                        .orElseThrow(() -> new RuntimeException("Inventory item not found for ID: " + itemDto.getItemId()));
-                
-                double currentStock = invItem.getCurrentStock() != null ? invItem.getCurrentStock() : 0;
-                Double incomingStock = purchaseOrderRepository.getIncomingQuantity(itemDto.getItemId(), request.getVisitDate());
-                if (incomingStock == null) incomingStock = 0.0;
+        if (Boolean.TRUE.equals(horse.getIsLocked())) {
+            throw new Exception("Ngựa này hiện đang bị khóa y tế rồi!");
+        }
 
-                double totalAvailable = currentStock + incomingStock;
+        horse.setIsLocked(true);
 
-                if (totalAvailable < itemDto.getQuantityPrescribed()) {
-                    throw new InvalidPrescriptionException(String.format(
-                            "Vật tư [%s] không đủ đáp ứng. Khả dụng (bao gồm lô hàng sắp về): [%s], Yêu cầu: [%d]. Vui lòng điều chỉnh phác đồ!",
-                            invItem.getItemName(), BigDecimal.valueOf(totalAvailable).stripTrailingZeros().toPlainString(),
-                            itemDto.getQuantityPrescribed()));
-                }
+        // Chỉ Bác sĩ thú y mới kết luận chấn thương (INJURED).
+        // Trainer/Groom bấm khẩn cấp thì chỉ khóa tập và chuyển sang WATCH để chờ bác sĩ khám.
+        boolean isVet = isCurrentUserVeterinarian();
+        horse.setHealthStatus(isVet ? "INJURED" : "WATCH");
+
+        horseRepository.save(horse);
+
+        int cancelled = trainingLockHandler.onHorseLocked(horse, dto.getReason());
+        auditTrail.record("VET_LOCK", "Horses", "isLocked=false",
+                "isLocked=true, health=" + horse.getHealthStatus() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId()
+                        + ") | hủy " + cancelled + " buổi tập | Lý do: " + dto.getReason());
+
+        log.warn("EMERGENCY VETLOCK: Ngựa ID {} đã bị khóa bởi {} ({})! Lý do: {}", horse.getHorseId(),
+                SecurityContextHolder.getContext().getAuthentication().getName(), isVet ? "INJURED" : "WATCH", dto.getReason());
+    }
+
+    // 2. Hàm mở khóa y tế (Hồi phục)
+    @Transactional
+    public void releaseVetLock(Integer horseId) throws Exception {
+        Horse horse = horseRepository.findById(horseId)
+                .orElseThrow(() -> new Exception("Không tìm thấy ngựa!"));
+
+        if (!Boolean.TRUE.equals(horse.getIsLocked())) {
+            throw new Exception("Ngựa này hiện không bị khóa y tế, không cần mở khóa!");
+        }
+
+        horse.setIsLocked(false);
+
+        // Đặt lại health_status về trạng thái khỏe mạnh hợp lệ của DB (Ví dụ: "Healthy" hoặc "Khỏe mạnh")
+        horse.setHealthStatus("HEALTHY");
+
+        horseRepository.save(horse);
+        trainingLockHandler.onHorseUnlocked(horse);
+        auditTrail.record("VET_UNLOCK", "Horses", "isLocked=true",
+                "isLocked=false, health=HEALTHY | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ")");
+    }
+
+    // ==========================================
+    // CA KHÁM / SỰ CỐ (bảng Vet_Cases)
+    // ==========================================
+
+    /**
+     * Hộp thư ca khám. Bác sĩ thú y xem mọi ca; Groom / Trainer chỉ xem các ca do chính mình báo.
+     * status = ALL (hoặc bỏ trống) để lấy mọi trạng thái.
+     */
+    @Transactional(readOnly = true)
+    public List<MedicalCaseDTO> getInboxCases(String status) {
+        String st = StringUtils.hasText(status) && !"ALL".equalsIgnoreCase(status.trim()) ? status.trim().toUpperCase() : null;
+        Integer reportedById = isCurrentUserVeterinarian() ? null : currentUser().getUserId();
+        return vetCaseRepository.search(st, reportedById).stream().map(this::toCaseDTO).collect(Collectors.toList());
+    }
+
+    /** Groom / Trainer báo sự cố; Groom chỉ báo được cho ngựa thuộc khu mình phụ trách (SRS màn hình 51). */
+    @Transactional
+    public MedicalCaseDTO reportCase(CaseReportRequestDTO dto) {
+        User reporter = currentUser();
+        Horse horse = horseRepository.findById(dto.getHorseId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngựa với ID: " + dto.getHorseId()));
+
+        boolean isGroom = "Groom".equals(reporter.getRoleName());
+        if (isGroom) {
+            String horseZone = horse.getStall() != null ? horse.getStall().getBarnZone() : null;
+            String groomZone = groomProfileRepository.findById(reporter.getUserId()).map(GroomProfile::getAssignedBarnZone).orElse(null);
+            if (horseZone == null || groomZone == null || !horseZone.trim().equalsIgnoreCase(groomZone.trim())) {
+                throw new AccessDeniedException("Bạn chỉ báo sự cố được cho ngựa thuộc khu mình phụ trách (khu của bạn: "
+                        + (groomZone == null ? "chưa có" : groomZone) + ").");
             }
         }
 
-        if (Boolean.TRUE.equals(request.getIsLockoutOrdered())) {
-            // Bác sĩ chỉ định khóa tập => kết luận chấn thương (giá trị hợp lệ theo CHK_Horse_Health)
-            horse.setIsLocked(true);
-            horse.setHealthStatus("INJURED");
-            horseRepository.save(horse);
-        }
-
-        MedicalRecord record = MedicalRecord.builder()
+        VetCase vetCase = VetCase.builder()
                 .horse(horse)
-                .veterinarian(vet)
-                .diagnosis(request.getDiagnosis())
-                .symptoms(request.getSymptoms())
-                .isLockoutOrdered(request.getIsLockoutOrdered())
-                .status("PENDING_APPROVAL")
-                .createdAt(LocalDateTime.now())
+                .reportedBy(reporter)
+                .caseType(dto.getCaseType().trim())
+                .description(dto.getDescription().trim())
+                .imageUrl(StringUtils.hasText(dto.getImageUrl()) ? dto.getImageUrl().trim() : null)
+                .severity(StringUtils.hasText(dto.getSeverity()) ? dto.getSeverity().toUpperCase() : "MEDIUM")
+                .source(isGroom ? "GROOM_REPORT" : "TRAINER_REQUEST")
+                .status("NEW")
+                .reportedAt(LocalDateTime.now())
                 .build();
-        
-        MedicalRecord savedRecord = medicalRecordRepository.save(record);
-
-        if (request.getInjuryMarks() != null) {
-            List<InjuryMark> injuryMarks = request.getInjuryMarks().stream().map(dto -> 
-                InjuryMark.builder()
-                    .affectedBodyPart(dto.getBodyPartCode())
-                    .coordX(dto.getCoordX())
-                    .coordY(dto.getCoordY())
-                    .severityLevel(dto.getSeverityLevel())
-                    .medicalRecord(savedRecord)
-                    .build()
-            ).collect(Collectors.toList());
-            injuryMarkRepository.saveAll(injuryMarks);
-        }
-
-        if (request.getPrescriptionItems() != null) {
-            List<PrescriptionItem> prescriptionItems = request.getPrescriptionItems().stream().map(dto -> {
-                InventoryItem invItem = inventoryItemRepository.findById(dto.getItemId()).orElseThrow();
-                return PrescriptionItem.builder()
-                    .medicineName(invItem.getItemName())
-                    .dosageInstructions(dto.getDosage())
-                    .quantity(BigDecimal.valueOf(dto.getQuantityPrescribed()))
-                    .medicalRecord(savedRecord)
-                    .build();
-            }).collect(Collectors.toList());
-            prescriptionItemRepository.saveAll(prescriptionItems);
-        }
-
-        return savedRecord.getRecordId();
+        VetCase saved = vetCaseRepository.saveAndFlush(vetCase);
+        // Đọc lại để lấy case_code do DB tự sinh
+        entityManager.refresh(saved);
+        log.info("Ca khám mới {} cho ngựa {} do {} báo", saved.getCaseCode(), horse.getHorseName(), reporter.getUsername());
+        return toCaseDTO(saved);
     }
 
-    // ==========================================
-    // LUỒNG PHÊ DUYỆT VÀ THANH TOÁN (VNPay)
-    // ==========================================
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void approveMedicalRecord(Integer recordId) {
-        MedicalRecord record = medicalRecordRepository.findById(recordId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh án"));
-
-        if (!"PENDING_APPROVAL".equals(record.getStatus())) {
-            throw new RuntimeException("Hồ sơ không ở trạng thái chờ duyệt");
+    /** Bác sĩ ghi nhận kết quả khám và hướng xử lý: ca chuyển sang MONITORING, gán cho bác sĩ đang đăng nhập. */
+    @Transactional
+    public MedicalCaseDTO processVetAction(VetActionRequestDTO dto) {
+        VetCase vetCase = findCase(dto.getCaseId());
+        if ("CLOSED".equals(vetCase.getStatus()) || "CANCELLED".equals(vetCase.getStatus())) {
+            throw new IllegalArgumentException("Ca " + vetCase.getCaseCode() + " đã đóng, không thể ghi nhận thêm.");
         }
-
-        // Club Manager duyệt phác đồ
-        record.setStatus("APPROVED_AWAITING_PAYMENT");
-        medicalRecordRepository.save(record);
+        String result = "Kết quả khám: " + dto.getVetNotes().trim()
+                + (StringUtils.hasText(dto.getTreatmentDirection()) ? " | Hướng xử lý: " + dto.getTreatmentDirection().trim() : "");
+        vetCase.setOutcome(result.length() > 1000 ? result.substring(0, 1000) : result);
+        vetCase.setAssignedVet(currentUser());
+        vetCase.setStatus("MONITORING");
+        return toCaseDTO(vetCaseRepository.save(vetCase));
     }
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void processPayment(Integer recordId, String paymentMethod) {
-        MedicalRecord record = medicalRecordRepository.findById(recordId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh án"));
-
-        if (!"APPROVED_AWAITING_PAYMENT".equals(record.getStatus())) {
-            throw new RuntimeException("Hồ sơ không ở trạng thái chờ thanh toán");
+    /** Bác sĩ đóng ca khi không cần điều trị thêm (SRS màn hình 60). */
+    @Transactional
+    public MedicalCaseDTO closeCase(String caseRef, String outcome) {
+        VetCase vetCase = findCase(caseRef);
+        if ("CLOSED".equals(vetCase.getStatus()) || "CANCELLED".equals(vetCase.getStatus())) {
+            throw new IllegalArgumentException("Ca " + vetCase.getCaseCode() + " đã đóng trước đó.");
         }
+        vetCase.setStatus("CLOSED");
+        vetCase.setOutcome(outcome.trim().length() > 1000 ? outcome.trim().substring(0, 1000) : outcome.trim());
+        vetCase.setAssignedVet(vetCase.getAssignedVet() != null ? vetCase.getAssignedVet() : currentUser());
+        vetCase.setClosedAt(LocalDateTime.now());
+        return toCaseDTO(vetCaseRepository.save(vetCase));
+    }
 
-        // Xác thực đúng chủ ngựa đang đăng nhập mới được thanh toán
+    // Nhận mã ca (C-0001) hoặc ID số
+    private VetCase findCase(String caseRef) {
+        String ref = caseRef == null ? "" : caseRef.trim();
+        if (ref.startsWith("#")) {
+            ref = ref.substring(1);
+        }
+        Optional<VetCase> found = vetCaseRepository.findByCaseCode(ref.toUpperCase());
+        if (found.isEmpty() && ref.matches("\\d+")) {
+            found = vetCaseRepository.findById(Integer.valueOf(ref));
+        }
+        String shown = ref;
+        return found.orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ca khám: " + shown));
+    }
+
+    private User currentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        User user = userRepository.findByUsername(username).orElseThrow();
-        if (record.getHorse().getOwner() != null && !record.getHorse().getOwner().getUserId().equals(user.getUserId())) {
-            throw new org.springframework.security.access.AccessDeniedException("Bạn không phải chủ của ngựa này");
-        }
-
-        // Giả lập (Mock) gọi cổng VNPay thành công
-        record.setStatus("IN_TREATMENT");
-        medicalRecordRepository.save(record);
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + username));
     }
 
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void confirmRecovery(Integer recordId) {
-        MedicalRecord record = medicalRecordRepository.findById(recordId)
-                .orElseThrow(() -> new RuntimeException("Không tìm thấy hồ sơ bệnh án"));
-
-        // Bác sĩ xác nhận hoàn tất điều trị
-        record.setStatus("COMPLETED");
-        medicalRecordRepository.save(record);
-
-        // Mở khóa VetLock cho ngựa
-        Horse horse = record.getHorse();
-        if (Boolean.TRUE.equals(record.getIsLockoutOrdered()) && horse != null) {
-            horse.setIsLocked(false);
-            horse.setHealthStatus("HEALTHY");
-            horseRepository.save(horse);
-        }
+    private MedicalCaseDTO toCaseDTO(VetCase c) {
+        return MedicalCaseDTO.builder()
+                .caseId(c.getCaseCode())
+                .id(c.getCaseId())
+                .horseId(c.getHorse().getHorseId())
+                .horseName(c.getHorse().getHorseName())
+                .source(c.getSource())
+                .issueType(c.getCaseType())
+                .severity(c.getSeverity())
+                .status(c.getStatus())
+                .description(c.getDescription())
+                .imageUrl(c.getImageUrl())
+                .reportedById(c.getReportedBy().getUserId())
+                .reportedByName(c.getReportedBy().getFullName())
+                .assignedVetName(c.getAssignedVet() != null ? c.getAssignedVet().getFullName() : null)
+                .vetResult(c.getOutcome())
+                .createdAt(c.getReportedAt())
+                .closedAt(c.getClosedAt())
+                .build();
     }
 }
