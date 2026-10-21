@@ -80,12 +80,28 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         TrainingSession session = trainingSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Session not found"));
 
-        if (session.getAssignedTo() == null || !session.getAssignedTo().getUserId().equals(user.getUserId())) {
+        boolean isAssigned = session.getAssignedTo() != null && session.getAssignedTo().getUserId().equals(user.getUserId());
+        boolean isTrainerOrManager = "Trainer".equalsIgnoreCase(user.getRoleName()) || "Club Manager".equalsIgnoreCase(user.getRoleName());
+
+        if (!isAssigned && !isTrainerOrManager) {
             throw new AccessDeniedException("You are not assigned to this session");
         }
 
-        if (!TrainingPlanActivator.OPEN_SESSION_STATUSES.contains(String.valueOf(session.getStatus()).toUpperCase())) {
-            throw new IllegalArgumentException("Không thể cập nhật buổi tập đang ở trạng thái " + session.getStatus() + ".");
+        java.util.List<String> cancellableStatuses = java.util.List.of(
+                TrainingPlanActivator.SESSION_PENDING,
+                TrainingPlanActivator.SESSION_CONFIRMED,
+                "IN_PROGRESS",
+                "PAUSED",
+                "PAUSED_PENDING_TRAINER"
+        );
+        if ("CANCELLED".equalsIgnoreCase(request.getStatus())) {
+            if (!cancellableStatuses.contains(String.valueOf(session.getStatus()).toUpperCase())) {
+                throw new IllegalArgumentException("Không thể hủy buổi tập đang ở trạng thái " + session.getStatus() + ".");
+            }
+        } else {
+            if (!TrainingPlanActivator.OPEN_SESSION_STATUSES.contains(String.valueOf(session.getStatus()).toUpperCase())) {
+                throw new IllegalArgumentException("Không thể cập nhật buổi tập đang ở trạng thái " + session.getStatus() + ".");
+            }
         }
         // Buổi tập phải được Groom xác nhận (PUT /{sessionId}/confirm) trước khi thực hiện
         if ("COMPLETED".equalsIgnoreCase(request.getStatus()) && TrainingPlanActivator.SESSION_PENDING.equalsIgnoreCase(session.getStatus())) {
@@ -125,6 +141,12 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
                     plan.setStatus("COMPLETED");
                     trainingPlanRepository.save(plan);
                 }
+            }
+        } else if ("CANCELLED".equalsIgnoreCase(request.getStatus())) {
+            TrainingPlan plan = session.getTrainingPlan();
+            if (plan != null && (TrainingPlanActivator.PLAN_ACTIVE.equalsIgnoreCase(plan.getStatus()) || TrainingPlanActivator.PLAN_PENDING.equalsIgnoreCase(plan.getStatus()))) {
+                plan.setStatus("PAUSED");
+                trainingPlanRepository.save(plan);
             }
         }
     }

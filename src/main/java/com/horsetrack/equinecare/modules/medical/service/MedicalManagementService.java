@@ -44,7 +44,11 @@ import java.util.stream.Collectors;
 public class MedicalManagementService {
 
     // Nhóm vật tư bác sĩ được kê trong phác đồ (danh mục thuốc)
-    private static final Set<String> MEDICAL_CATEGORIES = Set.of("MEDICINE", "VACCINE", "MEDICAL_SUPPLY");
+    private static final Set<String> MEDICAL_CATEGORIES = Set.of(
+            "MEDICINE", "VACCINE", "MEDICAL_SUPPLY",
+            "Thuốc", "Vaccine", "Vật tư y tế",
+            "Thuoc", "Vat tu y te"
+    );
     // Trạng thái trước khi cấp thuốc: còn sửa (phiên bản mới) hoặc hủy được
     private static final Set<String> REVISABLE_STATES = Set.of(
             "WAITING_STOCK_CHECK", "STOCK_AVAILABLE", "STOCK_SHORTAGE", "WAITING_RESTOCK", "REQUIRES_VET_REVIEW", "VET_CONFIRMED", "ON_HOLD_PAYMENT");
@@ -73,6 +77,7 @@ public class MedicalManagementService {
                         .itemCode(i.getItemCode())
                         .itemName(i.getItemName())
                         .category(i.getCategory())
+                        .itemGroup(i.getItemGroup())
                         .unit(i.getUnit())
                         .unitPrice(i.getUnitPrice())
                         .availableStock(BigDecimal.valueOf(i.getAvailableStock()).setScale(2, RoundingMode.HALF_UP).doubleValue())

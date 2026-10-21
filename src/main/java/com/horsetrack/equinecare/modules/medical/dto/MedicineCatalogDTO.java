@@ -17,6 +17,7 @@ public class MedicineCatalogDTO {
     private String itemCode;
     private String itemName;
     private String category;
+    private String itemGroup;
     private String unit;
     private BigDecimal unitPrice;
     private Double availableStock;
