@@ -13,6 +13,9 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     // Kiểm tra trùng Email
     boolean existsByEmail(String email);
 
+    // GEN-01: số điện thoại không được trùng giữa các tài khoản
+    boolean existsByPhone(String phone);
+
     // Kiểm tra trùng Username
     boolean existsByUsername(String username);
 
