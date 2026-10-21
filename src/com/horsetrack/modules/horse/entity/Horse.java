@@ -58,4 +58,45 @@ public class Horse {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    // Cột tính toán do DB tự sinh (HT-0001), chỉ đọc
+    @Column(name = "horse_code", insertable = false, updatable = false)
+    private String horseCode;
+
+    @Column(name = "color", length = 50)
+    private String color;
+
+    @Column(name = "height_hands", precision = 4, scale = 1)
+    private BigDecimal heightHands;
+
+    @Column(name = "passport_no", length = 50)
+    private String passportNo;
+
+    @Column(name = "health_cert_issuer", length = 150)
+    private String healthCertIssuer;
+
+    @Column(name = "health_cert_expiry")
+    private LocalDate healthCertExpiry;
+
+    // Trạng thái hồ sơ đăng ký mới nhất (Horse_Registrations), chỉ đọc
+    @org.hibernate.annotations.Formula("(SELECT TOP 1 r.status FROM Horse_Registrations r WHERE r.horse_id = horse_id ORDER BY r.registration_id DESC)")
+    private String latestRegistrationStatus;
+
+    // Trạng thái duyệt hiển thị: PENDING (chờ duyệt), APPROVED (đã duyệt, có chuồng), REJECTED (bị từ chối), CANCELLED
+    public static final String APPROVAL_PENDING = "PENDING";
+    public static final String APPROVAL_APPROVED = "APPROVED";
+    public static final String APPROVAL_REJECTED = "REJECTED";
+
+    public String getApprovalStatus() {
+        if (latestRegistrationStatus == null) {
+            // Ngựa tạo trước khi có bảng hồ sơ: suy ra từ việc đã được cấp chuồng hay chưa
+            return stall != null ? APPROVAL_APPROVED : APPROVAL_PENDING;
+        }
+        return switch (latestRegistrationStatus) {
+            case "PENDING_REVIEW" -> APPROVAL_PENDING;
+            case "APPROVED" -> APPROVAL_APPROVED;
+            case "REJECTED" -> APPROVAL_REJECTED;
+            default -> latestRegistrationStatus;
+        };
+    }
 }
