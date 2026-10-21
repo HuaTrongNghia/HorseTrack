@@ -41,12 +41,15 @@ public class TrainingLockHandler {
     private final TrainingPlanRepository planRepository;
     private final EmailService emailService;
     private final SessionIncidentHandler incidentHandler;
+    private final com.horsetrack.equinecare.modules.nutrition.service.NutritionLockHandler nutritionLockHandler;
 
     /** Gọi ngay sau khi ngựa chuyển sang khóa huấn luyện. Trả về số buổi tập đã hủy. */
     public int onHorseLocked(Horse horse, String reason) {
         String why = StringUtils.hasText(reason) ? reason.trim() : "Khóa huấn luyện theo chỉ định y tế";
         // Buổi tập đang chờ bác sĩ (dừng vì vượt ngưỡng) kết thúc và giáo án của nó đóng lại trước
         incidentHandler.resolveWaitingVet(horse, true, why);
+        // BR_03: khẩu phần của ngựa bị khóa do bác sĩ thú y đảm nhiệm
+        nutritionLockHandler.onHorseLocked(horse);
 
         List<TrainingSession> pending = sessionRepository.findPendingByHorse(horse.getHorseId());
         for (TrainingSession s : pending) {
@@ -81,6 +84,8 @@ public class TrainingLockHandler {
 
     /** Gọi ngay sau khi Bác sĩ thú y mở khóa huấn luyện. Trả về số giáo án được chuyển về trạng thái chờ. */
     public int onHorseUnlocked(Horse horse) {
+        // BR_03: mở khóa thì khẩu phần y tế kết thúc, HLV lập lại khẩu phần thường
+        nutritionLockHandler.onHorseUnlocked(horse);
         List<TrainingPlan> plans = planRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), "PAUSED");
         for (TrainingPlan p : plans) {
             p.setStatus(TrainingPlanActivator.PLAN_PENDING);

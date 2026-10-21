@@ -53,8 +53,9 @@ public class DietChangeController {
         return ResponseEntity.ok(ApiResponse.ok("Lấy chi tiết đề xuất thức ăn đặc biệt thành công", response));
     }
 
+    // Chỉ Bác sĩ thú y xét duyệt (quyết định chuyên môn dinh dưỡng)
     @PutMapping("/diet-requests/{requestId}/decide")
-    @PreAuthorize("hasAnyAuthority('Veterinarian', 'Club Manager')")
+    @PreAuthorize("hasAuthority('Veterinarian')")
     @Operation(summary = "Bác sĩ thú y duyệt hoặc từ chối đề xuất thức ăn đặc biệt")
     public ResponseEntity<ApiResponse<DietChangeResponseDTO>> decideDietRequest(
             @PathVariable Integer requestId,

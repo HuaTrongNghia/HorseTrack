@@ -43,12 +43,6 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class MedicalManagementService {
 
-    // Nhóm vật tư bác sĩ được kê trong phác đồ (danh mục thuốc)
-    private static final Set<String> MEDICAL_CATEGORIES = Set.of(
-            "MEDICINE", "VACCINE", "MEDICAL_SUPPLY",
-            "Thuốc", "Vaccine", "Vật tư y tế",
-            "Thuoc", "Vat tu y te"
-    );
     // Trạng thái trước khi cấp thuốc: còn sửa (phiên bản mới) hoặc hủy được
     private static final Set<String> REVISABLE_STATES = Set.of(
             "WAITING_STOCK_CHECK", "STOCK_AVAILABLE", "STOCK_SHORTAGE", "WAITING_RESTOCK", "REQUIRES_VET_REVIEW", "VET_CONFIRMED", "ON_HOLD_PAYMENT");
@@ -71,7 +65,7 @@ public class MedicalManagementService {
 
     @Transactional(readOnly = true)
     public List<MedicineCatalogDTO> getMedicineCatalog() {
-        return itemRepository.findByCategoryInOrderByItemNameAsc(MEDICAL_CATEGORIES).stream()
+        return itemRepository.findByCategoryInOrderByItemNameAsc(com.horsetrack.equinecare.modules.inventory.service.ItemCategories.MEDICAL_VALUES).stream()
                 .map(i -> MedicineCatalogDTO.builder()
                         .itemId(i.getItemId())
                         .itemCode(i.getItemCode())
@@ -272,9 +266,10 @@ public class MedicalManagementService {
                 }
                 InventoryItem item = itemRepository.findById(i.getItemId())
                         .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thuốc/vật tư với ID: " + i.getItemId()));
-                if (!MEDICAL_CATEGORIES.contains(item.getCategory())) {
+                // Nhóm vật tư bác sĩ được kê trong phác đồ: thuốc, vaccine, vật tư y tế
+                if (!com.horsetrack.equinecare.modules.inventory.service.ItemCategories.isMedical(item.getCategory())) {
                     throw new IllegalArgumentException("'" + item.getItemName() + "' (nhóm " + item.getCategory()
-                            + ") không thuộc danh mục thuốc. Chỉ kê được MEDICINE, VACCINE hoặc MEDICAL_SUPPLY.");
+                            + ") không thuộc danh mục thuốc. Chỉ kê được Thuốc, Vaccine hoặc Vật tư y tế.");
                 }
                 phase.addItem(ProtocolItem.builder()
                         .item(item)

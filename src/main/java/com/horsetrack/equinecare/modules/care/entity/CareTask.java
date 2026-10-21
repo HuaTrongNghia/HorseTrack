@@ -54,6 +54,14 @@ public class CareTask {
     private String notes;
 
     // Cảnh báo trễ hạn (BR_05 / F4-04): hệ thống ghi khi quá 45 phút sau giờ hẹn mà chưa xong; khác null thì không cảnh báo lặp
+    // Lưu ý đặc biệt của khẩu phần (ví dụ thức ăn bác sĩ duyệt thêm) hiển thị cho Groom
+    @Column(name = "diet_note", length = 255)
+    private String dietNote;
+
+    // Việc cho ăn theo khẩu phần y tế của bác sĩ
+    @Column(name = "is_medical_diet")
+    private Boolean isMedicalDiet;
+
     @Column(name = "warning_note", length = 500)
     private String warningNote;
 

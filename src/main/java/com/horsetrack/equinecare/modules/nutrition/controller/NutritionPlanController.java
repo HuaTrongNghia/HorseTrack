@@ -29,7 +29,7 @@ public class NutritionPlanController {
      * Khởi tạo Thực đơn Dinh dưỡng (BR_03)
      */
     @PostMapping("/nutrition-plans")
-    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian', 'Club Manager')")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian')")
     @Operation(summary = "Tạo thực đơn dinh dưỡng mới")
     public ResponseEntity<ApiResponse<Integer>> createNutritionPlan(
             @Valid @RequestBody NutritionPlanCreateRequestDTO request) {
@@ -74,7 +74,7 @@ public class NutritionPlanController {
      * Sửa thực đơn dinh dưỡng
      */
     @PutMapping("/nutrition-plans/{planId}")
-    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian', 'Club Manager')")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian')")
     @Operation(summary = "Chỉnh sửa thực đơn dinh dưỡng")
     public ResponseEntity<ApiResponse<NutritionPlanResponseDTO>> updateNutritionPlan(
             @PathVariable Integer planId,
@@ -87,7 +87,7 @@ public class NutritionPlanController {
      * Hủy thực đơn dinh dưỡng (đổi status = CANCELLED)
      */
     @PutMapping("/nutrition-plans/{planId}/cancel")
-    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian', 'Club Manager')")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian')")
     @Operation(summary = "Hủy thực đơn dinh dưỡng")
     public ResponseEntity<ApiResponse<Void>> cancelNutritionPlan(@PathVariable Integer planId) {
         nutritionPlanService.cancelNutritionPlan(planId);
@@ -98,7 +98,7 @@ public class NutritionPlanController {
      * Xóa thực đơn dinh dưỡng
      */
     @DeleteMapping("/nutrition-plans/{planId}")
-    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian', 'Club Manager')")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian')")
     @Operation(summary = "Xóa thực đơn dinh dưỡng")
     public ResponseEntity<ApiResponse<Void>> deleteNutritionPlan(@PathVariable Integer planId) {
         nutritionPlanService.deleteNutritionPlan(planId);
@@ -106,9 +106,23 @@ public class NutritionPlanController {
     }
 
     /**
+     * Gửi khẩu phần cho nhân viên: tạo việc cho ăn (từng bữa) cho Groom phụ trách khu chuồng của ngựa.
+     * Hệ thống cũng tự gửi khi lập / sửa khẩu phần và hằng ngày lúc 00:05.
+     */
+    @PostMapping("/nutrition-plans/{planId}/feed-tasks")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian')")
+    @Operation(summary = "Gửi khẩu phần thành việc cho ăn cho Groom", description = "date (yyyy-MM-dd, mặc định hôm nay). Bữa đã có việc thì bỏ qua; hôm nay chỉ gửi các bữa chưa tới giờ.")
+    public ResponseEntity<ApiResponse<Integer>> sendFeedTasks(@PathVariable Integer planId,
+                                                              @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate date) {
+        int n = nutritionPlanService.sendFeedTasks(planId, date);
+        return ResponseEntity.ok(ApiResponse.ok(n > 0 ? "Đã gửi " + n + " việc cho ăn cho Groom" : "Không có bữa nào cần gửi thêm", n));
+    }
+
+    /**
      * Xem Thực đơn hôm nay của một con ngựa
      */
     @GetMapping("/horses/{horseId}/nutrition-plan/today")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian', 'Groom', 'Club Manager', 'Horse Owner')")
     @Operation(summary = "Xem thực đơn hôm nay của ngựa")
     public ResponseEntity<ApiResponse<List<NutritionTodayItemDTO>>> getTodayNutritionPlan(
             @PathVariable Integer horseId) {

@@ -42,9 +42,11 @@ public class InventoryServiceImpl implements InventoryService {
     @Override
     @Transactional(readOnly = true)
     public List<InventoryItemDTO> getItems(String category, String keyword) {
-        String cat = StringUtils.hasText(category) ? category.trim().toUpperCase() : null;
+        // Nhận cả mã (MEDICINE) lẫn nhãn (Thuốc); tìm cả bản ghi lưu nhãn và bản ghi cũ lưu mã
+        String cat = StringUtils.hasText(category) ? com.horsetrack.equinecare.modules.inventory.service.ItemCategories.label(category) : null;
+        String code = StringUtils.hasText(category) ? com.horsetrack.equinecare.modules.inventory.service.ItemCategories.code(category) : null;
         String kw = StringUtils.hasText(keyword) ? keyword.trim() : null;
-        return itemRepository.search(cat, kw).stream()
+        return itemRepository.search(cat, code != null ? code : cat, kw).stream()
                 .map(item -> InventoryMapper.toItemDTO(item, null))
                 .collect(Collectors.toList());
     }
@@ -59,7 +61,7 @@ public class InventoryServiceImpl implements InventoryService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public InventoryItemDTO createItem(InventoryItemRequestDTO request) {
-        String category = request.getCategory().toUpperCase();
+        String category = normalizeCategory(request.getCategory());
         if (itemRepository.existsByItemNameIgnoreCaseAndCategory(request.getItemName().trim(), category)) {
             throw new IllegalArgumentException("Vật tư '" + request.getItemName().trim() + "' đã tồn tại trong nhóm " + category + ".");
         }
@@ -159,9 +161,18 @@ public class InventoryServiceImpl implements InventoryService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy vật tư với ID: " + itemId));
     }
 
+    // Lưu nhãn tiếng Việt chuẩn (khớp dữ liệu hiện có); nhận cả mã tiếng Anh hoặc nhãn
+    private static String normalizeCategory(String category) {
+        if (com.horsetrack.equinecare.modules.inventory.service.ItemCategories.code(category) == null) {
+            throw new IllegalArgumentException("Nhóm vật tư '" + category + "' không hợp lệ. Dùng một trong: "
+                    + String.join(", ", com.horsetrack.equinecare.modules.inventory.service.ItemCategories.LABELS.values()) + " (hoặc mã " + String.join(", ", com.horsetrack.equinecare.modules.inventory.service.ItemCategories.LABELS.keySet()) + ").");
+        }
+        return com.horsetrack.equinecare.modules.inventory.service.ItemCategories.label(category);
+    }
+
     private void applyItemInfo(InventoryItem item, InventoryItemRequestDTO request) {
         item.setItemName(request.getItemName().trim());
-        item.setCategory(request.getCategory().toUpperCase());
+        item.setCategory(normalizeCategory(request.getCategory()));
         item.setUnit(request.getUnit().trim());
         item.setUnitPrice(request.getUnitPrice());
         item.setMinSafetyStock(round2(request.getMinSafetyStock()));

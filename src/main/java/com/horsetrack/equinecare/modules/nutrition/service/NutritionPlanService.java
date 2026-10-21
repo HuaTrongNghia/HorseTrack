@@ -16,4 +16,7 @@ public interface NutritionPlanService {
     void cancelNutritionPlan(Integer planId);
     void deleteNutritionPlan(Integer planId);
     List<InventoryItemDTO> getFeedItems();
+
+    // Gửi khẩu phần thành việc cho ăn cho Groom của khu chuồng; trả về số việc vừa tạo
+    int sendFeedTasks(Integer planId, java.time.LocalDate date);
 }

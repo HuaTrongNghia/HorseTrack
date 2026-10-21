@@ -2,7 +2,7 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **119 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **131 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 ---
 
@@ -479,51 +479,74 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 
 ---
 
-## 5. Nutrition — Thực đơn dinh dưỡng
+## 5. Nutrition — Khẩu phần dinh dưỡng & đề xuất thức ăn
 
-### 5.1 `POST /api/v1/nutrition-plans` — Tạo thực đơn
-> **Phạm vi Trainer:** Trainer gọi với ngựa không được Club Manager phân công cho mình (3.8) → `403`.
+**Ai lập khẩu phần (BR_03):** ngựa khỏe → **HLV phụ trách ngựa** (khẩu phần `STANDARD`); ngựa đang khóa huấn luyện / chấn thương → **Bác sĩ thú y** (khẩu phần `MEDICAL`). Club Manager chỉ xem.
 
-Chỉ `Trainer` hoặc `Veterinarian` được gọi.
+**Ai xem được:** Trainer chỉ ngựa được phân công (3.8); Horse Owner chỉ ngựa của mình; Groom chỉ ngựa trong khu phụ trách (3.9); Bác sĩ thú y và Club Manager xem mọi ngựa. Ngoài phạm vi → `403`.
+
+### 5.1 `POST /api/v1/nutrition-plans` — Lập khẩu phần (`Trainer`, `Veterinarian`)
 
 ```json
 {
-  "horseId": 1,
-  "startDate": "2026-10-19",
+  "horseId": 6,
+  "startDate": "2026-10-22",
   "endDate": "2026-10-31",
-  "notes": "Thực đơn tăng sức bền",
+  "notes": "Khẩu phần tăng sức bền",
   "details": [
     { "inventoryItemId": 1, "mealType": "MORNING", "quantity": 3.5 },
+    { "inventoryItemId": 1, "mealType": "NOON", "quantity": 2 },
     { "inventoryItemId": 2, "mealType": "EVENING", "quantity": 2 }
   ]
 }
 ```
 
-- `inventoryItemId` phải có thật trong bảng `Inventory_Items`.
-- `mealType` chỉ nhận `MORNING`, `AFTERNOON` hoặc `EVENING`.
-- **Luật nghiệp vụ BR_03** (đây là phần quan trọng nhất để test):
+- `mealType`: `MORNING` (07:00), `NOON` (11:30), `EVENING` (17:00). `AFTERNOON` vẫn được nhận và lưu thành `NOON`. Giờ từng bữa chỉnh bằng `app.nutrition.*-time`.
+- **Mong đợi:** `201`, `data` là `planId`, `status = ACTIVE`, `planType` theo BR_03. Ghi Audit Log `CREATE_NUTRITION_PLAN`.
+- **Thay thế:** mỗi ngựa chỉ có một khẩu phần áp dụng tại một thời điểm. Khẩu phần mới giao thời gian với khẩu phần đang áp dụng thì khẩu phần cũ **kết thúc trước ngày khẩu phần mới bắt đầu** (hoặc bị hủy nếu chưa bắt đầu); việc cho ăn của khẩu phần cũ từ ngày đó bị hủy.
+- **Gửi cho nhân viên:** khi lập (và mỗi ngày lúc 00:05), mỗi bữa của khẩu phần thành một **việc cho ăn** (`FEED`) giao cho Groom phụ trách khu chuồng của ngựa, kèm định lượng từng món (`instructions`) và lưu ý đặc biệt (`dietNote`). Hôm nay chỉ gửi các bữa chưa tới giờ. Groom xem ở `GET /care-tasks/my-tasks` (9.1).
 
-| Ngựa (`isLocked`) | Người gọi | Kết quả mong đợi |
-|---|---|---|
-| `false` | Trainer | `201`, trả về `planId` |
-| `false` | Veterinarian | `403` "Ngựa khỏe mạnh. Quyền lên thực đơn thuộc về Huấn luyện viên (Trainer)." |
-| `true` | Trainer | `403` "Ngựa đang bị khóa y tế. Chỉ Bác sĩ Thú y..." |
-| `true` | Veterinarian | `201` |
-| bất kỳ | Groom / Owner | `403` (sai role) |
+| Trường hợp | Kết quả |
+|---|---|
+| Ngựa khỏe, Trainer phụ trách | `201` |
+| Ngựa khỏe, Veterinarian / Club Manager | `403` "...Khẩu phần do HLV phụ trách ngựa lập (BR_03)" |
+| Ngựa đang khóa, Trainer | `403` "...Chỉ Bác sĩ thú y được lập khẩu phần lúc này (BR_03)" |
+| Ngựa đang khóa, Veterinarian | `201`, `planType = MEDICAL` |
+| Trainer không phụ trách ngựa | `403` |
+| Ngựa chưa có chuồng; `endDate` trước `startDate` hoặc ở quá khứ; `details` rỗng; `mealType` sai | `400` |
+| Món không phải thức ăn (thuốc kê đơn, thuốc tiêm / bôi, vaccine, vật tư y tế) | `400` "...không phải thức ăn. Chọn món trong danh sách GET /nutrition-plans/feed-items..." |
+| `horseId` / `inventoryItemId` không tồn tại | `404` |
 
-  Để đổi `isLocked` của ngựa, dùng mục 3.6 hoặc 10.1 / 10.2.
+### 5.2 Xem khẩu phần
 
-- **Test lỗi khác:**
-  - `endDate` trước `startDate` → `400`.
-  - `details: []` → `400`.
-  - `horseId` không tồn tại → `404`.
+- `GET /api/v1/nutrition-plans/feed-items` (Trainer, Veterinarian, Groom, Club Manager): các món được dùng trong khẩu phần — nhóm Thức ăn / Thức ăn bổ sung, hoặc sản phẩm bổ sung / tiêu hóa đường uống không cần kê đơn.
 
-### 5.2 `GET /api/v1/horses/{horseId}/nutrition-plan/today`
-> **Phạm vi Trainer:** Trainer gọi với ngựa không được Club Manager phân công cho mình (3.8) → `403`.
+- `GET /api/v1/horses/{horseId}/nutrition-plan/today`: các món của khẩu phần **đang áp dụng** hôm nay (khẩu phần đã hủy / kết thúc không hiện). Không có → `data: []`.
+- `GET /api/v1/nutrition-plans?horseId=&status=` (`ACTIVE`, `ENDED`, `CANCELLED`): danh sách, tự lọc theo phạm vi người gọi.
+- `GET /api/v1/nutrition-plans/{planId}`: chi tiết (món theo bữa, `planType`, `status`, `specialInstructions`).
 
-- **Mong đợi:** `200`, danh sách món ăn hôm nay của ngựa (khi hôm nay nằm trong khoảng `startDate` – `endDate`).
-- Không có thực đơn nào cho hôm nay → `200` với `data: []`.
-- `horseId` không tồn tại → `404`.
+### 5.3 Sửa / hủy / xóa / gửi lại (`Trainer` với khẩu phần thường của ngựa khỏe; `Veterinarian` với khẩu phần y tế hoặc ngựa đang khóa)
+
+- `PUT /api/v1/nutrition-plans/{planId}` (body như 5.1): chỉ khẩu phần `ACTIVE`, không đổi ngựa. Việc cho ăn chưa làm được hủy và gửi lại theo định lượng mới.
+- `PUT /api/v1/nutrition-plans/{planId}/cancel`: `ACTIVE` → `CANCELLED`, hủy các việc cho ăn chưa làm.
+- `DELETE /api/v1/nutrition-plans/{planId}`: chỉ xóa được khẩu phần **chưa bắt đầu** và chưa có đề xuất gắn vào; còn lại `400` → dùng hủy.
+- `POST /api/v1/nutrition-plans/{planId}/feed-tasks?date=2026-10-23`: gửi (lại) việc cho ăn của một ngày cho Groom; bữa đã có việc thì bỏ qua. `data` = số việc vừa tạo.
+- **Test lỗi:** Trainer sửa / hủy khẩu phần y tế hoặc khi ngựa đang khóa, Veterinarian sửa khẩu phần thường của ngựa khỏe, Club Manager → `403`; khẩu phần đã hủy / kết thúc → `400`.
+
+**Khi Groom hoàn thành việc cho ăn** (`PUT /care-tasks/{id}/complete`): kho trừ đúng các món của bữa đó qua sổ cái (nhật ký kho `ISSUE`, nguồn `TASK`) và ghi chi phí vật tư (`Task_Material_Usage`, tính vào hóa đơn tháng dòng `DAILY_CARE`). Thiếu hàng không chặn việc hoàn thành; lý do ghi vào `notes` của việc.
+
+**Khi ngựa bị khóa / mở khóa (BR_03):** khóa (10.1, bệnh án chỉ định khóa, hoặc 3.6) → khẩu phần thường của HLV `ENDED` (khẩu phần chưa bắt đầu `CANCELLED`), việc cho ăn chưa làm bị hủy, bác sĩ thú y nhận email để lập khẩu phần y tế. Mở khóa (10.2) → khẩu phần y tế `ENDED`, HLV phụ trách nhận email để lập lại khẩu phần thường.
+
+### 5.4 Đề xuất thức ăn đặc biệt — `/api/v1/diet-requests`
+
+- `POST /api/v1/diet-requests` (`Groom` trong khu của ngựa, `Trainer` phụ trách ngựa):
+  ```json
+  { "horseId": 6, "itemId": 3, "item": "Cà rốt 1 kg/ngày", "reason": "Ngựa biếng ăn, cần bổ sung" }
+  ```
+  `itemId` tùy chọn (phải tồn tại nếu gửi); `reason` 10–500 ký tự. **Mong đợi:** `201`, `status = PENDING`.
+- `GET /api/v1/diet-requests?horseId=&status=`, `GET /api/v1/diet-requests/{id}`: lọc theo phạm vi người gọi.
+- `PUT /api/v1/diet-requests/{id}/decide` (**chỉ `Veterinarian`**): `{ "approve": true, "note": "Đồng ý" }`. Duyệt → món được thêm vào `specialInstructions` của khẩu phần đang áp dụng và hiện ngay trên các việc cho ăn chưa làm của Groom (`dietNote`). Từ chối → `note` ≥ 10 ký tự. Ghi Audit Log.
+- **Test lỗi:** Groom ngoài khu / Trainer không phụ trách → `403`; duyệt khi ngựa chưa có khẩu phần đang áp dụng → `400` "...Hãy lập khẩu phần trước khi duyệt"; xử lý lần 2 → `400`; Club Manager duyệt → `403`.
 
 ---
 
@@ -1024,7 +1047,7 @@ Sau đó login bằng `kho01` và Authorize.
 }
 ```
 
-- `category` chỉ nhận `FEED`, `SUPPLEMENT`, `MEDICINE`, `VACCINE`, `MEDICAL_SUPPLY`, `STABLE_SUPPLY`, `EQUIPMENT` hoặc `OTHER`.
+- `category` nhận mã (`FEED`, `SUPPLEMENT`, `MEDICINE`, `VACCINE`, `MEDICAL_SUPPLY`, `STABLE_SUPPLY`, `EQUIPMENT`, `OTHER`) hoặc nhãn tiếng Việt (Thức ăn, Thức ăn bổ sung, Thuốc, Vaccine, Vật tư y tế, Vật tư chuồng trại, Dụng cụ, Khác; có dấu hay không đều được). **Luôn lưu thành nhãn tiếng Việt** cho khớp dữ liệu hiện có (ví dụ `MEDICAL_SUPPLY` → "Vật tư y tế"). Lọc `GET /inventory/items?category=` cũng nhận mã hoặc nhãn.
 - **Mong đợi:** `201`. `data` có `itemCode` (DB tự sinh dạng `VT-0013`) và `currentStock = 0`. Vì tồn kho 0 < mức an toàn 20 nên `belowSafetyLevel = true`. **Ghi lại `itemId`**.
 - **Test lỗi:**
   - Thêm lại cùng tên trong cùng nhóm → `400` "Vật tư ... đã tồn tại...".
@@ -1493,7 +1516,10 @@ Sau khi test chức năng chính, thử gọi mỗi API sau bằng **sai role** 
 | `PUT /manager/medical-records/{id}/approve` | Club Manager |
 | `GET /training-plans/{planId}` | Trainer, Club Manager |
 | `POST /training-plans`, `GET /training-plans/assignable-staff`, `POST /training-plans/{id}/sessions` | Trainer |
-| `POST /nutrition-plans` | Trainer, Veterinarian |
+| `POST` / `PUT` / `DELETE /nutrition-plans/**`, `POST /nutrition-plans/{id}/feed-tasks` | Trainer (ngựa khỏe, phụ trách), Veterinarian (ngựa đang khóa / khẩu phần y tế) |
+| `GET /nutrition-plans/**`, `GET /horses/{id}/nutrition-plan/today` | Trainer, Veterinarian, Groom, Club Manager, Horse Owner (theo phạm vi) |
+| `POST /diet-requests` | Groom (cùng khu), Trainer (phụ trách) |
+| `PUT /diet-requests/{id}/decide` | Veterinarian |
 | `POST /veterinary/medical-records` | Veterinarian |
 | `POST /medical/release-lock/{horseId}` | Veterinarian |
 | `/inventory/**` (kho, nhà cung cấp, đơn mua, kiểm kê, xử lý yêu cầu vật tư) | Warehouse Manager |

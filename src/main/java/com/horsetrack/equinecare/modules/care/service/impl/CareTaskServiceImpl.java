@@ -41,6 +41,7 @@ public class CareTaskServiceImpl implements CareTaskService {
     private final EntityManager entityManager;
     private final GroomProfileRepository groomProfileRepository;
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
+    private final com.horsetrack.equinecare.modules.nutrition.service.NutritionFeedTaskService feedTaskService;
 
     // Việc chưa xong (còn có thể bị cảnh báo trễ)
     static final List<String> OPEN_STATUSES = List.of("TODO", "IN_PROGRESS");
@@ -78,6 +79,8 @@ public class CareTaskServiceImpl implements CareTaskService {
                 .groomName(task.getGroom() != null ? task.getGroom().getFullName() : null)
                 .warningNote(task.getWarningNote())
                 .overdue(task.getWarningNote() != null && OPEN_STATUSES.contains(task.getStatus()))
+                .dietNote(task.getDietNote())
+                .medicalDiet(task.getIsMedicalDiet())
                 .build();
     }
 
@@ -100,6 +103,9 @@ public class CareTaskServiceImpl implements CareTaskService {
             throw new AccessDeniedException("Bạn không được phân công công việc này");
         }
 
+        if ("SKIPPED".equals(task.getStatus())) {
+            throw new IllegalArgumentException("Công việc này đã bị hủy (khẩu phần đã thay đổi).");
+        }
         if ("DONE".equals(task.getStatus())) {
             throw new IllegalArgumentException("Công việc này đã được đánh dấu hoàn thành trước đó");
         }
@@ -108,21 +114,9 @@ public class CareTaskServiceImpl implements CareTaskService {
         task.setCompletedAt(LocalDateTime.now());
         careTaskRepository.save(task);
 
-        // Giảm tồn kho nếu là công việc cho ăn (FEED)
+        // Việc cho ăn sinh từ khẩu phần: trừ kho đúng các món của bữa đó qua sổ cái và ghi chi phí vật tư
         if ("FEED".equalsIgnoreCase(task.getTaskType()) && task.getHorse() != null) {
-            List<NutritionPlan> plans = nutritionPlanRepository.findByHorse_HorseIdOrderByCreatedDateDesc(task.getHorse().getHorseId());
-            for (NutritionPlan plan : plans) {
-                if (plan.getDetails() != null) {
-                    for (NutritionPlanDetail detail : plan.getDetails()) {
-                        InventoryItem item = detail.getInventoryItem();
-                        if (item != null && item.getCurrentStock() != null) {
-                            double newStock = Math.max(0, item.getCurrentStock() - detail.getQuantity());
-                            item.setCurrentStock(newStock);
-                            inventoryItemRepository.save(item);
-                        }
-                    }
-                }
-            }
+            feedTaskService.consumeStock(task);
         }
     }
 

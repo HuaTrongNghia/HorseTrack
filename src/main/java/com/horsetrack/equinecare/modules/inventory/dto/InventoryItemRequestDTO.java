@@ -29,8 +29,8 @@ public class InventoryItemRequestDTO {
     private String itemName;
 
     @NotBlank(message = "Nhóm vật tư (category) là bắt buộc")
-    @Pattern(regexp = "(?i)^(FEED|SUPPLEMENT|MEDICINE|VACCINE|MEDICAL_SUPPLY|STABLE_SUPPLY|EQUIPMENT|OTHER)$",
-            message = "category phải là FEED, SUPPLEMENT, MEDICINE, VACCINE, MEDICAL_SUPPLY, STABLE_SUPPLY, EQUIPMENT hoặc OTHER")
+    // Nhận mã (FEED, MEDICINE...) hoặc nhãn tiếng Việt (Thức ăn, Thuốc...); lưu thành nhãn tiếng Việt (ItemCategories)
+    @jakarta.validation.constraints.Size(max = 50, message = "Nhóm vật tư không vượt quá 50 ký tự")
     private String category;
 
     @NotBlank(message = "Đơn vị tính (unit) là bắt buộc")

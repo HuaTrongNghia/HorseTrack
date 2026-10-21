@@ -14,6 +14,11 @@ public interface CareTaskRepository extends JpaRepository<CareTask, Integer> {
 
     long countByGroom_UserIdAndStatusNot(Integer groomId, String status);
 
+    // Việc cho ăn sinh từ khẩu phần (ghi chú bắt đầu bằng KP-planId-MEAL:)
+    List<CareTask> findByHorse_HorseIdAndTaskDateAndTaskType(Integer horseId, LocalDate taskDate, String taskType);
+
+    List<CareTask> findByNotesStartingWithAndStatusAndTaskDateGreaterThanEqual(String notesPrefix, String status, LocalDate fromDate);
+
     // Việc chăm sóc chưa xong từ hôm nay trở đi của một Groom (chặn đổi / bỏ khu khi còn việc dở)
     long countByGroom_UserIdAndStatusInAndTaskDateGreaterThanEqual(Integer groomId, java.util.Collection<String> statuses, LocalDate fromDate);
 

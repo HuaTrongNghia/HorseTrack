@@ -39,6 +39,9 @@ public class DietChangeServiceImpl implements DietChangeService {
     private final InventoryItemRepository itemRepository;
     private final NutritionPlanRepository nutritionPlanRepository;
     private final HorseAccessGuard horseAccessGuard;
+    private final com.horsetrack.equinecare.modules.nutrition.service.NutritionScope scope;
+    private final com.horsetrack.equinecare.modules.nutrition.service.NutritionFeedTaskService feedTaskService;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
 
     private User getLoggedInUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -56,11 +59,17 @@ public class DietChangeServiceImpl implements DietChangeService {
         User user = getLoggedInUser();
         Horse horse = horseRepository.findById(dto.getHorseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngựa với ID: " + dto.getHorseId()));
+        // Trainer chỉ ngựa được phân công; Groom chỉ ngựa trong khu mình phụ trách
         horseAccessGuard.checkAssigned(horse);
+        scope.checkGroomZone(user, horse);
+        if (horse.getStall() == null) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa ở CLB, không thể đề xuất thức ăn.");
+        }
 
         InventoryItem item = null;
         if (dto.getItemId() != null) {
-            item = itemRepository.findById(dto.getItemId()).orElse(null);
+            item = itemRepository.findById(dto.getItemId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy vật tư với ID: " + dto.getItemId()));
         }
 
         DietChangeRequest req = DietChangeRequest.builder()
@@ -90,7 +99,8 @@ public class DietChangeServiceImpl implements DietChangeService {
         } else {
             list = requestRepository.findAllByOrderByRequestedAtDesc();
         }
-        return list.stream().map(this::toDTO).collect(Collectors.toList());
+        User user = scope.currentUser();
+        return list.stream().filter(r -> scope.canView(user, r.getHorse())).map(this::toDTO).collect(Collectors.toList());
     }
 
     @Override
@@ -98,6 +108,7 @@ public class DietChangeServiceImpl implements DietChangeService {
     public DietChangeResponseDTO getDietRequestDetail(Integer requestId) {
         DietChangeRequest req = requestRepository.findById(requestId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy yêu cầu thức ăn đặc biệt ID: " + requestId));
+        scope.checkView(scope.currentUser(), req.getHorse());
         return toDTO(req);
     }
 
@@ -109,7 +120,7 @@ public class DietChangeServiceImpl implements DietChangeService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy yêu cầu thức ăn đặc biệt ID: " + requestId));
 
         if (!"PENDING".equalsIgnoreCase(req.getStatus())) {
-            throw new IllegalStateException("Yêu cầu này đã được xử lý (trạng thái: " + req.getStatus() + ").");
+            throw new IllegalArgumentException("Yêu cầu này đã được xử lý (trạng thái: " + req.getStatus() + ").");
         }
 
         boolean approve = Boolean.TRUE.equals(decision.getApprove());
@@ -119,16 +130,21 @@ public class DietChangeServiceImpl implements DietChangeService {
             }
         }
 
+        // Duyệt thì phải có khẩu phần đang áp dụng để bổ sung, nếu không đề xuất sẽ không có tác dụng
+        List<NutritionPlan> activePlans = approve && req.getHorse() != null
+                ? nutritionPlanRepository.findActivePlansForHorseOnDate(req.getHorse().getHorseId(), LocalDate.now()) : List.of();
+        if (approve && activePlans.isEmpty()) {
+            throw new IllegalArgumentException("Ngựa " + req.getHorse().getHorseName() + " chưa có khẩu phần đang áp dụng để bổ sung. Hãy lập khẩu phần trước khi duyệt.");
+        }
+
         req.setDecidedBy(user);
         req.setDecidedAt(LocalDateTime.now());
         req.setStatus(approve ? "APPROVED" : "REJECTED");
         req.setVetNote(StringUtils.hasText(decision.getNote()) ? decision.getNote().trim() : null);
 
-        if (approve && req.getHorse() != null) {
-            LocalDate today = LocalDate.now();
-            List<NutritionPlan> plans = nutritionPlanRepository.findActivePlansForHorseOnDate(req.getHorse().getHorseId(), today);
-            if (!plans.isEmpty()) {
-                NutritionPlan plan = plans.get(0);
+        if (approve) {
+            {
+                NutritionPlan plan = activePlans.get(0);
                 String currentSpecial = plan.getSpecialInstructions();
                 String newSpecial = (!StringUtils.hasText(currentSpecial))
                         ? req.getRequestDetail()
@@ -136,10 +152,14 @@ public class DietChangeServiceImpl implements DietChangeService {
                 plan.setSpecialInstructions(newSpecial);
                 nutritionPlanRepository.save(plan);
                 req.setNutritionPlanId(plan.getPlanId());
+                // Lưu ý đặc biệt hiển thị ngay trên các việc cho ăn chưa làm của Groom
+                feedTaskService.refreshDietNote(plan);
             }
         }
 
         DietChangeRequest saved = requestRepository.save(req);
+        auditTrail.record(approve ? "APPROVE_DIET_REQUEST" : "REJECT_DIET_REQUEST", "Diet_Change_Requests", "status=PENDING",
+                "status=" + saved.getStatus() + " | ngựa " + (req.getHorse() != null ? req.getHorse().getHorseName() : "?") + " | " + req.getRequestDetail());
         return toDTO(saved);
     }
 

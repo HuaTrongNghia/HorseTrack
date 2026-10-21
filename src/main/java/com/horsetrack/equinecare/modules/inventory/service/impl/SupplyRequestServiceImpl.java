@@ -35,12 +35,6 @@ public class SupplyRequestServiceImpl implements SupplyRequestService {
 
     // Yêu cầu chưa xử lý xong
     private static final Set<String> OPEN_STATUSES = Set.of("SUBMITTED", "CHECKING_STOCK", "WAITING_RESTOCK");
-    // Groom chỉ được yêu cầu vật tư thông thường; thuốc và vaccine đi theo phác đồ của bác sĩ
-    private static final Set<String> MEDICAL_CATEGORIES = Set.of(
-            "MEDICINE", "VACCINE", "MEDICAL_SUPPLY",
-            "Thuốc", "Vaccine", "Vật tư y tế",
-            "Thuoc", "Vat tu y te"
-    );
 
     private final MaterialRequisitionRepository requisitionRepository;
     private final InventoryItemRepository itemRepository;
@@ -59,7 +53,8 @@ public class SupplyRequestServiceImpl implements SupplyRequestService {
         User groom = stockLedger.currentUser();
         InventoryItem item = itemRepository.findById(request.getItemId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy vật tư với ID: " + request.getItemId()));
-        if (MEDICAL_CATEGORIES.contains(item.getCategory())) {
+        // Groom chỉ được yêu cầu vật tư thông thường; thuốc và vaccine đi theo phác đồ của bác sĩ
+        if (com.horsetrack.equinecare.modules.inventory.service.ItemCategories.isMedical(item.getCategory())) {
             throw new IllegalArgumentException("Groom chỉ yêu cầu được vật tư thông thường. Thuốc và vaccine ("
                     + item.getItemName() + ") phải đi theo phác đồ của bác sĩ thú y.");
         }
@@ -95,7 +90,7 @@ public class SupplyRequestServiceImpl implements SupplyRequestService {
     @Override
     @Transactional(readOnly = true)
     public List<InventoryItemDTO> getRequestableItems() {
-        return itemRepository.findByCategoryNotInOrderByItemNameAsc(MEDICAL_CATEGORIES).stream()
+        return itemRepository.findByCategoryNotInOrderByItemNameAsc(com.horsetrack.equinecare.modules.inventory.service.ItemCategories.MEDICAL_VALUES).stream()
                 .map(item -> InventoryMapper.toItemDTO(item, null))
                 .collect(Collectors.toList());
     }
