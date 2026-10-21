@@ -29,4 +29,6 @@ public class CareTaskDTO {
     private String stallZone;
     private Integer groomId;
     private String groomName;
+    private String warningNote;   // Có giá trị khi việc bị cảnh báo trễ quá 45 phút (BR_05)
+    private Boolean overdue;
 }
