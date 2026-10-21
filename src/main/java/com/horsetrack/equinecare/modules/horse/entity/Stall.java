@@ -30,6 +30,11 @@ public class Stall {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    // Phí lưu chuồng mỗi tháng (VND), dòng BOARDING trên hóa đơn tháng
+    @Column(name = "monthly_base_fee", nullable = false, precision = 12, scale = 2)
+    @Builder.Default
+    private java.math.BigDecimal monthlyBaseFee = java.math.BigDecimal.ZERO;
+
     @OneToOne(mappedBy = "stall", fetch = FetchType.LAZY)
     private Horse horse;
 

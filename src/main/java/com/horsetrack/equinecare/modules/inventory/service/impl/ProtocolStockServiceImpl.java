@@ -41,6 +41,7 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
     private final PurchaseOrderRepository orderRepository;
     private final StockLedgerService stockLedger;
     private final TreatmentProtocolMapper mapper;
+    private final com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling phaseBilling;
 
     @Override
     @Transactional(readOnly = true)
@@ -159,6 +160,14 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
     @Transactional(rollbackFor = Exception.class)
     public TreatmentProtocolDTO dispense(Integer protocolId) {
         TreatmentProtocol protocol = findProtocol(protocolId);
+        // BR_16: giai đoạn đã tới ngày bắt đầu mà chưa thanh toán thì không cấp thuốc (ca cấp cứu được miễn - BR_17)
+        if (com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())) {
+            throw new IllegalArgumentException("Phác đồ " + protocol.getProtocolCode() + " đang tạm dừng do chưa thanh toán giai đoạn tới hạn (BR_16), chưa thể cấp thuốc.");
+        }
+        phaseBilling.blockingPhase(protocol, java.time.LocalDate.now()).ifPresent(ph -> {
+            throw new IllegalArgumentException("Giai đoạn " + ph.getPhaseNo() + " của phác đồ " + protocol.getProtocolCode()
+                    + " đã tới ngày bắt đầu nhưng chưa được thanh toán (BR_16), chưa thể cấp thuốc.");
+        });
         // BR_07: chỉ cấp thuốc sau khi bác sĩ xác nhận phương án kho
         if (!"VET_CONFIRMED".equals(protocol.getState())) {
             throw new IllegalArgumentException("Chỉ cấp thuốc khi bác sĩ đã xác nhận phác đồ (VET_CONFIRMED). Hiện tại: " + protocol.getState() + ".");

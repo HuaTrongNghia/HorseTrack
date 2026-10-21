@@ -47,7 +47,7 @@ public class MedicalManagementService {
     private static final Set<String> MEDICAL_CATEGORIES = Set.of("MEDICINE", "VACCINE", "MEDICAL_SUPPLY");
     // Trạng thái trước khi cấp thuốc: còn sửa (phiên bản mới) hoặc hủy được
     private static final Set<String> REVISABLE_STATES = Set.of(
-            "WAITING_STOCK_CHECK", "STOCK_AVAILABLE", "STOCK_SHORTAGE", "WAITING_RESTOCK", "REQUIRES_VET_REVIEW", "VET_CONFIRMED");
+            "WAITING_STOCK_CHECK", "STOCK_AVAILABLE", "STOCK_SHORTAGE", "WAITING_RESTOCK", "REQUIRES_VET_REVIEW", "VET_CONFIRMED", "ON_HOLD_PAYMENT");
 
     private final TreatmentProtocolRepository protocolRepository;
     private final ProtocolProgressNoteRepository noteRepository;
@@ -59,6 +59,7 @@ public class MedicalManagementService {
     private final ProtocolStockService protocolStockService;
     private final TreatmentProtocolMapper mapper;
     private final EntityManager entityManager;
+    private final com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling phaseBilling;
 
     // ==========================================
     // DANH MỤC THUỐC (chỉ đọc)
@@ -118,7 +119,11 @@ public class MedicalManagementService {
         }
         protocol.setState("VET_CONFIRMED");
         protocol.setConfirmedAt(LocalDateTime.now());
-        return mapper.toDTO(protocolRepository.save(protocol), true);
+        protocolRepository.save(protocol);
+        // BR_16: lập hóa đơn từng giai đoạn; giai đoạn đã tới ngày mà chưa trả thì tạm dừng ngay (trừ ca cấp cứu - BR_17)
+        phaseBilling.issuePhaseInvoices(protocol);
+        phaseBilling.evaluate(protocol, LocalDate.now());
+        return mapper.toDTO(protocol, true);
     }
 
     /** Kho báo thiếu hoặc hàng về trễ: bác sĩ chấp nhận chờ hàng, giữ nguyên phác đồ. */
@@ -142,7 +147,7 @@ public class MedicalManagementService {
     @Transactional(rollbackFor = Exception.class)
     public TreatmentProtocolDTO createNewVersion(Integer protocolId, ProtocolCreateRequestDTO request) {
         TreatmentProtocol old = findProtocol(protocolId);
-        if (!REVISABLE_STATES.contains(old.getState())) {
+        if (!REVISABLE_STATES.contains(old.getState()) || alreadyDispensed(old)) {
             throw new IllegalArgumentException("Không thể tạo phiên bản mới cho phác đồ đang ở trạng thái " + old.getState() + ".");
         }
         if (!old.getHorse().getHorseId().equals(request.getHorseId())) {
@@ -150,12 +155,19 @@ public class MedicalManagementService {
         }
 
         protocolStockService.releaseHolds(old.getProtocolId(), "Trả hàng do phác đồ " + old.getProtocolCode() + " có phiên bản mới");
+        phaseBilling.cancelOpenPhaseInvoices(old, false, "Phác đồ " + old.getProtocolCode() + " có phiên bản mới");
         old.setState("SUPERSEDED");
         old.setClosedAt(LocalDateTime.now());
         protocolRepository.saveAndFlush(old);
 
         TreatmentProtocol next = buildProtocol(request, old);
         return mapper.toDTO(saveAndReload(next), true);
+    }
+
+    // Phác đồ tạm dừng vì chưa thanh toán nhưng đã cấp thuốc thì không còn sửa / hủy được
+    private boolean alreadyDispensed(TreatmentProtocol protocol) {
+        return com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())
+                && !holdRepository.findByProtocolIdAndStatusIn(protocol.getProtocolId(), List.of("ISSUED")).isEmpty();
     }
 
     // ==========================================
@@ -180,9 +192,12 @@ public class MedicalManagementService {
     @Transactional(rollbackFor = Exception.class)
     public TreatmentProtocolDTO complete(Integer protocolId, ProtocolTextRequestDTO request) {
         TreatmentProtocol protocol = findProtocol(protocolId);
-        if (!"IN_TREATMENT".equals(protocol.getState())) {
-            throw new IllegalArgumentException("Chỉ kết thúc được phác đồ đang điều trị (IN_TREATMENT). Hiện tại: " + protocol.getState() + ".");
+        // Phác đồ đang tạm dừng vì chưa thanh toán (đã cấp thuốc) vẫn được bác sĩ kết thúc
+        if (!"IN_TREATMENT".equals(protocol.getState()) && !com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())) {
+            throw new IllegalArgumentException("Chỉ kết thúc được phác đồ đang điều trị (IN_TREATMENT) hoặc đang tạm dừng do chưa thanh toán. Hiện tại: " + protocol.getState() + ".");
         }
+        // Giai đoạn chưa bắt đầu thì không thu tiền nữa
+        phaseBilling.cancelOpenPhaseInvoices(protocol, true, "Phác đồ " + protocol.getProtocolCode() + " kết thúc sớm");
         protocol.setState("COMPLETED");
         protocol.setOutcome(request.getContent().trim());
         protocol.setClosedAt(LocalDateTime.now());
@@ -192,10 +207,11 @@ public class MedicalManagementService {
     @Transactional(rollbackFor = Exception.class)
     public TreatmentProtocolDTO cancel(Integer protocolId, ProtocolTextRequestDTO request) {
         TreatmentProtocol protocol = findProtocol(protocolId);
-        if (!REVISABLE_STATES.contains(protocol.getState())) {
+        if (!REVISABLE_STATES.contains(protocol.getState()) || alreadyDispensed(protocol)) {
             throw new IllegalArgumentException("Chỉ hủy được phác đồ chưa cấp thuốc. Hiện tại: " + protocol.getState() + ".");
         }
         protocolStockService.releaseHolds(protocolId, "Trả hàng do hủy phác đồ " + protocol.getProtocolCode());
+        phaseBilling.cancelOpenPhaseInvoices(protocol, false, "Hủy phác đồ " + protocol.getProtocolCode());
         protocol.setState("CANCELLED");
         protocol.setClosedAt(LocalDateTime.now());
         protocol.setNote(appendNote(protocol.getNote(), "Hủy: " + request.getContent().trim()));

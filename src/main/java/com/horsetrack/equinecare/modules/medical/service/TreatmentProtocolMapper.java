@@ -23,6 +23,7 @@ public class TreatmentProtocolMapper {
     private final TreatmentProtocolRepository protocolRepository;
     private final StockHoldRepository holdRepository;
     private final ProtocolProgressNoteRepository noteRepository;
+    private final com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling phaseBilling;
 
     public TreatmentProtocolDTO toDTO(TreatmentProtocol p, boolean detail) {
         TreatmentProtocol replacedBy = protocolRepository.findByReplacesProtocol_ProtocolId(p.getProtocolId()).orElse(null);
@@ -54,6 +55,7 @@ public class TreatmentProtocolMapper {
                 .confirmedAt(p.getConfirmedAt())
                 .closedAt(p.getClosedAt())
                 .totalCost(totalCost(p))
+                .emergency(phaseBilling.isEmergency(p))
                 .build();
 
         if (detail) {
@@ -64,6 +66,9 @@ public class TreatmentProtocolMapper {
                     .startDate(ph.getStartDate())
                     .durationDays(ph.getDurationDays())
                     .goal(ph.getGoal())
+                    .invoiceId(phaseBilling.findPhaseInvoice(p.getProtocolId(), ph.getPhaseNo()).map(i -> i.getInvoiceId()).orElse(null))
+                    .invoiceCode(phaseBilling.findPhaseInvoice(p.getProtocolId(), ph.getPhaseNo()).map(i -> i.getInvoiceCode()).orElse(null))
+                    .invoiceStatus(phaseBilling.findPhaseInvoice(p.getProtocolId(), ph.getPhaseNo()).map(i -> i.getPaymentStatus()).orElse(null))
                     .items(ph.getItems().stream().map(it -> TreatmentProtocolDTO.Item.builder()
                             .protocolItemId(it.getProtocolItemId())
                             .itemId(it.getItem().getItemId())

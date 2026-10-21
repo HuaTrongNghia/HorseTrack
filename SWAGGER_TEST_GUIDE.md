@@ -2,7 +2,7 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **100 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **115 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 ---
 
@@ -1301,6 +1301,114 @@ Hệ thống tự cộng số lượng từng thuốc qua các giai đoạn và 
 
 ---
 
+## 12F. Hóa đơn & thanh toán VNPay Sandbox — `/api/v1/billing`, `/api/v1/owner/invoices`, `/api/v1/payments/vnpay`
+
+Dùng các bảng có sẵn `Invoices`, `Invoice_Line_Items`, `Payment_Transactions` và `Horse_Owner_Profiles.service_status`; không cần sửa DB. **Chỉ chạy môi trường Sandbox**: server từ chối khởi động nếu `pay-url` / `api-url` không phải `sandbox.vnpayment.vn`.
+
+### 12F.0 Chuẩn bị
+
+1. **Tài khoản VNPay Sandbox:** đăng ký tại https://sandbox.vnpayment.vn/devreg/ → nhận `vnp_TmnCode` và `vnp_HashSecret` qua email.
+2. **IntelliJ → Run → Edit Configurations → Environment variables** (không ghi vào `application.properties`):
+   ```
+   VNPAY_TMN_CODE=<mã website>;VNPAY_HASH_SECRET=<chuỗi bí mật>
+   ```
+   Chưa đặt thì API thanh toán trả `503` "Cổng VNPay Sandbox chưa được cấu hình".
+3. **Thẻ test của Sandbox** (ngân hàng NCB): số thẻ `9704198526191432198`, tên `NGUYEN VAN A`, ngày phát hành `07/15`, OTP `123456`.
+4. **Giá thật trong DB:** hiện mọi chuồng có `monthly_base_fee = 0`, nên phải đặt phí lưu chuồng (12F.1) trước khi phát hành hóa đơn. Các nguồn phí khác lấy tự động nếu có dữ liệu:
+
+| Dòng phí | Nguồn dữ liệu |
+|---|---|
+| `BOARDING` – Lưu chuồng | `Stalls.monthly_base_fee` của chuồng ngựa đang ở |
+| `DAILY_CARE` – Vật tư chăm sóc | `Task_Material_Usage` của việc chăm sóc `DONE` trong kỳ |
+| `MEDICATION` – Thuốc điều trị | **Không** nằm trong hóa đơn tháng: thu theo từng giai đoạn phác đồ bằng hóa đơn riêng `GD-...` (12F.8, BR_16) |
+| `COMPETITION` – Thi đấu | `entry_fee_charged`, `transport_fee` của `Competition_Entries` có giải diễn ra trong kỳ |
+
+### 12F.1 `PUT /api/v1/billing/stalls/{stallId}/monthly-fee` (`Club Manager`)
+
+```json
+{ "monthlyBaseFee": 6000000 }
+```
+
+- **Mong đợi:** `200`, `data` = phí mới. Ghi Audit Log `UPDATE_STALL_FEE`.
+- **Test lỗi:** số âm hoặc có phần lẻ → `400`; `stallId` sai → `404`; token khác Club Manager → `403`.
+
+### 12F.2 `POST /api/v1/billing/invoices/generate?billingMonth=2026-10` (`Club Manager`)
+
+- Lập hóa đơn kỳ `billingMonth` cho mọi ngựa đã được duyệt (có chuồng). Hệ thống cũng **tự chạy 00:30 ngày 1 hằng tháng** cho kỳ tháng trước (BR_12).
+- **Mong đợi:** `201`, `data` gồm `created`, `skippedExisting` (ngựa đã có hóa đơn kỳ này), `skippedZero` (không phát sinh phí), `invoiceCodes` (dạng `HD-202610-0006`). Chủ ngựa nhận email hóa đơn.
+- Hạn thanh toán = ngày phát hành + 9 ngày (phát hành ngày 1 → hạn ngày 10).
+- **Test lỗi:** `billingMonth` sai định dạng hoặc là tháng tương lai → `400`. Gọi lại cùng kỳ → không tạo trùng (`skippedExisting`).
+
+### 12F.3 `GET /api/v1/billing/invoices?status=&billingMonth=&ownerId=&page=0&size=20` (`Club Manager`)
+
+- Mỗi hóa đơn có `principal` (gốc), `lateFee`, `reactivationFee`, `amountDue`, `amountPaid`, `daysOverdue`, `daysSinceIssue`, `suspensionEligible` (≥ 25 ngày, BR_13), `terminationDue` (quá hạn > 60 ngày, BR_15), `ownerServiceStatus`.
+- `GET /api/v1/billing/invoices/{id}`: thêm `lines` (dòng phí) và `transactions` (lịch sử giao dịch).
+- `PUT /api/v1/billing/invoices/{id}/cancel` `{ "reason": "Lập sai phí lưu chuồng" }`: chỉ hóa đơn đang mở và chưa có giao dịch; lý do 10–255 ký tự → ngược lại `400`.
+
+**Cách tính tiền (BR_12, BR_14):**
+- Từ ngày sau hạn: phí trễ hạn = gốc × 1% × số ngày quá hạn. Hóa đơn `UNPAID` quá hạn được tác vụ hằng ngày (00:15) chuyển `OVERDUE` và báo chủ ngựa.
+- Ngày thứ 20 kể từ phát hành: email cảnh báo chủ ngựa. Ngày thứ 25: email Club Manager danh sách đủ điều kiện đình chỉ.
+- Chủ ngựa đang bị đình chỉ: cộng phí kích hoạt lại 3.000.000 VND vào hóa đơn mở có hạn sớm nhất (chỉ một lần).
+- Các mức trên chỉnh được bằng `app.billing.*` trong `application.properties`.
+
+### 12F.4 Đình chỉ / kích hoạt lại dịch vụ (`Club Manager`)
+
+- `PUT /api/v1/billing/owners/{ownerId}/suspend` `{ "reason": "Nợ quá 25 ngày chưa thanh toán" }` → `200`, `serviceStatus = SUSPENDED`. Chỉ khi chủ ngựa có hóa đơn mở ≥ 25 ngày kể từ phát hành, ngược lại `400`. Ghi Audit Log, email chủ ngựa.
+- Chủ ngựa trả hết hóa đơn mở qua VNPay → hệ thống tự chuyển `REACTIVATION_PENDING`.
+- `PUT /api/v1/billing/owners/{ownerId}/reactivate` → `ACTIVE`. Chỉ khi đang `REACTIVATION_PENDING`, ngược lại `400`.
+- `GET /api/v1/billing/owners/{ownerId}/service`: xem trạng thái hiện tại.
+
+### 12F.5 Chủ ngựa xem hóa đơn (`Horse Owner`)
+
+- `GET /api/v1/owner/invoices`: hóa đơn còn phải trả (`UNPAID`, `OVERDUE`). `?includeClosed=true` để xem cả đã trả / đã hủy.
+- `GET /api/v1/owner/invoices/{id}`: chi tiết, `amountDue` là số tiền sẽ thanh toán nếu trả hôm nay. Hóa đơn của người khác → `403`.
+- `GET /api/v1/owner/invoices/payment-history`: chỉ giao dịch đã kết thúc (`VERIFIED`, `FAILED`).
+
+### 12F.6 Thanh toán: `POST /api/v1/owner/invoices/{id}/vnpay` (`Horse Owner`)
+
+1. Gọi API → `201`, `data.paymentUrl`. Giao dịch được tạo ở trạng thái `PENDING_VERIFICATION`, số tiền = `amountDue` tại thời điểm tạo.
+2. Mở `paymentUrl` trên trình duyệt → trang VNPay Sandbox → chọn ngân hàng NCB, nhập thẻ test ở 12F.0.
+3. VNPay chuyển về `GET /api/v1/payments/vnpay/return?...`. Server kiểm tra chữ ký rồi **hỏi lại VNPay bằng `querydr`**. Chỉ khi VNPay xác nhận thành công và đúng số tiền thì giao dịch mới thành `VERIFIED` và hóa đơn thành `PAID`. Kết quả trả JSON `status = SUCCESS | FAILED | PENDING | INVALID`; nếu đặt `VNPAY_FRONTEND_RESULT_URL` thì chuyển hướng về trang đó kèm `?status=&invoiceId=&txnRef=`.
+4. Kiểm tra lại bằng 12F.5: hóa đơn biến khỏi danh sách mở, xuất hiện trong lịch sử thanh toán. Chủ ngựa nhận email biên nhận.
+
+- **IPN** `GET /api/v1/payments/vnpay/ipn`: VNPay gọi server-to-server. Muốn dùng thì khai báo URL công khai (ví dụ ngrok `https://xxxx.ngrok-free.app/api/v1/payments/vnpay/ipn`) trong trang quản trị merchant Sandbox. Trả `RspCode`: `00` thành công, `97` sai chữ ký, `01` không có giao dịch, `04` sai số tiền, `02` đã xử lý (idempotent).
+- **Test lỗi:** hóa đơn đã trả hoặc đã hủy → `400`; hóa đơn của người khác → `403`; chưa cấu hình VNPay → `503`. Hủy trên trang VNPay → giao dịch `FAILED`, hóa đơn giữ nguyên.
+
+### 12F.7 `GET /api/v1/reports/finance?fromMonth=2026-01&toMonth=2026-12` (`Club Manager`)
+
+Báo cáo tài chính từ dữ liệu thật; tiền đã thu **chỉ tính giao dịch VNPay đã được server xác minh** (`VERIFIED`).
+
+| Phần | Nội dung |
+|---|---|
+| `totals` | Phát hành, đã thu, tỷ lệ thu, phí trễ hạn đã thu, gốc còn phải thu, phí trễ hạn đang phát sinh, chi phí nhập hàng (đơn mua đã nhận), dòng tiền ròng, số hóa đơn phát hành / đã trả / quá hạn |
+| `months` | Theo tháng: phát hành (theo kỳ), đã thu (theo ngày xác minh), tỷ lệ thu của kỳ, chi phí nhập hàng |
+| `revenueByService` | Theo loại phí: phát hành và đã thu |
+| `debtAgeing` | Tuổi nợ: chưa đến hạn, quá hạn 1–15 ngày, 16–60 ngày (đủ điều kiện đình chỉ), trên 60 ngày (BR_15) |
+| `debtByOwner` | Công nợ từng chủ ngựa: số hóa đơn mở, gốc, phí trễ hạn, tổng phải trả, số ngày quá hạn lớn nhất, cờ đình chỉ / chấm dứt |
+
+- Mặc định: tháng 1 năm nay → tháng hiện tại. **Test lỗi:** sai định dạng, `fromMonth` sau `toMonth`, hoặc quá 36 tháng → `400`; token khác Club Manager → `403`.
+
+### 12F.8 Thanh toán phác đồ theo giai đoạn (BR_16, BR_17)
+
+> **Chạy trước một lần:** `DATABASE_protocol_payment_hold.sql` (cho phép trạng thái `ON_HOLD_PAYMENT` trong `Treatment_Protocols`).
+
+1. Bác sĩ xác nhận phác đồ (`PUT /medical-management/protocols/{id}/confirm`, mục 12) → **mỗi giai đoạn có thuốc được lập một hóa đơn** mã `GD-<protocol_id 6 số>-<phase_no 2 số>`, ví dụ `GD-000001-02`:
+   - Dòng `MEDICATION` = số lượng × đơn giá trong `Protocol_Items` của giai đoạn đó. Giai đoạn không có thuốc thì không lập hóa đơn.
+   - **Hạn thanh toán = ngày bắt đầu giai đoạn** (giai đoạn đã bắt đầu thì hạn là hôm nay). Chủ ngựa nhận email liệt kê các hóa đơn.
+   - `GET /medical-management/protocols/{id}`: mỗi `phases[]` có `invoiceId`, `invoiceCode`, `invoiceStatus`; có thêm `emergency`.
+2. **Tới ngày bắt đầu một giai đoạn mà hóa đơn của giai đoạn đó chưa thanh toán** → phác đồ chuyển `ON_HOLD_PAYMENT` (kiểm tra ngay khi xác nhận và hằng ngày lúc 00:20). Chủ ngựa và bác sĩ nhận email, ghi Audit Log `PROTOCOL_PAYMENT_HOLD`.
+   - Khi đang tạm dừng: kho cấp thuốc (`PUT /inventory/protocols/{id}/dispense`) → `400` "...tạm dừng do chưa thanh toán giai đoạn tới hạn (BR_16)"; bác sĩ không ghi tiến trình được.
+   - Bác sĩ vẫn được kết thúc phác đồ đã cấp thuốc (`complete`); phác đồ chưa cấp thuốc vẫn hủy hoặc tạo phiên bản mới được.
+3. Chủ ngựa trả hóa đơn giai đoạn qua VNPay (12F.6). Khi giao dịch được xác minh, **phác đồ tự tiếp tục**: `IN_TREATMENT` nếu đã cấp thuốc, ngược lại `VET_CONFIRMED`. Ghi Audit Log `PROTOCOL_PAYMENT_RESUME`, báo bác sĩ.
+4. **BR_17 – ca cấp cứu:** phác đồ có `caseId` trỏ tới ca khám `severity = CRITICAL` vẫn được lập hóa đơn nhưng **không bị tạm dừng** vì chưa thanh toán (`emergency = true`).
+5. Phác đồ bị hủy hoặc có phiên bản mới → hóa đơn giai đoạn chưa trả chuyển `CANCELLED`. Kết thúc sớm → hủy hóa đơn của các giai đoạn chưa bắt đầu.
+
+- Hóa đơn giai đoạn vẫn hiện trong danh sách hóa đơn của chủ ngựa / Club Manager và trong báo cáo (loại `MEDICATION`). Phí trễ hạn tính từ sau ngày bắt đầu giai đoạn. Mốc đình chỉ (BR_13) tính theo hạn thanh toán nên hóa đơn phát hành sớm không bị tính đủ 25 ngày quá sớm.
+
+> **Lưu ý:** API cũ `POST /api/v1/owner/payments/medical-records/{recordId}/vnpay` vẫn là **giả lập** (không gọi VNPay), thuộc luồng bệnh án cũ.
+
+---
+
 ## 13–17. Các API dữ liệu giả (mock)
 
 Các API dưới đây **không đọc/ghi database**. Dữ liệu được code cứng hoặc nằm trong RAM. Chỉ cần kiểm tra là gọi được và trả đúng format. Tất cả yêu cầu đã login (role nào cũng được).
@@ -1373,7 +1481,9 @@ Sau khi test chức năng chính, thử gọi mỗi API sau bằng **sai role** 
 | `GET /care-tasks/my-tasks`, `PUT /care-tasks/{id}/complete` | Groom |
 | `GET /care-tasks/overdue` | Club Manager |
 | `/training-sessions/**` | Trainer, Groom (`PUT /training-sessions/{id}/confirm`: chỉ Groom được gán) |
-| `/owner/training/**`, `/owner/payments/**` | Horse Owner |
+| `/owner/training/**`, `/owner/payments/**`, `/owner/invoices/**` | Horse Owner |
+| `/billing/**`, `GET /reports/finance` | Club Manager |
+| `GET /payments/vnpay/ipn`, `GET /payments/vnpay/return` | Không cần đăng nhập (kiểm tra chữ ký VNPay) |
 
 Mọi API khác (trừ login/register/refresh/logout) chỉ cần đăng nhập. Gọi mà không Authorize phải nhận `401`.
 

@@ -19,6 +19,17 @@ public class HorseOwnerProfile {
     @Column(name = "tax_code", length = 30)
     private String taxCode;
 
-    @Column(name = "billing_address", nullable = false, length = 255)
+    @Column(name = "billing_address", length = 255)
     private String billingAddress;
+
+    // Trạng thái hợp đồng dịch vụ: ACTIVE, SUSPENDED (BR_13), REACTIVATION_PENDING (đã trả đủ, chờ Club Manager kích hoạt lại - BR_14)
+    @Column(name = "service_status", nullable = false, length = 30)
+    @Builder.Default
+    private String serviceStatus = "ACTIVE";
+
+    @Column(name = "suspended_since")
+    private java.time.LocalDate suspendedSince;
+
+    @Column(name = "suspension_reason", length = 255)
+    private String suspensionReason;
 }

@@ -76,6 +76,13 @@ public class GlobalExceptionHandler {
     }
 
     // Bắt lỗi gửi email (SMTP sai cấu hình hoặc mất kết nối) (HTTP 503)
+    @ExceptionHandler(com.horsetrack.equinecare.modules.finance.service.PaymentGatewayException.class)
+    public org.springframework.http.ResponseEntity<com.horsetrack.equinecare.common.base.ApiResponse<Object>> handlePaymentGateway(
+            com.horsetrack.equinecare.modules.finance.service.PaymentGatewayException ex) {
+        return org.springframework.http.ResponseEntity.status(org.springframework.http.HttpStatus.SERVICE_UNAVAILABLE)
+                .body(com.horsetrack.equinecare.common.base.ApiResponse.error(ex.getMessage()));
+    }
+
     @ExceptionHandler(com.horsetrack.equinecare.modules.notification.exception.EmailSendException.class)
     public ResponseEntity<ApiResponse<Void>> handleEmailSend(com.horsetrack.equinecare.modules.notification.exception.EmailSendException ex) {
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
