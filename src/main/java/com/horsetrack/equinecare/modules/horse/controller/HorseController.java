@@ -93,6 +93,14 @@ public class HorseController {
         return ResponseEntity.ok(ApiResponse.ok("Đã phân công HLV " + response.getAssignedTrainerName() + " phụ trách ngựa " + response.getHorseName(), response));
     }
 
+    // Club Manager bỏ phân công HLV (không cho phép khi ngựa còn giáo án chưa kết thúc)
+    @DeleteMapping("/{id}/assign-trainer")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    public ResponseEntity<ApiResponse<HorseResponseDTO>> unassignTrainer(@PathVariable Integer id) {
+        HorseResponseDTO response = horseService.unassignTrainer(id);
+        return ResponseEntity.ok(ApiResponse.ok("Đã bỏ phân công HLV của ngựa " + response.getHorseName(), response));
+    }
+
     @PutMapping("/{id}/reject")
     @PreAuthorize("hasAuthority('Club Manager')")
     public ResponseEntity<ApiResponse<HorseResponseDTO>> rejectHorse(

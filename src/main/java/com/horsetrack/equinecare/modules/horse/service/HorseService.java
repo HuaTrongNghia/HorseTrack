@@ -13,6 +13,9 @@ public interface HorseService {
 
     // Club Manager phân công HLV phụ trách ngựa
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO assignTrainer(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseAssignTrainerRequestDTO request);
+
+    // Club Manager bỏ phân công HLV của ngựa
+    com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO unassignTrainer(Integer horseId);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO approveHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseApprovalRequestDTO request);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO updateHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseUpdateRequestDTO request);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO rejectHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseRejectRequestDTO request);

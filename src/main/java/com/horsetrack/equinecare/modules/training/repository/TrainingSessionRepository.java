@@ -19,6 +19,9 @@ public interface TrainingSessionRepository extends JpaRepository<TrainingSession
 
     long countByTrainingPlan_PlanIdAndStatusIn(Integer planId, java.util.Collection<String> statuses);
 
+    // Buổi tập chưa thực hiện, chưa qua giờ của một nhân viên
+    long countByAssignedTo_UserIdAndStatusInAndSessionDateAfter(Integer userId, java.util.Collection<String> statuses, LocalDateTime from);
+
     boolean existsByTrainingPlan_PlanIdAndStatus(Integer planId, String status);
 
     // F21-05: buổi tập chưa kết thúc (PENDING / CONFIRMED) của một nhân viên bắt đầu trong khoảng (from, to) -> trùng khung giờ

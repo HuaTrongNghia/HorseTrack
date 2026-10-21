@@ -2,7 +2,7 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **115 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **118 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 ---
 
@@ -445,6 +445,30 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 | `id` hoặc `trainerId` không tồn tại | `404` |
 
 - **Kiểm tra phạm vi Trainer:** đăng nhập Trainer → `GET /horses` chỉ còn ngựa được phân công; `GET /horses/{id}` của ngựa khác → `403`.
+
+**Bỏ phân công HLV:** `DELETE /api/v1/horses/{id}/assign-trainer` (`Club Manager`)
+
+- **Mong đợi:** `200`, `data.assignedTrainerId = null`. HLV cũ nhận email, ghi Audit Log `UNASSIGN_TRAINER`.
+- **Test lỗi:** ngựa chưa có HLV → `400`; ngựa còn giáo án `PENDING` / `ACTIVE` / `PAUSED` → `400` "...Hãy phân công HLV khác để bàn giao giáo án, hoặc kết thúc / hủy giáo án trước..."; token khác Club Manager → `403`.
+
+### 3.9 Phân công / đổi / bỏ khu chăm sóc của Groom (`Club Manager`)
+
+- `GET /api/v1/users/{id}/barn-zone`: khu hiện tại của Groom (`barnZone = null` là chưa phân công).
+- `PUT /api/v1/users/{id}/barn-zone`:
+  ```json
+  { "barnZone": "Khu B" }
+  ```
+  Gửi `{ "barnZone": null }` (hoặc chuỗi rỗng) để **bỏ phân công**.
+- **Mong đợi:** `200`, `data.barnZone` là khu mới (tên khu không phân biệt hoa thường, trả về đúng tên trong DB). Groom nhận email; ghi Audit Log `ASSIGN_GROOM_ZONE` / `UNASSIGN_GROOM_ZONE`.
+- **Test lỗi:**
+
+| Trường hợp | Kết quả |
+|---|---|
+| `id` không phải Groom | `400` |
+| Khu không có trong bảng `Stalls` | `400` "Khu ... không tồn tại. Các khu hiện có: ..." |
+| Gửi đúng khu hiện tại / bỏ phân công khi chưa có khu | `400` |
+| Groom còn việc chăm sóc (`TODO`, `IN_PROGRESS`, từ hôm nay) hoặc buổi tập chưa thực hiện ở khu hiện tại | `400` "...còn X việc chăm sóc và Y buổi tập chưa thực hiện..." |
+| `id` không tồn tại | `404` |
 
 ---
 
@@ -1472,7 +1496,7 @@ Sau khi test chức năng chính, thử gọi mỗi API sau bằng **sai role** 
 | `GET /horses` | Club Manager, Trainer (chỉ ngựa được phân công), Veterinarian, Groom |
 | `GET /training-plans`, `GET /training-plans/dashboard-stats` | Club Manager, Trainer (chỉ ngựa được phân công), Groom, Veterinarian |
 | `GET /horses/{id}` | Nhân viên, và Horse Owner (chỉ ngựa của mình) |
-| `PUT /horses/{id}/approve`, `PUT /horses/{id}/reject`, `PUT /horses/{id}/assign-trainer` | Club Manager |
+| `PUT /horses/{id}/approve`, `PUT /horses/{id}/reject`, `PUT` / `DELETE /horses/{id}/assign-trainer`, `GET` / `PUT /users/{id}/barn-zone` | Club Manager |
 | `PUT /horses/{id}/resubmit` | Horse Owner (chỉ ngựa của mình) |
 | `GET /horses/{id}/registrations` | Club Manager, Horse Owner (chỉ ngựa của mình) |
 | `PUT /horses/{id}` | Club Manager, Trainer, Veterinarian (đổi `isLocked` hoặc `healthStatus`: chỉ Veterinarian) |

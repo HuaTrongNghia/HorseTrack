@@ -59,6 +59,11 @@ public class AccountServiceImpl implements AccountService {
                 dto.setLicenseNumber(vet.getVetLicenseNo());
                 dto.setClinicAffiliation(vet.getClinicAffiliation());
             }
+        } else if ("Groom".equalsIgnoreCase(user.getRoleName())) {
+            com.horsetrack.equinecare.modules.auth.entity.GroomProfile groom = user.getGroomProfile();
+            if (groom != null) {
+                dto.setSpecialization(groom.getAssignedBarnZone());
+            }
         }
 
         return dto;

@@ -179,6 +179,38 @@ public class HorseServiceImpl implements HorseService {
 
     @Override
     @Transactional
+    public HorseResponseDTO unassignTrainer(Integer horseId) {
+        Horse horse = findHorse(horseId);
+        User previous = horse.getAssignedTrainer();
+        if (previous == null) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được phân công HLV.");
+        }
+        // Giáo án chưa kết thúc cần có HLV phụ trách: phải phân công HLV khác để bàn giao, hoặc kết thúc / hủy giáo án trước
+        for (String st : com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES) {
+            if (!trainingPlanRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), st).isEmpty()) {
+                throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đang có giáo án " + st
+                        + ". Hãy phân công HLV khác để bàn giao giáo án, hoặc kết thúc / hủy giáo án trước khi bỏ phân công.");
+            }
+        }
+        horse.setAssignedTrainer(null);
+        horseRepository.save(horse);
+        auditTrail.record("UNASSIGN_TRAINER", "Horses", "assigned_trainer_id=" + previous.getUserId(),
+                "assigned_trainer_id=null | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ")");
+        if (StringUtils.hasText(previous.getEmail())) {
+            try {
+                emailService.sendAsync(previous.getEmail(), "[HorseTrack] Bạn không còn phụ trách ngựa " + horse.getHorseName(),
+                        "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(previous.getFullName()) + "</b>,</p>"
+                                + "<p>Club Manager đã bỏ phân công bạn phụ trách huấn luyện ngựa <b>"
+                                + org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName()) + "</b>.</p>");
+            } catch (Exception ignored) {
+                // Email chỉ là thông báo
+            }
+        }
+        return mapToResponseDTO(horse);
+    }
+
+    @Override
+    @Transactional
     public HorseResponseDTO assignTrainer(Integer horseId, HorseAssignTrainerRequestDTO request) {
         Horse horse = findHorse(horseId);
         if (horse.getStall() == null) {

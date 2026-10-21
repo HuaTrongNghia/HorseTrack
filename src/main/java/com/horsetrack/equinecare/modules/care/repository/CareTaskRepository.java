@@ -14,6 +14,9 @@ public interface CareTaskRepository extends JpaRepository<CareTask, Integer> {
 
     long countByGroom_UserIdAndStatusNot(Integer groomId, String status);
 
+    // Việc chăm sóc chưa xong từ hôm nay trở đi của một Groom (chặn đổi / bỏ khu khi còn việc dở)
+    long countByGroom_UserIdAndStatusInAndTaskDateGreaterThanEqual(Integer groomId, java.util.Collection<String> statuses, LocalDate fromDate);
+
     // Việc chưa xong, chưa bị cảnh báo, có ngày làm từ hôm nay trở về trước (lọc giờ trễ ở service)
     List<CareTask> findByStatusInAndWarningNoteIsNullAndTaskDateLessThanEqual(java.util.Collection<String> statuses, LocalDate taskDate);
 
