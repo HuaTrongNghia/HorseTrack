@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HorseTrack API Tester - Flow 2.1</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; color: #333; padding: 20px; }
+        .container { display: flex; gap: 20px; max-width: 1200px; margin: 0 auto; }
+        .panel { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 50%; }
+        h1, h2, h3 { color: #2c3e50; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px;}
+        input, select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box;}
+        button { background-color: #27ae60; color: white; border: none; padding: 10px 15px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 10px;}
+        button:hover { background-color: #2ecc71; }
+        .btn-secondary { background-color: #3498db; }
+        .btn-secondary:hover { background-color: #2980b9; }
+        .log-area { background-color: #2c3e50; color: #2ecc71; padding: 15px; border-radius: 4px; font-family: monospace; white-space: pre-wrap; height: 800px; overflow-y: auto; }
+        .step-box { border: 1px solid #e0e0e0; padding: 15px; border-radius: 5px; margin-bottom: 20px; background-color: #fafafa;}
+    </style>
+</head>
+<body>
+
+<h1>🐎 HorseTrack API Tester (Flow 2.1)</h1>
+
+<div class="container">
+    <!-- Bảng điều khiển Form -->
+    <div class="panel">
+        <h2>Gửi Request</h2>
+
+        <!-- BƯỚC 1: Lấy danh sách Grooms -->
+        <div class="step-box">
+            <h3>1. Khởi tạo & Lấy danh sách Grooms</h3>
+            <p style="font-size: 12px; color: #666;">Gọi GET /api/training/grooms</p>
+            <button class="btn-secondary" onclick="fetchGrooms()">Tải danh sách Groom</button>
+        </div>
+
+        <!-- BƯỚC 2: Tạo Giáo Án -->
+        <div class="step-box">
+            <h3>2. Lập Giáo Án Chung (Bước 1)</h3>
+            <p style="font-size: 12px; color: #666;">Gọi POST /api/training/plans</p>
+            <div style="display: flex; gap: 10px;">
+                <div class="form-group" style="width: 50%;">
+                    <label>Horse ID (1=Khỏe, 2=VetLock):</label>
+                    <input type="number" id="horseId" value="1">
+                </div>
+                <div class="form-group" style="width: 50%;">
+                    <label>Trainer ID:</label>
+                    <input type="number" id="trainerId" value="1">
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Tên giáo án:</label>
+                <input type="text" id="planName" value="Giáo án thể lực tháng 10">
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <div class="form-group" style="width: 33%;">
+                    <label>Cự ly (m):</label>
+                    <input type="number" id="targetDistanceM" value="1500">
+                </div>
+                <div class="form-group" style="width: 33%;">
+                    <label>Vận tốc (km/h):</label>
+                    <input type="number" id="targetSpeedKmh" value="60">
+                </div>
+                <div class="form-group" style="width: 33%;">
+                    <label>Mặt sân:</label>
+                    <select id="trackType">
+                        <option value="Turf">Sân Cỏ (Turf)</option>
+                        <option value="Dirt">Sân Đất (Dirt)</option>
+                        <option value="Synthetic">Sân Nhân tạo</option>
+                    </select>
+                </div>
+            </div>
+            <button onclick="createPlan()">Tạo Giáo Án</button>
+        </div>
+
+        <!-- BƯỚC 3: Lập lịch chi tiết -->
+        <div class="step-box">
+            <h3>3. Lập lịch / Thêm buổi tập (Bước 2)</h3>
+            <p style="font-size: 12px; color: #666;">Gọi POST /api/training/plans/{planId}/days</p>
+            <div class="form-group">
+                <label>ID Giáo án vừa tạo (Tự động điền):</label>
+                <input type="number" id="planIdResult" placeholder="Nhập ID Plan...">
+            </div>
+            <div class="form-group">
+                <label>Chọn Groom phụ trách:</label>
+                <select id="groomSelect">
+                    <option value="2">Groom Demo (ID: 2)</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Ngày tập:</label>
+                <input type="date" id="trainingDate" value="2026-10-15">
+            </div>
+            <button onclick="addTrainingDay()">Thêm Buổi Tập (Gán việc)</button>
+        </div>
+
+        <!-- BƯỚC 4: Groom xác nhận -->
+        <div class="step-box">
+            <h3>4. Groom Xác nhận Lịch</h3>
+            <p style="font-size: 12px; color: #666;">Gọi PUT /api/training/days/{trainingDayId}/confirm</p>
+            <div class="form-group">
+                <label>ID Buổi tập (Tự động điền):</label>
+                <input type="number" id="trainingDayIdResult" placeholder="Nhập ID buổi tập...">
+            </div>
+            <button class="btn-secondary" onclick="confirmTask()">Xác nhận hoàn thành phân công</button>
+        </div>
+    </div>
+
+    <!-- Bảng hiển thị Console Log -->
+    <div class="panel">
+        <h2>Kết quả trả về (JSON)</h2>
+        <div class="log-area" id="logArea">Đang chờ thao tác...</div>
+    </div>
+</div>
+
+<script>
+    const BASE_URL = 'http://localhost:8080/api/training';
+
+    // Hàm ghi log ra màn hình đen
+    function logData(title, responseStatus, data) {
+        const logBox = document.getElementById('logArea');
+        const time = new Date().toLocaleTimeString();
+        const color = (responseStatus >= 200 && responseStatus < 300) ? '#2ecc71' : '#e74c3c'; // Xanh nếu OK, Đỏ nếu Lỗi
+
+        const logHTML = `
+<span style="color: #f39c12;">[${time}] ${title} (Status: ${responseStatus})</span>
+<span style="color: ${color};">${JSON.stringify(data, null, 2)}</span>
+---------------------------------------------------
+`;
+        logBox.innerHTML = logHTML + logBox.innerHTML;
+    }
+
+    // BƯỚC 1: LẤY DANH SÁCH GROOMS
+    async function fetchGrooms() {
+        try {
+            const res = await fetch(`${BASE_URL}/grooms`);
+            const data = await res.json();
+            logData('GET /grooms', res.status, data);
+
+            if (data.success && data.data) {
+                const select = document.getElementById('groomSelect');
+                select.innerHTML = ''; // Xóa option cũ
+                data.data.forEach(g => {
+                    select.innerHTML += `<option value="${g.userId}">${g.fullName} (ID: ${g.userId})</option>`;
+                });
+            }
+        } catch (error) {
+            logData('Lỗi Kết Nối Cổng 8080', 500, error.message);
+        }
+    }
+
+    // BƯỚC 2: TẠO GIÁO ÁN
+    async function createPlan() {
+        const payload = {
+            horseId: parseInt(document.getElementById('horseId').value),
+            trainerId: parseInt(document.getElementById('trainerId').value),
+            planName: document.getElementById('planName').value,
+            targetDistanceM: parseFloat(document.getElementById('targetDistanceM').value),
+            targetSpeedKmh: parseFloat(document.getElementById('targetSpeedKmh').value),
+            trackType: document.getElementById('trackType').value,
+            startDate: "2026-10-10", // Hardcode cho nhanh
+            endDate: "2026-10-30"
+        };
+
+        try {
+            const res = await fetch(`${BASE_URL}/plans`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            logData('POST /plans', res.status, data);
+
+            // Nếu tạo thành công, tự động điền planId vào ô bước 3
+            if (data.success && data.data && data.data.planId) {
+                document.getElementById('planIdResult').value = data.data.planId;
+            }
+        } catch (error) {
+            logData('Lỗi POST /plans', 500, error.message);
+        }
+    }
+
+    // BƯỚC 3: THÊM BUỔI TẬP (LẬP LỊCH TRÊN CALENDAR)
+    async function addTrainingDay() {
+        const planId = document.getElementById('planIdResult').value;
+        if (!planId) { alert('Vui lòng tạo Giáo án trước hoặc nhập ID Giáo án!'); return; }
+
+        const payload = {
+            groomId: parseInt(document.getElementById('groomSelect').value),
+            trainerId: parseInt(document.getElementById('trainerId').value),
+            trainingDate: document.getElementById('trainingDate').value,
+            durationMinutes: 60
+        };
+
+        try {
+            const res = await fetch(`${BASE_URL}/plans/${planId}/days`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            logData(`POST /plans/${planId}/days`, res.status, data);
+
+            // Tự động điền ID buổi tập vào ô bước 4
+            if (data.success && data.data && data.data.trainingDayId) {
+                document.getElementById('trainingDayIdResult').value = data.data.trainingDayId;
+            }
+        } catch (error) {
+            logData('Lỗi thêm buổi tập', 500, error.message);
+        }
+    }
+
+    // BƯỚC 4: XÁC NHẬN CÔNG VIỆC
+    async function confirmTask() {
+        const dayId = document.getElementById('trainingDayIdResult').value;
+        if (!dayId) { alert('Vui lòng thêm buổi tập trước để lấy ID!'); return; }
+
+        try {
+            const res = await fetch(`${BASE_URL}/days/${dayId}/confirm`, {
+                method: 'PUT'
+            });
+            const data = await res.json();
+            logData(`PUT /days/${dayId}/confirm`, res.status, data);
+        } catch (error) {
+            logData('Lỗi xác nhận', 500, error.message);
+        }
+    }
+</script>
+</body>
+</html>

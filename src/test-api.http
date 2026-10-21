@@ -1,0 +1,306 @@
+@baseUrl = http://localhost:8080
+@token = dán_chuỗi_token_vào_đây
+@refreshToken = dán_refresh_token_vào_đây
+
+###############################################################################
+# 1. AUTHENTICATION & TÀI KHOẢN (JWT, ĐĂNG NHẬP, ĐĂNG KÝ, REFRESH, LOGOUT)
+###############################################################################
+
+### 1.1 Đăng nhập Club Manager lấy Token
+# @name loginManager
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "manager_admin",
+  "password": "Password123!"
+}
+
+### 1.2 Đăng nhập Huấn luyện viên (Head Trainer)
+# @name loginTrainer
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "trainer_hung",
+  "password": "Password123!"
+}
+
+### 1.3 Đăng nhập Nhân viên chăm sóc (Groom)
+# @name loginGroom
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "groom_nam",
+  "password": "Password123!"
+}
+
+### 1.4 Đăng nhập Chủ ngựa (Horse Owner)
+# @name loginOwner
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "chu_ngua_lanhoang",
+  "password": "Password123!"
+}
+
+### 1.5 Đăng ký Chủ ngựa mới
+POST {{baseUrl}}/api/v1/auth/register-owner
+Content-Type: application/json
+
+{
+  "username": "owner_test01",
+  "password": "Password123!",
+  "fullName": "Nguyễn Văn Chủ Ngựa",
+  "email": "owner01@test.com",
+  "phone": "0912345678",
+  "taxCode": "0312456789",
+  "billingAddress": "123 Đường Lê Lợi, Quận 1, TP.HCM"
+}
+
+### 1.6 Club Manager tạo tài khoản nhân viên (Groom / Trainer / Veterinarian)
+POST {{baseUrl}}/api/v1/auth/staff/create
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "username": "groom_02",
+  "password": "Password123!",
+  "fullName": "Lê Văn Chăm Sóc",
+  "email": "groom02@horsetrack.com",
+  "phone": "0987654321",
+  "roleName": "Groom",
+  "licenseNumber": "",
+  "specialization": "Vệ sinh chuồng trại"
+}
+
+### 1.7 Làm mới Access Token bằng Refresh Token (Mỗi token dùng 1 lần)
+POST {{baseUrl}}/api/v1/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+### 1.8 Đăng xuất (Thu hồi refresh token & đưa access token vào blacklist)
+POST {{baseUrl}}/api/v1/auth/logout
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "refreshToken": "{{refreshToken}}"
+}
+
+
+###############################################################################
+# 2. KHÓA Y TẾ KHẨN CẤP (VETLOCK) & QUẢN LÝ BỆNH ÁN
+###############################################################################
+
+### 2.1 Kích hoạt Khóa y tế khẩn cấp (VetLock) cho ngựa
+POST {{baseUrl}}/api/v1/medical/vet-lock
+Content-Type: application/json
+
+{
+  "horseId": 1,
+  "reason": "Phát hiện sưng phù gân chân trước bên phải sau buổi tập"
+}
+
+### 2.2 Mở khóa VetLock khi ngựa đã hồi phục hoàn toàn
+POST {{baseUrl}}/api/v1/medical/release-lock/1
+Content-Type: application/json
+
+### 2.3 Bác sĩ tạo hồ sơ bệnh án mới (kê đơn & đánh dấu chấn thương)
+POST {{baseUrl}}/api/v1/medical-records
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "horseId": 1,
+  "visitDate": "2026-10-25",
+  "symptoms": "Đi khập khiễng nhẹ chân trước",
+  "diagnosis": "Viêm màng bao gân nhẹ",
+  "isLockoutOrdered": true,
+  "injuryMarks": [
+    {
+      "bodyPartCode": "FRONT_RIGHT_LEG",
+      "coordX": 150.5,
+      "coordY": 320.0,
+      "severityLevel": "MODERATE"
+    }
+  ],
+  "prescriptionItems": [
+    {
+      "itemId": 1,
+      "quantityPrescribed": 2,
+      "dosage": "Uống 1 liều/ngày sau bữa ăn sáng"
+    }
+  ]
+}
+
+### 2.4 Club Manager phê duyệt phác đồ điều trị
+PUT {{baseUrl}}/api/v1/manager/medical-records/1/approve
+Authorization: Bearer {{token}}
+
+### 2.5 Chủ ngựa thanh toán viện phí qua VNPay
+POST {{baseUrl}}/api/v1/owner/payments/medical-records/1/vnpay
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 3. TIÊM CHỦNG & LỊCH TIÊM VẮC-XIN (VACCINATIONS)
+###############################################################################
+
+### 3.1 Xem danh sách lịch tiêm chủng (Filter: upcoming / due / completed)
+GET {{baseUrl}}/api/v1/vaccinations?tab=upcoming
+
+### 3.2 Ghi nhận đã tiêm mũi vắc-xin (Tự động cập nhật DB & tạo lịch nhắc lại)
+POST {{baseUrl}}/api/v1/vaccinations/VC-036/execute
+
+### 3.3 Tạo lịch tiêm chủng mới hàng loạt cho nhiều ngựa
+POST {{baseUrl}}/api/v1/vaccinations/schedule
+Content-Type: application/json
+
+{
+  "horseIds": [1, 2, 3],
+  "medicineName": "Vaccine Cúm Ngựa Equine Influenza",
+  "scheduledDate": "2026-11-01",
+  "notes": "Tiêm phòng định kỳ mùa đông"
+}
+
+
+###############################################################################
+# 4. PHÁC ĐỒ ĐIỀU TRỊ & QUẢN LÝ LÔ HÀNG (PROTOCOLS & SHIPMENTS)
+###############################################################################
+
+### 4.1 Xem danh sách phác đồ theo Tab
+GET {{baseUrl}}/api/v1/protocols?tab=Cần bác sĩ xử lý
+
+### 4.2 Xem danh sách lô hàng thuốc/vật tư liên quan đến phác đồ
+GET {{baseUrl}}/api/v1/protocols/shipments
+
+
+###############################################################################
+# 5. KHÁM SÀNG LỌC TRƯỚC THI ĐẤU (PRE-RACE EXAMS)
+###############################################################################
+
+### 5.1 Danh sách đề xuất khám trước giải đua (Tab: CHO_KHAM)
+GET {{baseUrl}}/api/v1/prerace-exams?tab=CHO_KHAM
+
+### 5.2 Danh sách ngựa đã có kết quả khám (Tab: DA_CO_KET_QUA)
+GET {{baseUrl}}/api/v1/prerace-exams?tab=DA_CO_KET_QUA
+
+### 5.3 Bác sĩ ghi nhận kết quả khám sàng lọc
+POST {{baseUrl}}/api/v1/prerace-exams/DX-0009/examine
+Content-Type: application/json
+
+{
+  "isPassed": true,
+  "vetNotes": "Nhịp tim ổn định, khớp khỏe mạnh, không có dấu hiệu chấn thương. Đủ điều kiện thi đấu."
+}
+
+
+###############################################################################
+# 6. GIÁO ÁN HUẤN LUYỆN & LẬP LỊCH TẬP (TRAINING PLANS & CALENDAR)
+###############################################################################
+
+### 6.1 Thống kê tổng quan màn hình Huấn luyện (Dashboard Stats)
+GET {{baseUrl}}/api/v1/training-plans/dashboard-stats
+Authorization: Bearer {{token}}
+
+### 6.2 Lấy danh sách giáo án huấn luyện (Có phân trang & lọc status)
+GET {{baseUrl}}/api/v1/training-plans?status=ACTIVE&page=0&size=10
+Authorization: Bearer {{token}}
+
+### 6.3 Lấy chi tiết Giáo án & các buổi tập để hiển thị lên Calendar
+GET {{baseUrl}}/api/v1/training-plans/1
+Authorization: Bearer {{token}}
+
+### 6.4 Lấy danh sách nhân viên (Groom / Trainer) để gán việc trên lịch
+GET {{baseUrl}}/api/v1/training-plans/assignable-staff
+Authorization: Bearer {{token}}
+
+### 6.5 Head Trainer tạo buổi tập mới vào lịch của giáo án
+POST {{baseUrl}}/api/v1/training-plans/1/sessions
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "sessionDate": "2026-10-25T08:30:00",
+  "activityType": "Chạy bứt tốc 800m",
+  "notes": "Quan sát nhịp thở sau khi về đích",
+  "assignedToId": 2
+}
+
+
+###############################################################################
+# 7. CHĂM SÓC HÀNG NGÀY & CHO ĂN (CARE TASKS)
+###############################################################################
+
+### 7.1 Groom xem danh sách công việc cần làm hôm nay
+GET {{baseUrl}}/api/v1/care-tasks/my-tasks
+Authorization: Bearer {{token}}
+
+### 7.2 Groom hoàn thành công việc (Tự động trừ tồn kho nếu là FEEDING)
+PUT {{baseUrl}}/api/v1/care-tasks/1/complete
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 8. QUẢN LÝ NGỰA & BẢN ĐỒ CHUỒNG (HORSES & STALLS)
+###############################################################################
+
+### 8.1 Lấy danh sách tất cả ngựa
+GET {{baseUrl}}/api/v1/horses
+Authorization: Bearer {{token}}
+
+### 8.2 Xem sơ đồ vị trí chuồng trại (Stall Map)
+GET {{baseUrl}}/api/v1/stalls/map
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 9. QUẢN LÝ PHÁC ĐỒ & DANH MỤC THUỐC (MEDICAL MANAGEMENT)
+###############################################################################
+
+### 9.1 Lấy danh mục thuốc trong kho y tế
+GET {{baseUrl}}/api/medical-management/medications
+
+### 9.2 Khởi tạo phác đồ điều trị nhiều giai đoạn & trừ tồn kho thuốc
+POST {{baseUrl}}/api/medical-management/protocols
+Content-Type: application/json
+
+{
+  "horseId": 1,
+  "caseId": "C-0015",
+  "diagnosis": "Viêm bao gân cấp tính",
+  "targetDate": "2026-11-01",
+  "stages": [
+    {
+      "stageName": "Giai đoạn 1: Chống viêm cấp & Giảm đau",
+      "startDate": "2026-10-20",
+      "durationDays": 5,
+      "goal": "Hạ sốt, giảm sưng và tiêu viêm",
+      "items": [
+        {
+          "medicationId": 1,
+          "quantity": 2
+        }
+      ]
+    }
+  ]
+}
+
+### 9.3 Lấy danh sách ca khám (Hộp thư ca khám của Bác sĩ)
+GET {{baseUrl}}/api/medical/cases?status=ALL
+
+### 9.4 Bác sĩ ghi nhận kết quả khám và hướng xử lý
+POST {{baseUrl}}/api/medical/cases/action?vetId=1
+Content-Type: application/json
+
+{
+  "caseId": "C-0015",
+  "vetNotes": "Chân trước sưng nhẹ, đề xuất nghỉ tập và dùng kháng viêm",
+  "treatmentDirection": "Tạm dừng tập luyện 1 tuần, theo dõi thêm"
+}
