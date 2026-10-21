@@ -2,7 +2,7 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **118 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **119 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 ---
 
@@ -652,7 +652,20 @@ Không cần body. Buổi tập HLV vừa phân công (6.5) ở trạng thái `P
 | Ngựa đang VetLock | `400` |
 | `sessionId` không tồn tại | `404` |
 
-### 7.3 `PUT /api/v1/training-sessions/{sessionId}/execute`
+### 7.3 `PUT /api/v1/training-sessions/{sessionId}/stop`: dừng buổi tập vì chỉ số sức khỏe vượt ngưỡng (`Trainer` phụ trách ngựa hoặc `Groom` được giao)
+
+```json
+{ "reason": "Nhịp tim vượt ngưỡng 210 bpm, ngựa thở gấp", "requestVet": true, "severity": "HIGH", "heartRate": 210, "speedKmh": 52 }
+```
+
+- `requestVet` (mặc định `true`): buổi tập chuyển **`WAITING_VET`** (đã dừng, chờ bác sĩ) và hệ thống tự tạo ca khám nguồn `SESSION_STOP` trong hộp thư bác sĩ (`GET /medical/cases`). `requestVet: false`: buổi tập chuyển `STOPPED` ngay.
+- Khi bác sĩ ra quyết định, **dù khóa hay không khóa huấn luyện**, buổi tập chờ bác sĩ chuyển **`STOPPED`** (đã kết thúc), các buổi chưa thực hiện của giáo án bị hủy và **giáo án kết thúc** (`COMPLETED` nếu đã có buổi hoàn thành, ngược lại `CANCELLED`). HLV nhận email.
+  - **Không khóa:** bác sĩ đóng ca `PUT /medical/cases/{caseId}/close` → lập được giáo án mới ngay.
+  - **Khóa:** `POST /medical/vet-lock` (hoặc bệnh án chỉ định khóa tập, hoặc `PUT /horses/{id}` với `isLocked: true`) → giáo án đóng, không chuyển `PAUSED`; lập giáo án mới sau khi bác sĩ mở khóa (10.2).
+- Khi đang `WAITING_VET`: Groom không hoàn thành được buổi tập (`400`) và chưa lập được giáo án mới cho ngựa (giáo án cũ còn mở).
+- **Test lỗi:** lý do dưới 10 ký tự → `400`; buổi tập đã kết thúc → `400`; Trainer không phụ trách ngựa hoặc Groom khác → `403`; `sessionId` sai → `404`.
+
+### 7.4 `PUT /api/v1/training-sessions/{sessionId}/execute`
 
 ```json
 { "status": "COMPLETED", "notes": "Ngựa chạy tốt" }

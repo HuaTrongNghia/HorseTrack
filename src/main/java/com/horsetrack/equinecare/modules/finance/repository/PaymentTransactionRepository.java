@@ -16,4 +16,9 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
 
     // Tiền đã thu: chỉ giao dịch đã được server xác minh
     List<PaymentTransaction> findByPaymentStatusAndVerifiedAtBetween(String status, LocalDateTime from, LocalDateTime to);
+
+    // Giao dịch còn chờ xác minh (để hỏi lại VNPay)
+    List<PaymentTransaction> findByPaymentStatusAndPaidAtAfterOrderByPaidAtAsc(String status, LocalDateTime after);
+
+    List<PaymentTransaction> findByInvoice_Owner_UserIdAndPaymentStatus(Integer ownerId, String status);
 }

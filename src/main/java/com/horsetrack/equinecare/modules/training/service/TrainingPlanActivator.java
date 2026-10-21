@@ -26,6 +26,12 @@ public class TrainingPlanActivator {
     public static final String PLAN_ACTIVE = "ACTIVE";
     public static final String SESSION_PENDING = "PENDING";
     public static final String SESSION_CONFIRMED = "CONFIRMED";
+    /** Buổi tập dừng giữa chừng (chỉ số vượt ngưỡng), đã gửi ca cho bác sĩ, chờ bác sĩ quyết định */
+    public static final String SESSION_WAITING_VET = "WAITING_VET";
+    /** Buổi tập kết thúc do dừng giữa chừng */
+    public static final String SESSION_STOPPED = "STOPPED";
+    /** Buổi tập chưa kết thúc (kể cả đang chờ bác sĩ): giáo án chưa được tự hoàn thành */
+    public static final List<String> UNFINISHED_SESSION_STATUSES = List.of("PENDING", "CONFIRMED", "WAITING_VET");
     /** Buổi tập chưa kết thúc (chờ xác nhận hoặc đã xác nhận) */
     public static final List<String> OPEN_SESSION_STATUSES = List.of(SESSION_PENDING, SESSION_CONFIRMED);
     /** Giáo án đang chiếm ngựa: mỗi ngựa chỉ có tối đa một giáo án ở các trạng thái này */

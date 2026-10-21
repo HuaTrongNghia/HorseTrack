@@ -325,7 +325,7 @@ public class InvoiceService {
         }
     }
 
-    User currentUser() {
+    public User currentUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + username));

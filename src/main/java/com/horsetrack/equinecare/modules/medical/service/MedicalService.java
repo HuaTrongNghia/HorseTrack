@@ -41,6 +41,7 @@ public class MedicalService {
     private final com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
+    private final com.horsetrack.equinecare.modules.training.service.SessionIncidentHandler incidentHandler;
 
     private boolean isCurrentUserVeterinarian() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -176,7 +177,13 @@ public class MedicalService {
         vetCase.setOutcome(outcome.trim().length() > 1000 ? outcome.trim().substring(0, 1000) : outcome.trim());
         vetCase.setAssignedVet(vetCase.getAssignedVet() != null ? vetCase.getAssignedVet() : currentUser());
         vetCase.setClosedAt(LocalDateTime.now());
-        return toCaseDTO(vetCaseRepository.save(vetCase));
+        VetCase saved = vetCaseRepository.save(vetCase);
+        // Bác sĩ đóng ca mà không khóa huấn luyện: buổi tập đang chờ bác sĩ kết thúc, giáo án đóng để lập giáo án mới
+        Horse horse = saved.getHorse();
+        if (horse != null && !Boolean.TRUE.equals(horse.getIsLocked())) {
+            incidentHandler.resolveWaitingVet(horse, false, outcome);
+        }
+        return toCaseDTO(saved);
     }
 
     // Nhận mã ca (C-0001) hoặc ID số

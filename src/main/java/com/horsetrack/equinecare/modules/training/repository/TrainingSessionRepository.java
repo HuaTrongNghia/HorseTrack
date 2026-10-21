@@ -24,6 +24,8 @@ public interface TrainingSessionRepository extends JpaRepository<TrainingSession
 
     boolean existsByTrainingPlan_PlanIdAndStatus(Integer planId, String status);
 
+    List<TrainingSession> findByTrainingPlan_Horse_HorseIdAndStatus(Integer horseId, String status);
+
     // F21-05: buổi tập chưa kết thúc (PENDING / CONFIRMED) của một nhân viên bắt đầu trong khoảng (from, to) -> trùng khung giờ
     @org.springframework.data.jpa.repository.Query("SELECT s FROM TrainingSession s WHERE s.assignedTo.userId = :userId " +
             "AND s.status IN ('PENDING', 'CONFIRMED') AND s.sessionDate > :from AND s.sessionDate < :to ORDER BY s.sessionDate")

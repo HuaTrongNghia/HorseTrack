@@ -126,6 +126,14 @@ public class PaymentService {
         String txnRef = params.get("vnp_TxnRef");
         String responseCode = params.get("vnp_ResponseCode");
         if (!vnPay.verifySignature(params)) {
+            // Ghi lại để tra cứu (thường do sai VNPAY_HASH_SECRET); giao dịch vẫn chờ xác minh lại
+            transactionRepository.findByTransactionRef(txnRef).ifPresent(t -> {
+                if (PaymentTransaction.PENDING_VERIFICATION.equals(t.getPaymentStatus())) {
+                    t.setNotes(truncate(stamp() + " Return: chữ ký không hợp lệ (mã VNPay " + responseCode + ")"));
+                    transactionRepository.save(t);
+                }
+            });
+            log.warn("VNPay Return {}: chữ ký không hợp lệ (kiểm tra VNPAY_HASH_SECRET)", txnRef);
             return VnPayResultDTO.builder().status("INVALID").message("Chữ ký dữ liệu trả về không hợp lệ.").txnRef(txnRef).responseCode(responseCode).build();
         }
         Optional<PaymentTransaction> found = transactionRepository.findByTransactionRef(txnRef);
@@ -135,16 +143,85 @@ public class PaymentService {
         PaymentTransaction tx = lock(found.get());
 
         if (PaymentTransaction.PENDING_VERIFICATION.equals(tx.getPaymentStatus()) && verifyOnReturn) {
-            VnPayGateway.QueryResult q = vnPay.queryTransaction(tx.getTransactionRef(), orderInfo(tx.getInvoice()), txnTime(tx), clientIp);
-            if (q.paid() && q.amount() != null && q.amount().compareTo(tx.getAmountPaid()) == 0) {
-                finish(tx, true, q.transactionNo(), q.responseCode(), "querydr");
-            } else if (q.ok() && "00".equals(q.responseCode()) && q.transactionStatus() != null
-                    && !"00".equals(q.transactionStatus()) && !"01".equals(q.transactionStatus())) {
-                // VNPay xác nhận giao dịch không thành công (01 = đang xử lý thì giữ nguyên, chờ IPN)
-                finish(tx, false, q.transactionNo(), q.transactionStatus(), "querydr");
-            }
+            verifyWithVnPay(tx, clientIp, "Return");
         }
         return result(tx, responseCode);
+    }
+
+    /**
+     * Hỏi lại VNPay (querydr) cho giao dịch còn chờ xác minh. Dùng khi chạy localhost (VNPay không gọi được IPN)
+     * hoặc khi trình duyệt không quay về Return URL. Kết quả mỗi lần hỏi được ghi vào ghi chú giao dịch.
+     */
+    private void verifyWithVnPay(PaymentTransaction tx, String clientIp, String source) {
+        VnPayGateway.QueryResult q = vnPay.queryTransaction(tx.getTransactionRef(), orderInfo(tx.getInvoice()), txnTime(tx), clientIp);
+        if (q.paid() && q.amount() != null && q.amount().compareTo(tx.getAmountPaid()) == 0) {
+            finish(tx, true, q.transactionNo(), q.responseCode(), "querydr/" + source);
+            return;
+        }
+        if (q.ok() && "00".equals(q.responseCode()) && q.transactionStatus() != null
+                && !"00".equals(q.transactionStatus()) && !"01".equals(q.transactionStatus())) {
+            // VNPay xác nhận giao dịch không thành công (01 = đang xử lý thì giữ nguyên)
+            finish(tx, false, q.transactionNo(), q.transactionStatus(), "querydr/" + source);
+            return;
+        }
+        boolean expired = tx.getPaidAt() != null && tx.getPaidAt().isBefore(LocalDateTime.now().minusMinutes(vnPay.getExpireMinutes() + 30L));
+        if (expired && q.ok() && "91".equals(q.responseCode())) {
+            // VNPay không có giao dịch này và đã quá hạn thanh toán: chủ ngựa chưa thanh toán
+            finish(tx, false, null, "91", "querydr/" + source + " - quá hạn, VNPay không ghi nhận giao dịch");
+            return;
+        }
+        String detail = q.paid() ? "số tiền VNPay " + q.amount() + " khác số tiền giao dịch " + tx.getAmountPaid()
+                : "chưa xác nhận - mã " + q.responseCode() + ", trạng thái " + q.transactionStatus() + (q.message() != null ? ", " + q.message() : "");
+        tx.setNotes(truncate(stamp() + " " + source + " querydr: " + detail));
+        transactionRepository.save(tx);
+        log.warn("VNPay querydr {} ({}): {}", tx.getTransactionRef(), source, detail);
+    }
+
+    /** Hỏi lại VNPay các giao dịch còn chờ xác minh của chủ ngựa đang đăng nhập */
+    @Transactional
+    public int recheckMyPending(Integer ownerId, String clientIp) {
+        if (!vnPay.isConfigured()) {
+            return 0;
+        }
+        return recheck(transactionRepository.findByInvoice_Owner_UserIdAndPaymentStatus(ownerId, PaymentTransaction.PENDING_VERIFICATION), clientIp, "Tải lại");
+    }
+
+    /** Mỗi 5 phút hỏi lại VNPay các giao dịch còn chờ trong 3 ngày gần nhất */
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelayString = "${app.vnpay.recheck-ms:300000}", initialDelayString = "${app.vnpay.recheck-initial-delay-ms:60000}")
+    @Transactional
+    public void recheckRecent() {
+        if (!vnPay.isConfigured()) {
+            return;
+        }
+        int n = recheck(transactionRepository.findByPaymentStatusAndPaidAtAfterOrderByPaidAtAsc(PaymentTransaction.PENDING_VERIFICATION,
+                LocalDateTime.now().minusDays(3)), "127.0.0.1", "Định kỳ");
+        if (n > 0) {
+            log.info("VNPay: xác minh lại {} giao dịch", n);
+        }
+    }
+
+    // Trả về số giao dịch đã kết thúc (VERIFIED / FAILED) sau khi hỏi lại
+    private int recheck(java.util.List<PaymentTransaction> pending, String clientIp, String source) {
+        int done = 0;
+        for (PaymentTransaction t : pending) {
+            try {
+                PaymentTransaction tx = lock(t);
+                if (!PaymentTransaction.PENDING_VERIFICATION.equals(tx.getPaymentStatus())) {
+                    continue;
+                }
+                verifyWithVnPay(tx, clientIp, source);
+                if (!PaymentTransaction.PENDING_VERIFICATION.equals(tx.getPaymentStatus())) {
+                    done++;
+                }
+            } catch (Exception ex) {
+                log.warn("Không xác minh lại được giao dịch {}: {}", t.getTransactionRef(), ex.getMessage());
+            }
+        }
+        return done;
+    }
+
+    private static String stamp() {
+        return "[" + LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM HH:mm")) + "]";
     }
 
     private VnPayResultDTO result(PaymentTransaction tx, String responseCode) {

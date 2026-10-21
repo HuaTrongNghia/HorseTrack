@@ -28,20 +28,33 @@ public class OwnerInvoiceController {
 
     @GetMapping
     @Operation(summary = "Hóa đơn của tôi", description = "Mặc định chỉ hóa đơn còn phải trả (UNPAID, OVERDUE). includeClosed=true để xem cả hóa đơn đã thanh toán / đã hủy.")
-    public ResponseEntity<ApiResponse<List<InvoiceDTO>>> getMyInvoices(@RequestParam(defaultValue = "false") boolean includeClosed) {
+    public ResponseEntity<ApiResponse<List<InvoiceDTO>>> getMyInvoices(@RequestParam(defaultValue = "false") boolean includeClosed,
+                                                                       HttpServletRequest request) {
+        recheck(request);
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách hóa đơn thành công", invoiceService.getMyInvoices(includeClosed)));
     }
 
     @GetMapping("/payment-history")
     @Operation(summary = "Lịch sử thanh toán", description = "Chỉ giao dịch đã kết thúc: thành công (VERIFIED) hoặc thất bại (FAILED).")
-    public ResponseEntity<ApiResponse<List<PaymentTransactionDTO>>> getPaymentHistory() {
+    public ResponseEntity<ApiResponse<List<PaymentTransactionDTO>>> getPaymentHistory(HttpServletRequest request) {
+        recheck(request);
         return ResponseEntity.ok(ApiResponse.ok("Lấy lịch sử thanh toán thành công", invoiceService.getMyPaymentHistory()));
     }
 
     @GetMapping("/{invoiceId}")
     @Operation(summary = "Chi tiết hóa đơn", description = "Dòng phí, hạn thanh toán, phí trễ hạn (BR_12), phí kích hoạt lại (BR_14), số tiền phải trả hôm nay và lịch sử giao dịch.")
-    public ResponseEntity<ApiResponse<InvoiceDTO>> getMyInvoice(@PathVariable Integer invoiceId) {
+    public ResponseEntity<ApiResponse<InvoiceDTO>> getMyInvoice(@PathVariable Integer invoiceId, HttpServletRequest request) {
+        recheck(request);
         return ResponseEntity.ok(ApiResponse.ok("Lấy chi tiết hóa đơn thành công", invoiceService.getMyInvoice(invoiceId)));
+    }
+
+    // Giao dịch VNPay còn chờ xác minh được hỏi lại trước khi trả dữ liệu, để tải lại trang thấy đúng trạng thái
+    private void recheck(HttpServletRequest request) {
+        try {
+            paymentService.recheckMyPending(invoiceService.currentUser().getUserId(), ClientIp.of(request));
+        } catch (Exception ignored) {
+            // Không để lỗi kết nối VNPay làm hỏng việc xem hóa đơn
+        }
     }
 
     @PostMapping("/{invoiceId}/vnpay")

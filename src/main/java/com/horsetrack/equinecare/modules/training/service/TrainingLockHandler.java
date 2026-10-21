@@ -40,10 +40,13 @@ public class TrainingLockHandler {
     private final TrainingSessionRepository sessionRepository;
     private final TrainingPlanRepository planRepository;
     private final EmailService emailService;
+    private final SessionIncidentHandler incidentHandler;
 
     /** Gọi ngay sau khi ngựa chuyển sang khóa huấn luyện. Trả về số buổi tập đã hủy. */
     public int onHorseLocked(Horse horse, String reason) {
         String why = StringUtils.hasText(reason) ? reason.trim() : "Khóa huấn luyện theo chỉ định y tế";
+        // Buổi tập đang chờ bác sĩ (dừng vì vượt ngưỡng) kết thúc và giáo án của nó đóng lại trước
+        incidentHandler.resolveWaitingVet(horse, true, why);
 
         List<TrainingSession> pending = sessionRepository.findPendingByHorse(horse.getHorseId());
         for (TrainingSession s : pending) {
