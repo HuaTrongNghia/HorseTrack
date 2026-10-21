@@ -53,6 +53,10 @@ public class CareTask {
     @Column(name = "notes", length = 2000)
     private String notes;
 
+    // Cảnh báo trễ hạn (BR_05 / F4-04): hệ thống ghi khi quá 45 phút sau giờ hẹn mà chưa xong; khác null thì không cảnh báo lặp
+    @Column(name = "warning_note", length = 500)
+    private String warningNote;
+
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
