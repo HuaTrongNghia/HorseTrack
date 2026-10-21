@@ -19,4 +19,8 @@ public class TrainingSessionDTO {
     private String notes;
     private Integer assignedToId;
     private String assignedToName;
+    private Integer evaluationScore;
+    private String evaluationComment;
+    private String evaluatedBy;
+    private String evaluatedAt;
 }

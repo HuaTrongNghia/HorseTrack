@@ -11,6 +11,8 @@ import com.horsetrack.equinecare.modules.training.entity.TrainingPlan;
 import com.horsetrack.equinecare.modules.training.entity.TrainingSession;
 import com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository;
 import com.horsetrack.equinecare.modules.training.service.OwnerTrainingService;
+import com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper;
+import com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -62,8 +64,22 @@ public class OwnerTrainingServiceImpl implements OwnerTrainingService {
             throw new AccessDeniedException("You do not have permission to view this horse's training progress");
         }
 
-        TrainingPlan plan = trainingPlanRepository.findFirstByHorse_HorseIdAndStatusInOrderByCreatedAtDesc(horseId, com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES)
-                .orElseThrow(() -> new RuntimeException("Ngựa hiện chưa có giáo án nào"));
+        // Ưu tiên giáo án đang chạy/chờ; nếu đã hoàn thành thì lấy giáo án gần nhất của ngựa
+        TrainingPlan plan = trainingPlanRepository.findFirstByHorse_HorseIdAndStatusInOrderByCreatedAtDesc(horseId, TrainingPlanActivator.OPEN_PLAN_STATUSES)
+                .or(() -> trainingPlanRepository.findFirstByHorse_HorseIdOrderByCreatedAtDesc(horseId))
+                .orElse(null);
+
+        if (plan == null) {
+            return OwnerTrainingProgressDTO.builder()
+                    .planId(null)
+                    .planName(null)
+                    .startDate(null)
+                    .endDate(null)
+                    .status("NONE")
+                    .progress(0.0)
+                    .sessions(List.of())
+                    .build();
+        }
 
         List<TrainingSession> sessions = plan.getSessions();
         double progress = 0.0;
@@ -77,14 +93,21 @@ public class OwnerTrainingServiceImpl implements OwnerTrainingService {
 
             sessionDTOs = sessions.stream()
                     .sorted(Comparator.comparing(TrainingSession::getSessionDate))
-                    .map(s -> TrainingSessionLogDTO.builder()
-                            .sessionId(s.getSessionId())
-                            .sessionDate(s.getSessionDate())
-                            .activityType(s.getActivityType())
-                            .status(s.getStatus())
-                            .notes(s.getNotes())
-                            .assignedToName(s.getAssignedTo() != null ? s.getAssignedTo().getFullName() : null)
-                            .build())
+                    .map(s -> {
+                        SessionEvaluationHelper.EvaluationData eval = SessionEvaluationHelper.extractEvaluation(s.getNotes());
+                        return TrainingSessionLogDTO.builder()
+                                .sessionId(s.getSessionId())
+                                .sessionDate(s.getSessionDate())
+                                .activityType(s.getActivityType())
+                                .status(s.getStatus())
+                                .notes(SessionEvaluationHelper.removeEvaluation(s.getNotes()))
+                                .assignedToName(s.getAssignedTo() != null ? s.getAssignedTo().getFullName() : null)
+                                .evaluationScore(eval != null ? eval.getScore() : null)
+                                .evaluationComment(eval != null ? eval.getComment() : null)
+                                .evaluatedBy(eval != null ? eval.getBy() : null)
+                                .evaluatedAt(eval != null ? eval.getAt() : null)
+                                .build();
+                    })
                     .collect(Collectors.toList());
         }
 

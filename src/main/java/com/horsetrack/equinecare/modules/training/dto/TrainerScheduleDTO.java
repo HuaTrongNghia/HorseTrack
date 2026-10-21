@@ -16,4 +16,8 @@ public class TrainerScheduleDTO {
     private String planName;
     private String horseName;
     private String stallZone;
+    private Integer evaluationScore;
+    private String evaluationComment;
+    private String evaluatedBy;
+    private String evaluatedAt;
 }

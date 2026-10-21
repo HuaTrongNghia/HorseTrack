@@ -142,8 +142,8 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         if (!TrainingPlanActivator.SESSION_PENDING.equalsIgnoreCase(session.getStatus())) {
             throw new IllegalArgumentException("Chỉ xác nhận được buổi tập đang chờ xác nhận (hiện tại: " + session.getStatus() + ").");
         }
-        if (session.getSessionDate() != null && session.getSessionDate().isBefore(LocalDateTime.now())) {
-            throw new IllegalArgumentException("Buổi tập lúc " + session.getSessionDate() + " đã qua giờ, không thể xác nhận. Hãy báo HLV xếp lại lịch.");
+        if (session.getSessionDate() != null && session.getSessionDate().toLocalDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Buổi tập ngày " + session.getSessionDate().toLocalDate() + " đã qua ngày, không thể xác nhận. Hãy báo HLV xếp lại lịch.");
         }
         TrainingPlan plan = session.getTrainingPlan();
         if (plan != null && plan.getHorse() != null && Boolean.TRUE.equals(plan.getHorse().getIsLocked())) {
@@ -159,5 +159,29 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         // Đã có Groom xác nhận: giáo án chạy ngay nếu đã tới ngày bắt đầu, nếu chưa thì tác vụ định kỳ sẽ kích hoạt đúng ngày
         planActivator.tryActivate(plan, LocalDate.now());
         return plan != null ? plan.getStatus() : null;
+    }
+
+    @Override
+    @Transactional
+    public void evaluateSession(Integer sessionId, com.horsetrack.equinecare.modules.training.dto.SessionEvaluateRequestDTO request) {
+        User user = getLoggedInUser();
+        TrainingSession session = trainingSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new com.horsetrack.equinecare.common.exception.ResourceNotFoundException("Không tìm thấy buổi tập với ID: " + sessionId));
+
+        if (!"COMPLETED".equalsIgnoreCase(session.getStatus())) {
+            throw new IllegalArgumentException("Chỉ đánh giá được phiên đã hoàn thành.");
+        }
+
+        String nowStr = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM HH:mm"));
+        String updatedNotes = com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper.attachEvaluation(
+                session.getNotes(),
+                request.getScore(),
+                request.getComment(),
+                user.getFullName() != null ? user.getFullName() : user.getUsername(),
+                nowStr
+        );
+
+        session.setNotes(updatedNotes);
+        trainingSessionRepository.save(session);
     }
 }

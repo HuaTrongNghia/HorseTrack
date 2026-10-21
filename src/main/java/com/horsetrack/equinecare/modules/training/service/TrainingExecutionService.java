@@ -1,5 +1,6 @@
 package com.horsetrack.equinecare.modules.training.service;
 
+import com.horsetrack.equinecare.modules.training.dto.SessionEvaluateRequestDTO;
 import com.horsetrack.equinecare.modules.training.dto.SessionExecuteRequestDTO;
 import com.horsetrack.equinecare.modules.training.dto.TrainerScheduleDTO;
 
@@ -12,4 +13,7 @@ public interface TrainingExecutionService {
 
     // Groom xác nhận nhận buổi tập được HLV phân công; trả về trạng thái giáo án sau khi xác nhận
     String confirmSession(Integer sessionId);
+
+    // HLV đánh giá phong độ sau khi buổi tập hoàn thành
+    void evaluateSession(Integer sessionId, SessionEvaluateRequestDTO request);
 }

@@ -156,15 +156,23 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         horseAccessGuard.checkAssigned(plan.getHorse());
 
         List<TrainingSessionDTO> sessionDTOs = plan.getSessions().stream()
-                .map(s -> TrainingSessionDTO.builder()
-                        .sessionId(s.getSessionId())
-                        .sessionDate(s.getSessionDate())
-                        .activityType(s.getActivityType())
-                        .status(s.getStatus())
-                        .notes(s.getNotes())
-                        .assignedToId(s.getAssignedTo() != null ? s.getAssignedTo().getUserId() : null)
-                        .assignedToName(s.getAssignedTo() != null ? s.getAssignedTo().getFullName() : null)
-                        .build())
+                .map(s -> {
+                    com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper.EvaluationData eval =
+                            com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper.extractEvaluation(s.getNotes());
+                    return TrainingSessionDTO.builder()
+                            .sessionId(s.getSessionId())
+                            .sessionDate(s.getSessionDate())
+                            .activityType(s.getActivityType())
+                            .status(s.getStatus())
+                            .notes(com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper.removeEvaluation(s.getNotes()))
+                            .assignedToId(s.getAssignedTo() != null ? s.getAssignedTo().getUserId() : null)
+                            .assignedToName(s.getAssignedTo() != null ? s.getAssignedTo().getFullName() : null)
+                            .evaluationScore(eval != null ? eval.getScore() : null)
+                            .evaluationComment(eval != null ? eval.getComment() : null)
+                            .evaluatedBy(eval != null ? eval.getBy() : null)
+                            .evaluatedAt(eval != null ? eval.getAt() : null)
+                            .build();
+                })
                 .collect(Collectors.toList());
 
         return TrainingPlanDetailDTO.builder()

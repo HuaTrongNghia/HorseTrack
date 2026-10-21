@@ -1,6 +1,7 @@
 package com.horsetrack.equinecare.modules.training.controller;
 
 import com.horsetrack.equinecare.common.base.ApiResponse;
+import com.horsetrack.equinecare.modules.training.dto.SessionEvaluateRequestDTO;
 import com.horsetrack.equinecare.modules.training.dto.SessionExecuteRequestDTO;
 import com.horsetrack.equinecare.modules.training.dto.TrainerScheduleDTO;
 import com.horsetrack.equinecare.modules.training.service.TrainingExecutionService;
@@ -17,7 +18,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/training-sessions")
 @RequiredArgsConstructor
-@PreAuthorize("hasAnyAuthority('Trainer', 'Groom')")
+@PreAuthorize("hasAnyAuthority('Trainer', 'Groom', 'Club Manager')")
 public class TrainingExecutionController {
 
     private final TrainingExecutionService trainingExecutionService;
@@ -47,5 +48,15 @@ public class TrainingExecutionController {
             @Valid @RequestBody SessionExecuteRequestDTO request) {
         trainingExecutionService.executeSession(sessionId, request);
         return ResponseEntity.ok(ApiResponse.ok("Session executed successfully", null));
+    }
+
+    // HLV hoặc Quản lý CLB đánh giá phong độ sau buổi tập
+    @PutMapping("/{sessionId}/evaluate")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Club Manager')")
+    public ResponseEntity<ApiResponse<Void>> evaluateSession(
+            @PathVariable Integer sessionId,
+            @Valid @RequestBody SessionEvaluateRequestDTO request) {
+        trainingExecutionService.evaluateSession(sessionId, request);
+        return ResponseEntity.ok(ApiResponse.ok("Đã đánh giá buổi tập thành công", null));
     }
 }

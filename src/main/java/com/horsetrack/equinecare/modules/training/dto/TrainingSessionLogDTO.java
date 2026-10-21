@@ -15,4 +15,8 @@ public class TrainingSessionLogDTO {
     private String status;
     private String notes;
     private String assignedToName;
+    private Integer evaluationScore;
+    private String evaluationComment;
+    private String evaluatedBy;
+    private String evaluatedAt;
 }

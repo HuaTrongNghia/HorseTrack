@@ -23,6 +23,8 @@ public interface TrainingPlanRepository extends JpaRepository<TrainingPlan, Inte
 
     Optional<TrainingPlan> findFirstByHorse_HorseIdAndStatusInOrderByCreatedAtDesc(Integer horseId, java.util.Collection<String> statuses);
 
+    Optional<TrainingPlan> findFirstByHorse_HorseIdOrderByCreatedAtDesc(Integer horseId);
+
     // Phạm vi của Trainer: giáo án của các ngựa được phân công cho Trainer đó
     Page<TrainingPlan> findByHorse_AssignedTrainer_UserId(Integer trainerId, Pageable pageable);
 
