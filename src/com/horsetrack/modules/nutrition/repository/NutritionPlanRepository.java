@@ -15,10 +15,16 @@ public interface NutritionPlanRepository extends JpaRepository<NutritionPlan, In
     @Query("SELECT DISTINCT np FROM NutritionPlan np " +
             "LEFT JOIN FETCH np.details d " +
             "LEFT JOIN FETCH d.inventoryItem " +
-            "WHERE np.horse.horseId = :horseId " +
+            "WHERE np.horse.horseId = :horseId AND (np.status IS NULL OR np.status = 'ACTIVE') " +
             "AND np.startDate <= :today AND np.endDate >= :today " +
             "ORDER BY np.createdDate DESC, np.planId DESC")
     List<NutritionPlan> findActivePlansForHorseOnDate(@Param("horseId") Integer horseId, @Param("today") LocalDate today);
 
     List<NutritionPlan> findByHorse_HorseIdOrderByCreatedDateDesc(Integer horseId);
+
+    List<NutritionPlan> findAllByOrderByCreatedDateDesc();
+
+    List<NutritionPlan> findByStatusOrderByCreatedDateDesc(String status);
+
+    List<NutritionPlan> findByHorse_HorseIdAndStatusOrderByCreatedDateDesc(Integer horseId, String status);
 }
