@@ -1469,9 +1469,9 @@ Báo cáo tài chính từ dữ liệu thật; tiền đã thu **chỉ tính gia
 
 ---
 
-## 13–17. Các API dữ liệu giả (mock)
+## 13–17. Các API dữ liệu giả (mock) — trừ mục 14 đã dùng dữ liệu thật
 
-Các API dưới đây **không đọc/ghi database**. Dữ liệu được code cứng hoặc nằm trong RAM. Chỉ cần kiểm tra là gọi được và trả đúng format. Tất cả yêu cầu đã login (role nào cũng được).
+Các API dưới đây (trừ mục 14) **không đọc/ghi database**. Dữ liệu được code cứng hoặc nằm trong RAM. Chỉ cần kiểm tra là gọi được và trả đúng format. Tất cả yêu cầu đã login (role nào cũng được).
 
 ### 13. Pre-race Exam (khám trước đua) — dữ liệu trong RAM, mất khi restart
 
@@ -1487,10 +1487,15 @@ Các API dưới đây **không đọc/ghi database**. Dữ liệu được code
 
 4. **Test lỗi:** khám lại `DX-0009`, hoặc dùng mã không tồn tại → `400` "Không tìm thấy mã đề xuất hoặc đề xuất đã được khám!".
 
-### 14. Protocols
+### 14. Protocols — ĐÃ DÙNG DỮ LIỆU THẬT (không còn là mock)
 
-- **`GET /api/v1/protocols?tab=...`** → luôn trả 2 phác đồ cố định (`PD-0013`, `PD-0012`), bất kể tab.
-- **`GET /api/v1/protocols/shipments`** → luôn trả 1 lô hàng `SHIP-0024`.
+Danh sách tóm tắt cho mọi vai trò đã đăng nhập, đọc từ `Treatment_Protocols` và `Purchase_Orders`. DB không có phác đồ hoặc đơn mua thì trả `data: []`.
+
+- **`GET /api/v1/protocols?tab=Cần bác sĩ xử lý`**: phác đồ còn hiệu lực. Tab có chữ "đóng" (ví dụ `tab=Đã đóng`) → phác đồ `COMPLETED` / `SUPERSEDED` / `CANCELLED`.
+  Mỗi dòng: `protocolCode` (ví dụ `PD-1019 v1`), `horseName`, `diagnosis`, `caseCode`, `requiredDate`, `estimatedCost` (tổng `Protocol_Items`), `status` (nhãn tiếng Việt, gồm cả "Tạm dừng · chờ chủ ngựa thanh toán"), `nextStep`.
+- **`GET /api/v1/protocols/shipments`**: đơn mua đang mở (`ORDERED`, `IN_TRANSIT`, `DELAYED`, `PARTIALLY_RECEIVED`) phục vụ phác đồ, sắp theo ETA. `status = "Trễ"` khi đơn `DELAYED` hoặc đã quá ETA.
+- **Phạm vi:** Horse Owner chỉ thấy phác đồ / lô hàng của ngựa mình; Trainer chỉ ngựa được phân công; Groom chỉ ngựa trong khu phụ trách; Veterinarian, Club Manager, Warehouse Manager thấy tất cả.
+- Để có dữ liệu test: bác sĩ lập phác đồ (12.2), kho kiểm hàng (12E). Thiếu hàng → kho tạo đơn mua cho phác đồ (12B) → xuất hiện ở `/protocols/shipments`.
 
 ### 15. Vaccinations
 
