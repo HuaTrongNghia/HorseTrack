@@ -36,13 +36,29 @@ jobs:
       - name: Replace application container
         env:
           IMAGE_TAG: horsetrack-api:${{ github.sha }}
+          MAIL_USERNAME: ${{ secrets.MAIL_USERNAME }}
+          MAIL_PASSWORD: ${{ secrets.MAIL_PASSWORD }}
+          VNPAY_TMN_CODE: ${{ secrets.VNPAY_TMN_CODE }}
+          VNPAY_HASH_SECRET: ${{ secrets.VNPAY_HASH_SECRET }}
+          VNPAY_RETURN_URL: ${{ secrets.VNPAY_RETURN_URL }}
+          VNPAY_FRONTEND_RESULT_URL: ${{ secrets.VNPAY_FRONTEND_RESULT_URL }}
+          CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
         run: |
           set -euo pipefail
+          # Chỉ truyền biến có giá trị: secret bỏ trống thì ứng dụng dùng giá trị mặc định trong application.properties
+          ENV_FILE="$(mktemp)"
+          trap 'rm -f "$ENV_FILE"' EXIT
+          for name in MAIL_USERNAME MAIL_PASSWORD VNPAY_TMN_CODE VNPAY_HASH_SECRET VNPAY_RETURN_URL VNPAY_FRONTEND_RESULT_URL CORS_ALLOWED_ORIGINS; do
+            if [[ -n "${!name:-}" ]]; then
+              printf '%s=%s\n' "$name" "${!name}" >> "$ENV_FILE"
+            fi
+          done
           docker rm --force horsetrack-service 2>/dev/null || true
           docker run --detach \
             --name horsetrack-service \
             --restart unless-stopped \
             --publish 8080:8080 \
+            --env-file "$ENV_FILE" \
             "$IMAGE_TAG"
 
           for attempt in {1..12}; do
