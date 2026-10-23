@@ -59,6 +59,13 @@ public class SupplyRequestController {
         return ResponseEntity.ok(ApiResponse.ok("Đã hủy yêu cầu vật tư", supplyRequestService.cancelMyRequest(requisitionId)));
     }
 
+    @PutMapping("/supply-requests/{requisitionId}/confirm-received")
+    @PreAuthorize("hasAuthority('Groom')")
+    @Operation(summary = "Groom xác nhận đã nhận vật tư", description = "Chuyển trạng thái yêu cầu từ ISSUED sang CLOSED.")
+    public ResponseEntity<ApiResponse<SupplyRequestDTO>> confirmReceived(@PathVariable Integer requisitionId) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã xác nhận nhận vật tư", supplyRequestService.confirmReceived(requisitionId)));
+    }
+
     // ==========================================
     // NHÂN VIÊN KHO
     // ==========================================
