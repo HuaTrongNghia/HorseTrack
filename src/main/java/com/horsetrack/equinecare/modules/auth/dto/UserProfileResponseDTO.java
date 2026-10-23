@@ -15,6 +15,7 @@ public class UserProfileResponseDTO {
     private String phone;
     private String roleName;
     private Boolean isActive;
+    private String avatarUrl;
 
     private String specialization;
     private String licenseNumber;

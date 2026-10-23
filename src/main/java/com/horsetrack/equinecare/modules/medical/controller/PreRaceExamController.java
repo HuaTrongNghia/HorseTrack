@@ -6,6 +6,7 @@ import com.horsetrack.equinecare.modules.medical.dto.SubmitExamResultDTO;
 import com.horsetrack.equinecare.modules.medical.service.PreRaceExamService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,21 +21,20 @@ public class PreRaceExamController {
 
     // Lấy dữ liệu cho bảng. Frontend gọi: GET /api/prerace-exams?tab=CHO_KHAM
     @GetMapping
+    @PreAuthorize("hasAnyAuthority('Veterinarian', 'Club Manager')")
     public ResponseEntity<ApiResponse<List<PreRaceExamDTO>>> getExams(@RequestParam(defaultValue = "CHO_KHAM") String tab) {
         List<PreRaceExamDTO> data = examService.getExamsByTab(tab);
         return ResponseEntity.ok(ApiResponse.ok("Thành công", data));
     }
 
     // Ghi nhận kết quả khám. Frontend gọi: POST /api/prerace-exams/DX-0009/examine
+    // Đạt -> READY_TO_SUBMIT (HLV gửi BTC); không đạt (bắt buộc vetNotes) -> VET_FAILED
     @PostMapping("/{proposalCode}/examine")
+    @PreAuthorize("hasAuthority('Veterinarian')")
     public ResponseEntity<ApiResponse<String>> submitResult(
             @PathVariable String proposalCode,
             @RequestBody SubmitExamResultDTO dto) {
-        try {
-            examService.submitExamResult(proposalCode, dto);
-            return ResponseEntity.ok(ApiResponse.ok("Đã lưu kết quả khám cho " + proposalCode, null));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
-        }
+        examService.submitExamResult(proposalCode, dto);
+        return ResponseEntity.ok(ApiResponse.ok("Đã lưu kết quả khám cho " + proposalCode, null));
     }
 }

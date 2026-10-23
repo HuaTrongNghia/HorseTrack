@@ -32,6 +32,7 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.medical.repository.VetCaseRepository vetCaseRepository;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
+    private final com.horsetrack.equinecare.modules.training.service.SessionReadingView sessionReadingView;
 
     private User getLoggedInUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -49,6 +50,7 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         List<TrainingSession> sessions = trainingSessionRepository.findByAssignedTo_UserIdAndSessionDateBetweenOrderBySessionDateAsc(
                 user.getUserId(), startOfDay, endOfDay);
 
+        var readings = sessionReadingView.load(sessions);
         return sessions.stream().map(session -> {
             String horseName = null;
             String stallZone = null;
@@ -72,6 +74,14 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
                     .planName(planName)
                     .horseName(horseName)
                     .stallZone(stallZone)
+                    .notes(com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper.removeEvaluation(session.getNotes()))
+                    .maxHeartRate(sessionReadingView.maxHeartRate(session))
+                    .maxSpeedKmh(sessionReadingView.maxSpeedKmh(session))
+                    .startedAt(session.getStartedAt())
+                    .pausedAt(session.getPausedAt())
+                    .pausedReason(session.getPausedReason())
+                    .readings(sessionReadingView.phase(readings.get(session.getSessionId()), com.horsetrack.equinecare.modules.training.entity.SessionReading.PHASE_SESSION))
+                    .recovery(sessionReadingView.phase(readings.get(session.getSessionId()), com.horsetrack.equinecare.modules.training.entity.SessionReading.PHASE_RECOVERY))
                     .build();
         }).collect(Collectors.toList());
     }
@@ -133,7 +143,10 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         }
 
         session.setStatus(request.getStatus().toUpperCase());
-        session.setNotes(request.getNotes());
+        if (request.getNotes() != null && !request.getNotes().isBlank()) {
+            String note = request.getNotes().trim();
+            session.setNotes(session.getNotes() == null || session.getNotes().isBlank() ? note : session.getNotes() + " | " + note);
+        }
         trainingSessionRepository.save(session);
 
         if ("COMPLETED".equalsIgnoreCase(request.getStatus())) {
@@ -172,15 +185,8 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         } else if (!isManager && !isAssignedGroom) {
             throw new AccessDeniedException("Bạn không được phân công buổi tập này");
         }
-        java.util.List<String> stoppableStatuses = java.util.List.of(
-                TrainingPlanActivator.SESSION_PENDING,
-                TrainingPlanActivator.SESSION_CONFIRMED,
-                "IN_PROGRESS",
-                "PAUSED",
-                "PAUSED_PENDING_TRAINER"
-        );
-        if (!stoppableStatuses.contains(String.valueOf(session.getStatus()).toUpperCase())) {
-            throw new IllegalArgumentException("Chỉ dừng được buổi tập chưa kết thúc (hiện tại: " + session.getStatus() + ").");
+        if (!TrainingPlanActivator.SESSION_PAUSED_PENDING_TRAINER.equalsIgnoreCase(session.getStatus())) {
+            throw new IllegalArgumentException("Chỉ dừng được buổi tập đang tạm dừng chờ HLV quyết định (hiện tại: " + session.getStatus() + ").");
         }
 
         boolean requestVet = !Boolean.FALSE.equals(request.getRequestVet());

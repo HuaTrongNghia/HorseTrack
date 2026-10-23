@@ -16,6 +16,15 @@ public interface UserRepository extends JpaRepository<User, Integer> {
     // GEN-01: số điện thoại không được trùng giữa các tài khoản
     boolean existsByPhone(String phone);
 
+    // Ảnh đại diện (data URL) đọc / ghi riêng, không map vào entity để không nạp chuỗi lớn mỗi lần đọc User
+    @org.springframework.data.jpa.repository.Query(value = "SELECT avatar_url FROM Users WHERE user_id = :userId", nativeQuery = true)
+    String findAvatarUrl(@org.springframework.data.repository.query.Param("userId") Integer userId);
+
+    @org.springframework.data.jpa.repository.Modifying
+    @org.springframework.data.jpa.repository.Query(value = "UPDATE Users SET avatar_url = :avatarUrl WHERE user_id = :userId", nativeQuery = true)
+    int updateAvatarUrl(@org.springframework.data.repository.query.Param("userId") Integer userId,
+                        @org.springframework.data.repository.query.Param("avatarUrl") String avatarUrl);
+
     // Kiểm tra trùng Username
     boolean existsByUsername(String username);
 

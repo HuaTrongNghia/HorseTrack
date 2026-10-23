@@ -8,4 +8,6 @@ public interface AccountService {
     /** Gửi OTP đổi mật khẩu tới email của người đang đăng nhập; trả về email đã che bớt. */
     String requestChangePasswordOtp();
     void changePassword(ChangePasswordRequestDTO request);
+    UserProfileResponseDTO updateMyProfile(com.horsetrack.equinecare.modules.auth.dto.ProfileUpdateRequestDTO request);
+    UserProfileResponseDTO updateAvatar(org.springframework.web.multipart.MultipartFile file);
 }

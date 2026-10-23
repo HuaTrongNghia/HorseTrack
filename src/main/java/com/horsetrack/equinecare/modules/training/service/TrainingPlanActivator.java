@@ -30,10 +30,16 @@ public class TrainingPlanActivator {
     public static final String SESSION_WAITING_VET = "WAITING_VET";
     /** Buổi tập kết thúc do dừng giữa chừng */
     public static final String SESSION_STOPPED = "STOPPED";
-    /** Buổi tập chưa kết thúc (kể cả đang chờ bác sĩ): giáo án chưa được tự hoàn thành */
-    public static final List<String> UNFINISHED_SESSION_STATUSES = List.of("PENDING", "CONFIRMED", "WAITING_VET");
-    /** Buổi tập chưa kết thúc (chờ xác nhận hoặc đã xác nhận) */
-    public static final List<String> OPEN_SESSION_STATUSES = List.of(SESSION_PENDING, SESSION_CONFIRMED);
+    /** Groom đã bắt đầu buổi tập, đang nhập chỉ số */
+    public static final String SESSION_IN_PROGRESS = "IN_PROGRESS";
+    /** Chỉ số vượt ngưỡng: buổi tập tự tạm dừng, chờ HLV cho tập tiếp hoặc dừng & gửi bác sĩ (F22-02) */
+    public static final String SESSION_PAUSED_PENDING_TRAINER = "PAUSED_PENDING_TRAINER";
+    /** Buổi tập chưa kết thúc (kể cả đang chờ HLV / bác sĩ): giáo án chưa được tự hoàn thành */
+    public static final List<String> UNFINISHED_SESSION_STATUSES = List.of("PENDING", "CONFIRMED", SESSION_IN_PROGRESS, SESSION_PAUSED_PENDING_TRAINER, "WAITING_VET");
+    /** Buổi tập chưa kết thúc và còn thực hiện tiếp được (chờ xác nhận, đã xác nhận, đang tập) */
+    public static final List<String> OPEN_SESSION_STATUSES = List.of(SESSION_PENDING, SESSION_CONFIRMED, SESSION_IN_PROGRESS);
+    /** Buổi tập đang chiếm lịch của Groom / ngựa (để chặn trùng giờ, hủy khi ngựa bị khóa) */
+    public static final List<String> ACTIVE_SESSION_STATUSES = List.of(SESSION_PENDING, SESSION_CONFIRMED, SESSION_IN_PROGRESS, SESSION_PAUSED_PENDING_TRAINER);
     /** Giáo án đang chiếm ngựa: mỗi ngựa chỉ có tối đa một giáo án ở các trạng thái này */
     public static final List<String> OPEN_PLAN_STATUSES = List.of(PLAN_PENDING, PLAN_ACTIVE, "PAUSED");
 

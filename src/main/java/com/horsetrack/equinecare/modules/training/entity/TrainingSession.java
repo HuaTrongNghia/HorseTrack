@@ -26,11 +26,27 @@ public class TrainingSession {
     @Column(name = "activity_type", nullable = false, length = 100)
     private String activityType;
 
-    @Column(name = "status", nullable = false, length = 20)
+    @Column(name = "status", nullable = false, length = 30)
     private String status;
 
     @Column(name = "notes", columnDefinition = "NVARCHAR(MAX)")
     private String notes;
+
+    // Ngưỡng của buổi tập (F22-02): chỉ số vượt ngưỡng thì buổi tập tự tạm dừng chờ HLV
+    @Column(name = "max_heart_rate")
+    private Integer maxHeartRate;
+
+    @Column(name = "max_speed_kmh", precision = 5, scale = 2)
+    private java.math.BigDecimal maxSpeedKmh;
+
+    @Column(name = "started_at")
+    private LocalDateTime startedAt;
+
+    @Column(name = "paused_at")
+    private LocalDateTime pausedAt;
+
+    @Column(name = "paused_reason", length = 500)
+    private String pausedReason;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "plan_id", nullable = false)

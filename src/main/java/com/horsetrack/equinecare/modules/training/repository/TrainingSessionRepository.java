@@ -26,15 +26,15 @@ public interface TrainingSessionRepository extends JpaRepository<TrainingSession
 
     List<TrainingSession> findByTrainingPlan_Horse_HorseIdAndStatus(Integer horseId, String status);
 
-    // F21-05: buổi tập chưa kết thúc (PENDING / CONFIRMED) của một nhân viên bắt đầu trong khoảng (from, to) -> trùng khung giờ
+    // F21-05: buổi tập chưa kết thúc (chờ xác nhận / đã xác nhận / đang tập / tạm dừng) của một nhân viên bắt đầu trong khoảng (from, to) -> trùng khung giờ
     @org.springframework.data.jpa.repository.Query("SELECT s FROM TrainingSession s WHERE s.assignedTo.userId = :userId " +
-            "AND s.status IN ('PENDING', 'CONFIRMED') AND s.sessionDate > :from AND s.sessionDate < :to ORDER BY s.sessionDate")
+            "AND s.status IN ('PENDING', 'CONFIRMED', 'IN_PROGRESS', 'PAUSED_PENDING_TRAINER') AND s.sessionDate > :from AND s.sessionDate < :to ORDER BY s.sessionDate")
     List<TrainingSession> findOverlapping(@org.springframework.data.repository.query.Param("userId") Integer userId,
                                          @org.springframework.data.repository.query.Param("from") LocalDateTime from,
                                          @org.springframework.data.repository.query.Param("to") LocalDateTime to);
 
-    // F3-03: các buổi tập còn chờ của một con ngựa (để hủy khi ngựa bị VetLock)
+    // F3-03: các buổi tập chưa kết thúc của một con ngựa, kể cả đang tập / tạm dừng (để hủy khi ngựa bị VetLock)
     @org.springframework.data.jpa.repository.Query("SELECT s FROM TrainingSession s WHERE s.trainingPlan.horse.horseId = :horseId " +
-            "AND s.status IN ('PENDING', 'CONFIRMED') ORDER BY s.sessionDate")
+            "AND s.status IN ('PENDING', 'CONFIRMED', 'IN_PROGRESS', 'PAUSED_PENDING_TRAINER') ORDER BY s.sessionDate")
     List<TrainingSession> findPendingByHorse(@org.springframework.data.repository.query.Param("horseId") Integer horseId);
 }

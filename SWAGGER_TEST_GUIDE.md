@@ -2,7 +2,9 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **131 endpoint**, chia thành 22 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **152 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+
+> **Bắt buộc trước khi chạy bản backend này:** chạy `DATABASE_fe_requests_schema.sql` trên DB (thêm cột ngưỡng / tạm dừng cho buổi tập, `Session_Readings.session_id`, chấn thương gắn với ngựa, `Users.avatar_url`, `Competition_Entries.proposal_note`). Chưa chạy script thì các API buổi tập, chấn thương, hồ sơ cá nhân, đề xuất thi đấu trả `500` "Invalid column name".
 
 ---
 
@@ -53,7 +55,7 @@ Các chức năng phụ thuộc dữ liệu của nhau, nên test theo thứ t�
 
 ```
 Auth (1) → Account (2) → Stall (4) → Horse (3) → Nutrition (5)
-       → Training (6, 7, 8) → Care (9) → Medical (10 → 13) → Mock (14 → 17)
+       → Training (6, 7, 8) → Care (9) → Medical (10 → 12) → Thi đấu (13) → Mock (15 → 17)
 ```
 
 ---
@@ -205,8 +207,24 @@ Không cần token.
 
 ### 2.1 `GET /api/v1/account/my-profile`
 
-- **Mong đợi:** `200`, thông tin của user đang đăng nhập (`username`, `roleName`...).
+- **Mong đợi:** `200`, thông tin của user đang đăng nhập (`username`, `roleName`, `avatarUrl`...).
 - **Test lỗi:** không Authorize → `401`.
+
+### 2.1A `PUT /api/v1/account/my-profile`: sửa thông tin của chính mình
+
+```json
+{ "fullName": "Nguyễn Văn A", "phone": "0912345678" }
+```
+
+- Chỉ đổi được họ tên và số điện thoại (không đổi username, email, vai trò). `phone` để trống `""` để xóa số.
+- **Mong đợi:** `200`, trả lại hồ sơ đã cập nhật. Ghi nhật ký `UPDATE_PROFILE`.
+- **Test lỗi:** `fullName` trống hoặc 1 ký tự → `400`; `phone` sai định dạng (ví dụ `123`) → `400`; số điện thoại đã thuộc tài khoản khác → `400` "Số điện thoại ... đã được tài khoản khác sử dụng".
+
+### 2.1B `POST /api/v1/account/avatar`: ảnh đại diện
+
+- Body `multipart/form-data`, trường `file`. Chỉ nhận PNG, JPEG, WEBP, tối đa 1 MB.
+- **Mong đợi:** `200`, `avatarUrl` dạng `data:image/png;base64,...` (FE gán thẳng vào `<img src>`). `GET /my-profile` trả cùng giá trị.
+- **Test lỗi:** không chọn file → `400`; file GIF / PDF → `400` "Ảnh đại diện phải là PNG, JPEG hoặc WEBP"; file trên 1 MB → `400`.
 
 ### 2.2 Đổi mật khẩu bằng OTP (2 bước)
 
@@ -288,6 +306,7 @@ Phục vụ màn hình **Người dùng & phân quyền** của FE (5.1, 5.2, 5.
 
 ### 2B.7 `GET /api/v1/audit-logs` — Xem nhật ký kiểm toán hệ thống (BR_10)
 - **Mong đợi:** `200`, danh sách các hành động gần nhất trên hệ thống (ai thực hiện, thao tác gì, bảng nào, giá trị cũ/mới, IP, thời gian).
+- `actionType` giữ đủ tối đa 50 ký tự (trước đây bị cắt còn 20, ví dụ "CREATE_NUTRITION_PLA"). Bản ghi cũ đã bị cắt vẫn giữ nguyên.
 
 ---
 
@@ -336,7 +355,7 @@ Chỉ nhân viên CLB (Club Manager, Trainer, Veterinarian, Groom). Owner gọi 
 - Bỏ trống `status` → tất cả ngựa.
 - `status=PENDING` → chỉ ngựa chưa có chuồng; ngựa vừa đăng ký ở 3.1 phải có trong đây.
 - `status=APPROVED` → chỉ ngựa đã có chuồng.
-- `data` gồm `horses`, `currentPage`, `totalPages`, `totalElements`. Mỗi ngựa có thêm `assignedTrainerId`, `assignedTrainerName`.
+- `data` gồm `horses`, `currentPage`, `totalPages`, `totalElements`. Mỗi ngựa có thêm `ownerName`, `assignedTrainerId`, `assignedTrainerName`.
 - **Trainer:** chỉ thấy ngựa được phân công cho mình (3.8); `status=PENDING` hoặc `REJECTED` trả danh sách rỗng.
 
 ### 3.4 `GET /api/v1/horses/{id}`
@@ -344,8 +363,8 @@ Chỉ nhân viên CLB (Club Manager, Trainer, Veterinarian, Groom). Owner gọi 
 Club Manager, Veterinarian, Groom xem được mọi ngựa. Horse Owner xem ngựa của người khác → `403` "Bạn không phải chủ của ngựa này".
 - **Phạm vi Trainer:** Trainer chỉ nhận ngựa được Club Manager phân công cho mình (3.8). Ngựa ngoài phạm vi → `403` "Bạn không được Club Manager phân công phụ trách ngựa ...".
 
-- **Mong đợi:** `200`, chi tiết ngựa.
-- `id` không tồn tại → `500` "Horse not found".
+- **Mong đợi:** `200`, chi tiết ngựa, gồm `ownerName` và `injuries[]` (danh sách chấn thương, xem 3.10).
+- `id` không tồn tại → `404`.
 
 ### 3.5 Hồ sơ đăng ký ngựa: duyệt, từ chối, nộp lại
 
@@ -470,12 +489,49 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 | Groom còn việc chăm sóc (`TODO`, `IN_PROGRESS`, từ hôm nay) hoặc buổi tập chưa thực hiện ở khu hiện tại | `400` "...còn X việc chăm sóc và Y buổi tập chưa thực hiện..." |
 | `id` không tồn tại | `404` |
 
+### 3.10 Hồ sơ sức khỏe và Groom theo khu của ngựa
+
+**Chấn thương (sơ đồ 2D):**
+
+- `GET /api/v1/horses/{id}/injuries` (Club Manager, Trainer phụ trách, Veterinarian, Groom): danh sách chấn thương, mới nhất trước. Cũng có trong `GET /horses/{id}` (`injuries[]`).
+- `POST /api/v1/horses/{id}/injuries` (`Veterinarian`):
+
+  ```json
+  { "part": "Chân trước trái", "severity": "Trung bình", "note": "Sưng nhẹ", "x": 30.5, "y": 60, "caseId": "C-0012" }
+  ```
+
+  - `severity`: `Nhẹ` / `Trung bình` / `Nặng` hoặc `MINOR` / `MODERATE` / `SEVERE`. `x`, `y` là phần trăm 0–100 trên sơ đồ. `caseId` tùy chọn: ID ca (`12`) hoặc mã ca (`C-0012`) của chính ngựa này.
+  - **Mong đợi:** `201`, `{ injuryId, part, severity, severityLabel, note, x, y, caseId, caseCode, createdByName, createdAt }`; nhật ký `MARK_INJURY`.
+  - **Test lỗi:** `severity` lạ → `400`; `x` > 100 → `400`; ca của ngựa khác → `400`; ca không tồn tại → `404`; Trainer / Groom gọi → `403`.
+- `DELETE /api/v1/horses/{id}/injuries/{injuryId}` (`Veterinarian`): gỡ đánh dấu; nhật ký `REMOVE_INJURY`. Chấn thương thuộc ngựa khác → `404`; chấn thương ghi trong bệnh án (11.1) → `400`.
+
+**`PUT /api/v1/horses/{id}/health-status`** (`Veterinarian`):
+
+```json
+{ "status": "WATCH", "reason": "Theo dõi sau khi chạy 2000m" }
+```
+
+- `status`: `HEALTHY`, `WATCH`, `INJURED`, `QUARANTINE` (hoặc "Khỏe mạnh", "Theo dõi", "Chấn thương", "Cách ly"). **Mong đợi:** `200`, `data` là trạng thái mới; nhật ký `UPDATE_HEALTH_STATUS` kèm lý do. Không đổi khóa huấn luyện (khóa dùng 10.1).
+- **Test lỗi:** trạng thái lạ hoặc trùng trạng thái hiện tại → `400`; thiếu `reason` → `400`; role khác → `403`.
+
+**`GET /api/v1/horses/{id}/grooms`** (`Trainer` phụ trách ngựa, `Club Manager`): Groom đang hoạt động phụ trách khu chuồng của ngựa, dùng để chọn `groomId` khi giao việc chăm sóc (9.0) hoặc `assignedToId` khi phân công buổi tập (6.5). Mỗi phần tử `{ userId, fullName, barnZone }`. Ngựa chưa có chuồng → `400`; Trainer không phụ trách ngựa → `403`.
+
 ---
 
 ## 4. Stall — `GET /api/v1/stalls` (mọi role đã login)
 
 - **Mong đợi:** `200`, sơ đồ chuồng gồm `stallId`, `stallCode`, `barnZone`, `cleanStatus`, `currentHorseId`, `horseName`, `isLocked`.
 - Dùng để tìm chuồng trống cho mục 3.5. Sau khi duyệt, gọi lại để thấy ngựa đã vào chuồng.
+
+### 4.1 `PUT /api/v1/stalls/{id}/clean-status` (`Groom` chuồng trong khu mình, `Club Manager`)
+
+```json
+{ "status": "NEEDS_CLEANING", "note": "Rơm ướt" }
+```
+
+- `status`: `CLEAN`, `NEEDS_CLEANING`, `MAINTENANCE`. **Mong đợi:** `200`, chuồng sau cập nhật; ghi nhật ký `UPDATE_STALL_STATUS`.
+- Ngoài ra, khi Groom hoàn thành việc dọn chuồng (`taskType = CLEAN`, 9.2) chuồng **tự chuyển `CLEAN`** (trừ chuồng đang `MAINTENANCE`).
+- **Test lỗi:** Groom đổi chuồng khu khác → `403`; trạng thái giống hiện tại → `400`; `status` khác 3 giá trị → `400`; Trainer / Owner gọi → `403`.
 
 ---
 
@@ -631,10 +687,13 @@ Chỉ `Trainer`.
   "sessionDate": "2026-10-22T07:00:00",
   "activityType": "Chạy nước kiệu 2000m",
   "notes": "Tập nhẹ",
-  "assignedToId": 14
+  "assignedToId": 14,
+  "maxHeartRate": 180,
+  "maxSpeedKmh": 55
 }
 ```
 
+- `maxHeartRate` (60–300 bpm), `maxSpeedKmh` (1–100 km/h): ngưỡng của buổi tập (F22-02). Bỏ trống thì lấy mặc định `app.training.default-max-heart-rate` = 180, `app.training.default-max-speed-kmh` = 60.
 - `assignedToId` lấy từ 6.4. `sessionDate` phải nằm trong thời gian giáo án và không ở quá khứ.
 - **Mong đợi:** `201`. Buổi tập mới có trạng thái `PENDING`.
 - **Test lỗi** (đều trả `400` kèm thông báo rõ lý do):
@@ -656,6 +715,7 @@ Chỉ `Trainer`.
 
 - Login bằng đúng nhân viên được gán ở 6.5.
 - **Mong đợi:** `200`, thấy buổi tập vừa tạo. **Ghi lại `sessionId`**.
+- Mỗi buổi tập có thêm `notes`, `maxHeartRate`, `maxSpeedKmh`, `startedAt`, `pausedAt`, `pausedReason`, `readings[]` và `recovery[]` (mỗi phần tử `{ readingId, time: "HH:mm", recordedAt, heartRate, speedKmh }`). `GET /training-plans/{planId}` (6.3) trả cùng các trường trong `sessions[]`.
 - **Test lỗi:** thiếu `startDate` → `400`.
 
 ### 7.2 `PUT /api/v1/training-sessions/{sessionId}/confirm`: Groom xác nhận buổi tập (`Groom`)
@@ -677,6 +737,8 @@ Không cần body. Buổi tập HLV vừa phân công (6.5) ở trạng thái `P
 
 ### 7.3 `PUT /api/v1/training-sessions/{sessionId}/stop`: dừng buổi tập vì chỉ số sức khỏe vượt ngưỡng (`Trainer` phụ trách ngựa hoặc `Groom` được giao)
 
+**Chỉ dừng được buổi tập đang `PAUSED_PENDING_TRAINER`** (đã tự tạm dừng do chỉ số vượt ngưỡng, 7.6). Buổi `PENDING` / `CONFIRMED` / `IN_PROGRESS` → `400` "Chỉ dừng được buổi tập đang tạm dừng chờ HLV quyết định".
+
 ```json
 { "reason": "Nhịp tim vượt ngưỡng 210 bpm, ngựa thở gấp", "requestVet": true, "severity": "HIGH", "heartRate": 210, "speedKmh": 52 }
 ```
@@ -686,7 +748,7 @@ Không cần body. Buổi tập HLV vừa phân công (6.5) ở trạng thái `P
   - **Không khóa:** bác sĩ đóng ca `PUT /medical/cases/{caseId}/close` → lập được giáo án mới ngay.
   - **Khóa:** `POST /medical/vet-lock` (hoặc bệnh án chỉ định khóa tập, hoặc `PUT /horses/{id}` với `isLocked: true`) → giáo án đóng, không chuyển `PAUSED`; lập giáo án mới sau khi bác sĩ mở khóa (10.2).
 - Khi đang `WAITING_VET`: Groom không hoàn thành được buổi tập (`400`) và chưa lập được giáo án mới cho ngựa (giáo án cũ còn mở).
-- **Test lỗi:** lý do dưới 10 ký tự → `400`; buổi tập đã kết thúc → `400`; Trainer không phụ trách ngựa hoặc Groom khác → `403`; `sessionId` sai → `404`.
+- **Test lỗi:** lý do dưới 10 ký tự → `400`; buổi tập không ở `PAUSED_PENDING_TRAINER` → `400`; Trainer không phụ trách ngựa hoặc Groom khác → `403`; `sessionId` sai → `404`.
 
 ### 7.4 `PUT /api/v1/training-sessions/{sessionId}/execute`
 
@@ -695,7 +757,8 @@ Không cần body. Buổi tập HLV vừa phân công (6.5) ở trạng thái `P
 ```
 
 - `status` chỉ nhận `COMPLETED` hoặc `CANCELLED`.
-- **Hoàn thành (`COMPLETED`) chỉ khi buổi đã được xác nhận (7.2) và giáo án đang `ACTIVE`. Hủy (`CANCELLED`) được cả buổi `PENDING` lẫn `CONFIRMED`.**
+- **Hoàn thành (`COMPLETED`) khi buổi đã được xác nhận (`CONFIRMED`) hoặc đang tập (`IN_PROGRESS`) và giáo án đang `ACTIVE`. Buổi đang `PAUSED_PENDING_TRAINER` phải được HLV cho tập tiếp (7.8) hoặc dừng (7.3) trước. Hủy (`CANCELLED`) được mọi buổi chưa kết thúc.**
+- `notes` được **nối thêm** vào ghi chú cũ (ngăn bằng ` | `), không ghi đè ghi chú HLV đặt lúc phân công.
 - **Mong đợi:** `200`. Nếu không còn buổi `PENDING` / `CONFIRMED` nào, giáo án tự chuyển sang `COMPLETED` (kiểm tra lại bằng 6.2).
 - **Test lỗi:**
   - `COMPLETED` khi buổi còn `PENDING` (chưa xác nhận) → `400` "Buổi tập chưa được xác nhận...".
@@ -704,6 +767,42 @@ Không cần body. Buổi tập HLV vừa phân công (6.5) ở trạng thái `P
   - Nhân viên khác (không được gán) gọi → `403`.
   - `"status": "CANCELLED"` mà không có `notes` → `400` "Phải ghi lý do (notes) khi hủy buổi tập".
   - `"status": "COMPLETED"` khi ngựa đang VetLock (F22-01) → `400`. Chỉ được hủy buổi tập.
+
+### 7.5 `PUT /api/v1/training-sessions/{sessionId}/start`: Groom bắt đầu buổi tập (`Groom` được giao)
+
+Không cần body. `CONFIRMED` → `IN_PROGRESS`, ghi `startedAt`.
+
+- **Test lỗi:** buổi chưa xác nhận hoặc đã bắt đầu → `400`; buổi xếp ngày khác hôm nay → `400` "...chỉ bắt đầu được đúng ngày tập"; ngựa đang VetLock → `400`; giáo án chưa `ACTIVE` → `400`; Groom khác → `403`.
+
+### 7.6 `POST /api/v1/training-sessions/{sessionId}/readings`: nhập chỉ số (`Groom` được giao)
+
+```json
+{ "time": "07:15", "heartRate": 165, "speedKmh": 42.5 }
+```
+
+- `time`: `HH:mm` (tính theo ngày của buổi tập) hoặc `yyyy-MM-ddTHH:mm`; bỏ trống = bây giờ. `heartRate` 1–300, `speedKmh` 0–100.
+- Chỉ nhập khi buổi đang `IN_PROGRESS`. **Mong đợi:** `200`, `data` là buổi tập kèm `readings[]`.
+- **Vượt ngưỡng** (`heartRate > maxHeartRate` hoặc `speedKmh > maxSpeedKmh`): vẫn lưu lần đo, buổi tập chuyển **`PAUSED_PENDING_TRAINER`**, có `pausedAt`, `pausedReason` (ví dụ "Nhịp tim 195 bpm vượt ngưỡng 180 bpm"), HLV phụ trách nhận email, nhật ký `PAUSE_SESSION`.
+- **Test lỗi:** buổi chưa bắt đầu → `400`; buổi đang tạm dừng → `400` "...không nhập thêm chỉ số. Hãy nhập nhịp tim hồi phục"; `time` sai định dạng → `400`; Groom khác → `403`.
+
+### 7.7 `POST /api/v1/training-sessions/{sessionId}/recovery`: nhịp tim hồi phục (`Groom` được giao)
+
+```json
+{ "time": "07:20", "heartRate": 120 }
+```
+
+- Chỉ khi buổi đang `PAUSED_PENDING_TRAINER`. **Mong đợi:** `200`, buổi tập kèm `recovery[]`. Buổi khác trạng thái → `400`.
+
+### 7.8 `PUT /api/v1/training-sessions/{sessionId}/resume`: HLV cho tập tiếp (`Trainer` phụ trách ngựa)
+
+```json
+{ "intensity": "Nhẹ", "distanceM": 800, "maxHeartRate": 170, "note": "Giảm tốc độ nửa sau" }
+```
+
+- Mọi trường đều tùy chọn. `maxHeartRate` là ngưỡng mới cho phần còn lại của buổi. Điều chỉnh được nối vào `notes`.
+- Điều kiện: buổi đang `PAUSED_PENDING_TRAINER`, ngựa không bị khóa, **nhịp hồi phục gần nhất dưới ngưỡng đang áp dụng lúc tạm dừng**. **Mong đợi:** `200`, buổi về `IN_PROGRESS`, `pausedAt` / `pausedReason` xóa; nhật ký `RESUME_SESSION`.
+- **Test lỗi:** chưa có nhịp hồi phục → `400`; nhịp hồi phục ≥ ngưỡng → `400` "...chưa dưới ngưỡng..."; buổi không tạm dừng → `400`; ngựa đang VetLock → `400`; Groom / Club Manager gọi → `403`; HLV không phụ trách ngựa → `403`.
+- Không cho tập tiếp thì HLV dừng & gửi bác sĩ bằng 7.3.
 
 ---
 
@@ -772,6 +871,7 @@ Chỉ `Trainer` được gọi. Lấy `groomId` từ `GET /training-plans/assign
 
 - **Mong đợi:** `200` "Đã hoàn thành công việc!". Task chuyển sang `status = "DONE"` và có `completedAt`.
 - Nếu task là `FEED`, tồn kho (`Inventory_Items.current_stock`) của các món trong thực đơn của ngựa bị trừ. Kiểm tra lại bằng SQL.
+- Nếu task là `CLEAN`, chuồng của việc chuyển `CLEAN` (xem 4.1).
 - **Test lỗi:**
   - Hoàn thành lại cùng task → `400` "...đã được đánh dấu hoàn thành trước đó".
   - Groom khác gọi → `403`.
@@ -1469,23 +1569,48 @@ Báo cáo tài chính từ dữ liệu thật; tiền đã thu **chỉ tính gia
 
 ---
 
-## 13–17. Các API dữ liệu giả (mock) — trừ mục 14 đã dùng dữ liệu thật
+## 13–17. Các API dữ liệu giả (mock) — trừ mục 13, 14 đã dùng dữ liệu thật
 
-Các API dưới đây (trừ mục 14) **không đọc/ghi database**. Dữ liệu được code cứng hoặc nằm trong RAM. Chỉ cần kiểm tra là gọi được và trả đúng format. Tất cả yêu cầu đã login (role nào cũng được).
+Các API dưới đây (trừ mục 13, 14) **không đọc/ghi database**. Dữ liệu được code cứng hoặc nằm trong RAM. Chỉ cần kiểm tra là gọi được và trả đúng format. Tất cả yêu cầu đã login (role nào cũng được).
 
-### 13. Pre-race Exam (khám trước đua) — dữ liệu trong RAM, mất khi restart
+### 13. Giải đấu, đề xuất thi đấu và khám tiền thi đấu — DỮ LIỆU THẬT (`External_Competitions`, `Competition_Entries`)
 
-1. **`GET /api/v1/prerace-exams?tab=CHO_KHAM`** → 3 đề xuất: `DX-0009`, `DX-0008`, `DX-0007`.
-2. **`GET /api/v1/prerace-exams?tab=DA_CO_KET_QUA`** → 2 đề xuất: `DX-0006`, `DX-0004`.
-3. **`POST /api/v1/prerace-exams/DX-0009/examine`** với body:
+Luồng: HLV đề xuất (`WAITING_OWNER`) → chủ ngựa đồng ý (`WAITING_VET`) / từ chối (`OWNER_DECLINED`) → bác sĩ khám đạt (`READY_TO_SUBMIT`) / không đạt (`VET_FAILED`) → HLV gửi BTC (`SUBMITTED`) → BTC từ chối (`REJECTED`) hoặc ghi kết quả (`RESULT_RECORDED`). Mỗi bước có nhật ký; chủ ngựa / HLV nhận email ở các bước liên quan. Trạng thái "chờ bác sĩ khám" trong DB là `WAITING_VET` (FE gọi là WAITING_VET_EXAM); mỗi đề xuất có thêm `statusLabel` tiếng Việt.
+
+**13.1 Giải đấu**
+
+- `GET /api/v1/tournaments?open=false` (mọi role đã login): danh sách giải. `open=true` chỉ lấy giải còn nhận đề xuất (chưa kết thúc, chưa qua ngày đua và hạn đăng ký). Mỗi giải: `tournamentId, code, name, organizer, location, raceDate, registrationDeadline, distanceM, entryFee, entryConditions, finished, openForProposal`.
+- `POST /api/v1/tournaments` (`Club Manager`), DB đang chưa có giải nào nên tạo trước:
+
+  ```json
+  { "code": "BD-2026", "name": "Giải Mở rộng Bình Dương 2026", "organizer": "CLB Đua ngựa Bình Dương", "location": "Trường đua Đại Nam",
+    "raceDate": "2026-11-25", "registrationDeadline": "2026-11-10", "distanceM": 1200, "entryFee": 5000000, "entryConditions": "Ngựa từ 3 tuổi" }
+  ```
+
+  → `201`. Lỗi: hạn đăng ký sau ngày đua → `400`; mã giải trùng → `400`; ngày đua ở quá khứ → `400`; role khác → `403`.
+
+**13.2 Đề xuất thi đấu — `/api/v1/race-proposals`**
+
+- `POST` (`Trainer` phụ trách ngựa): `{ "horseId": 21, "tournamentId": 1, "note": "Ngựa đang phong độ tốt" }` → `201`, `status = WAITING_OWNER`, `proposalCode` dạng `DX-0001`, `entryFee` lấy lệ phí của giải. Lỗi: ngựa chưa duyệt / đang VetLock → `400`; giải đã đóng → `400`; ngựa đã có đề xuất cho giải này → `400`; HLV không phụ trách ngựa → `403`.
+- `GET ?status=` (Trainer: ngựa được giao; Horse Owner: ngựa của mình; Veterinarian, Club Manager: tất cả), `GET /{id}` (ngoài phạm vi → `403`). Mỗi đề xuất gồm ngựa, chủ ngựa, `tournament`, người đề xuất, `note`, phản hồi chủ ngựa, kết luận bác sĩ, kết quả.
+- `PUT /{id}/owner-response` (`Horse Owner` của ngựa): `{ "agree": true, "note": "Đồng ý" }` → `WAITING_VET`; `agree: false` → `OWNER_DECLINED`. Lỗi: không phải chủ → `403`; đã trả lời → `400`.
+- `PUT /{id}/submitted` (`Trainer`): chỉ khi `READY_TO_SUBMIT` → `SUBMITTED`. Chưa qua bác sĩ → `400`.
+- `PUT /{id}/organizer-rejected` (`Trainer`): `{ "reason": "Thiếu giấy chứng nhận" }`, chỉ khi `SUBMITTED` → `REJECTED`.
+- `PUT /{id}/result` (`Trainer`): `{ "rank": 2, "finishTime": "1:12.45", "note": "Về nhì" }` (`finishTime` là giây `72.45` hoặc `phút:giây`), chỉ khi `SUBMITTED` và đã tới ngày đua → `RESULT_RECORDED`, `finishTimeSeconds = 72.450`. Lỗi: giải chưa diễn ra → `400`; `finishTime` sai → `400`; `rank` < 1 → `400`.
+
+**13.3 Khám tiền thi đấu — `/api/v1/prerace-exams`** (đọc / ghi `Competition_Entries`)
+
+1. **`GET /api/v1/prerace-exams?tab=CHO_KHAM`** (`Veterinarian`, `Club Manager`): các đề xuất chủ ngựa đã đồng ý (`WAITING_VET`). `healthStatus` là trạng thái sức khỏe hiện tại của ngựa; `warningTag` báo ngựa đang VetLock hoặc không khỏe.
+2. **`GET /api/v1/prerace-exams?tab=DA_CO_KET_QUA`**: các đề xuất bác sĩ đã kết luận; `resultStatus` "ĐẠT" / "KHÔNG ĐẠT", `nextStepStatus` là trạng thái hiện tại của đề xuất.
+3. **`POST /api/v1/prerace-exams/{proposalCode}/examine`** (`Veterinarian`), `proposalCode` là `DX-0001` hoặc ID:
 
    ```json
    { "isPassed": true, "vetNotes": "Tim mạch ổn định" }
    ```
 
-   → `200`. Gọi lại bước 1 và 2: `DX-0009` đã chuyển sang tab `DA_CO_KET_QUA` với `resultStatus = "ĐẠT"`.
+   → `200`. Đạt → đề xuất `READY_TO_SUBMIT`; không đạt → `VET_FAILED`.
 
-4. **Test lỗi:** khám lại `DX-0009`, hoặc dùng mã không tồn tại → `400` "Không tìm thấy mã đề xuất hoặc đề xuất đã được khám!".
+4. **Test lỗi:** đề xuất không ở `WAITING_VET` (khám lại) → `400`; mã không tồn tại → `404`; `isPassed` thiếu → `400`; không đạt mà thiếu `vetNotes` → `400`; kết luận đạt khi ngựa đang VetLock → `400`; role khác → `403`.
 
 ### 14. Protocols — ĐÃ DÙNG DỮ LIỆU THẬT (không còn là mock)
 
@@ -1566,6 +1691,6 @@ Mọi API khác (trừ login/register/refresh/logout) chỉ cần đăng nhập.
 - **L3. (Đã sửa.)** Kê thuốc vượt tồn kho trước đây trả `500` do `String.format` dùng `%d` cho kiểu `double`. Giờ trả `400` đúng thông báo. Câu truy vấn hàng sắp về cũng đã được viết lại theo bảng thật `Purchase_Orders` + `Purchase_Order_Lines` (trước đó lỗi `Invalid column name 'item_id'`).
 - **L4. Lỗi nghiệp vụ trả `500`.** Service ném `RuntimeException` ("Horse not found", "Old password is incorrect", duyệt lại hồ sơ...). `GlobalExceptionHandler` không bắt riêng loại này, nên chúng rơi vào handler chung → `500 "Lỗi máy chủ: ..."`. Đúng ra nên là `400` hoặc `404`.
 - **L5. (Đã sửa.)** `my-profile` trước đây kiểm tra cả role `HEAD_TRAINER`. Hệ thống đã bỏ role này, chỉ còn `Trainer`.
-- **L6. Một số API vẫn chưa phân quyền.** Các API mock (khám trước đua, protocols, vaccinations) vẫn cho **mọi user đã login** gọi. Các API ngựa, `/medical/**` và `/medical-management/**` đã được phân quyền (xem mục 18).
+- **L6. Một số API vẫn chưa phân quyền.** Các API protocols, vaccinations vẫn cho **mọi user đã login** gọi (khám tiền thi đấu đã giới hạn Veterinarian / Club Manager). Các API ngựa, `/medical/**` và `/medical-management/**` đã được phân quyền (xem mục 18).
 - **L7. Thiếu API tạo dữ liệu.** Đã có API tạo Training Plan (6.0) và Care Task (9.0). Đã có module kho cho nhân viên kho (12A–12D). Đã có kiểm kho và cấp thuốc cho phác đồ (12E). Vẫn chưa có API tạo Stall.
 - **L8. `AuditController` và `AudtitController` là class rỗng.** Hai class này không có endpoint nào và tên sau bị gõ sai chính tả.

@@ -22,7 +22,7 @@ public class AuditLog {
     @Column(name = "user_id")
     private Integer userId;
 
-    @Column(name = "action_type", nullable = false, length = 20)
+    @Column(name = "action_type", nullable = false, length = 50)
     private String actionType;
 
     @Column(name = "target_table", nullable = false, length = 50)

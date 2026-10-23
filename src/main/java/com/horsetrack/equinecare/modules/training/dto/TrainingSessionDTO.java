@@ -23,4 +23,11 @@ public class TrainingSessionDTO {
     private String evaluationComment;
     private String evaluatedBy;
     private String evaluatedAt;
+    private Integer maxHeartRate;
+    private java.math.BigDecimal maxSpeedKmh;
+    private LocalDateTime startedAt;
+    private LocalDateTime pausedAt;
+    private String pausedReason;
+    private java.util.List<SessionReadingDTO> readings;
+    private java.util.List<SessionReadingDTO> recovery;
 }

@@ -42,6 +42,7 @@ public class CareTaskServiceImpl implements CareTaskService {
     private final GroomProfileRepository groomProfileRepository;
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.nutrition.service.NutritionFeedTaskService feedTaskService;
+    private final com.horsetrack.equinecare.modules.nutrition.service.StallService stallService;
 
     // Việc chưa xong (còn có thể bị cảnh báo trễ)
     static final List<String> OPEN_STATUSES = List.of("TODO", "IN_PROGRESS");
@@ -118,6 +119,11 @@ public class CareTaskServiceImpl implements CareTaskService {
         if ("FEED".equalsIgnoreCase(task.getTaskType()) && task.getHorse() != null) {
             feedTaskService.consumeStock(task);
         }
+        // Dọn chuồng xong: chuồng của việc (hoặc chuồng hiện tại của ngựa) chuyển CLEAN
+        if ("CLEAN".equalsIgnoreCase(task.getTaskType())) {
+            stallService.markCleanedByTask(task.getStall() != null ? task.getStall() : task.getHorse() != null ? task.getHorse().getStall() : null,
+                    "việc dọn chuồng #" + task.getTaskId());
+        }
     }
 
     @Override
@@ -160,6 +166,7 @@ public class CareTaskServiceImpl implements CareTaskService {
                 .taskDate(request.getTaskDate())
                 .scheduledTime(request.getScheduledTime())
                 .instructions(request.getInstructions())
+                .isMedicalDiet(false)
                 .status("TODO")
                 .createdAt(LocalDateTime.now())
                 .build();

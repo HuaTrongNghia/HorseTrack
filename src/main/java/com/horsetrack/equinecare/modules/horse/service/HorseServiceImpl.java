@@ -46,6 +46,7 @@ public class HorseServiceImpl implements HorseService {
     private final HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository;
     private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
+    private final com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService;
 
     public HorseServiceImpl(HorseRepository horseRepository, UserRepository userRepository, StallRepository stallRepository,
                             HorseRegistrationRepository registrationRepository, EntityManager entityManager,
@@ -53,7 +54,8 @@ public class HorseServiceImpl implements HorseService {
                             com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler,
                             HorseAccessGuard horseAccessGuard,
                             com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository,
-                            com.horsetrack.equinecare.modules.notification.service.EmailService emailService) {
+                            com.horsetrack.equinecare.modules.notification.service.EmailService emailService,
+                            com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService) {
         this.horseRepository = horseRepository;
         this.userRepository = userRepository;
         this.stallRepository = stallRepository;
@@ -64,6 +66,7 @@ public class HorseServiceImpl implements HorseService {
         this.horseAccessGuard = horseAccessGuard;
         this.trainingPlanRepository = trainingPlanRepository;
         this.emailService = emailService;
+        this.injuryService = injuryService;
     }
 
     private boolean currentUserHasRole(String role) {
@@ -108,6 +111,7 @@ public class HorseServiceImpl implements HorseService {
                 .isLocked(horse.getIsLocked())
                 .prizeSharePct(horse.getPrizeSharePct())
                 .ownerId(horse.getOwner().getUserId())
+                .ownerName(horse.getOwner().getFullName())
                 .stallId(horse.getStall() != null ? horse.getStall().getStallId() : null)
                 .stallCode(horse.getStall() != null ? horse.getStall().getStallCode() : null)
                 .approvalStatus(horse.getApprovalStatus())
@@ -174,7 +178,9 @@ public class HorseServiceImpl implements HorseService {
         Horse horse = findHorse(horseId);
         checkOwnerAccess(horse.getOwner().getUserId(), "Bạn không phải chủ của ngựa này");
         horseAccessGuard.checkAssigned(horse);
-        return mapToResponseDTO(horse);
+        HorseResponseDTO dto = mapToResponseDTO(horse);
+        dto.setInjuries(injuryService.listForHorse(horse.getHorseId()));
+        return dto;
     }
 
     @Override

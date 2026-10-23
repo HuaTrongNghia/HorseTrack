@@ -22,6 +22,7 @@ import java.util.List;
 public class TrainingExecutionController {
 
     private final TrainingExecutionService trainingExecutionService;
+    private final com.horsetrack.equinecare.modules.training.service.SessionMonitorService sessionMonitorService;
 
     @GetMapping("/my-schedule")
     public ResponseEntity<ApiResponse<List<TrainerScheduleDTO>>> getMySchedule(
@@ -42,7 +43,45 @@ public class TrainingExecutionController {
         return ResponseEntity.ok(ApiResponse.ok(message, planStatus));
     }
 
-    // Dừng buổi tập vì chỉ số sức khỏe vượt ngưỡng: mặc định gửi ca cho bác sĩ, buổi tập chờ bác sĩ quyết định (WAITING_VET)
+    // F22-02: Groom bắt đầu buổi tập đã xác nhận, đúng ngày tập (CONFIRMED -> IN_PROGRESS)
+    @PutMapping("/{sessionId}/start")
+    @PreAuthorize("hasAuthority('Groom')")
+    public ResponseEntity<ApiResponse<com.horsetrack.equinecare.modules.training.dto.TrainingSessionDTO>> startSession(@PathVariable Integer sessionId) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã bắt đầu buổi tập", sessionMonitorService.start(sessionId)));
+    }
+
+    // Groom nhập chỉ số; vượt ngưỡng thì buổi tập tự tạm dừng (PAUSED_PENDING_TRAINER) và báo HLV
+    @PostMapping("/{sessionId}/readings")
+    @PreAuthorize("hasAuthority('Groom')")
+    public ResponseEntity<ApiResponse<com.horsetrack.equinecare.modules.training.dto.TrainingSessionDTO>> addReading(
+            @PathVariable Integer sessionId,
+            @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.SessionReadingRequestDTO request) {
+        var dto = sessionMonitorService.addReading(sessionId, request);
+        String message = "PAUSED_PENDING_TRAINER".equals(dto.getStatus())
+                ? "Chỉ số vượt ngưỡng: buổi tập đã tạm dừng và báo HLV. " + dto.getPausedReason()
+                : "Đã ghi nhận chỉ số";
+        return ResponseEntity.ok(ApiResponse.ok(message, dto));
+    }
+
+    // Groom nhập nhịp tim hồi phục khi buổi tập đang tạm dừng
+    @PostMapping("/{sessionId}/recovery")
+    @PreAuthorize("hasAuthority('Groom')")
+    public ResponseEntity<ApiResponse<com.horsetrack.equinecare.modules.training.dto.TrainingSessionDTO>> addRecovery(
+            @PathVariable Integer sessionId,
+            @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.SessionRecoveryRequestDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã ghi nhận nhịp tim hồi phục", sessionMonitorService.addRecovery(sessionId, request)));
+    }
+
+    // HLV điều chỉnh và cho buổi tập tạm dừng tập tiếp (nhịp hồi phục phải dưới ngưỡng, ngựa không bị khóa)
+    @PutMapping("/{sessionId}/resume")
+    @PreAuthorize("hasAuthority('Trainer')")
+    public ResponseEntity<ApiResponse<com.horsetrack.equinecare.modules.training.dto.TrainingSessionDTO>> resumeSession(
+            @PathVariable Integer sessionId,
+            @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.SessionResumeRequestDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Buổi tập tiếp tục", sessionMonitorService.resume(sessionId, request)));
+    }
+
+    // Dừng buổi tập đang tạm dừng vì chỉ số vượt ngưỡng: mặc định gửi ca cho bác sĩ, buổi tập chờ bác sĩ quyết định (WAITING_VET)
     @PutMapping("/{sessionId}/stop")
     public ResponseEntity<ApiResponse<String>> stopSession(@PathVariable Integer sessionId,
                                                            @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.SessionStopRequestDTO request) {

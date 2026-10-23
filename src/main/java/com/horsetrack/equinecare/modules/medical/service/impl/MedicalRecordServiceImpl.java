@@ -101,6 +101,8 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
                     .coordY(dto.getCoordY())
                     .severityLevel(dto.getSeverityLevel())
                     .medicalRecord(savedRecord)
+                    .horse(savedRecord.getHorse())
+                    .createdAt(LocalDateTime.now())
                     .build()
             ).collect(Collectors.toList());
             injuryMarkRepository.saveAll(injuryMarks);

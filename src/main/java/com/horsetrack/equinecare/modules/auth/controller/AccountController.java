@@ -24,6 +24,19 @@ public class AccountController {
         return ResponseEntity.ok(ApiResponse.ok("Fetched profile successfully", profile));
     }
 
+    // Sửa họ tên, số điện thoại của chính mình
+    @PutMapping("/my-profile")
+    public ResponseEntity<ApiResponse<UserProfileResponseDTO>> updateMyProfile(
+            @Valid @RequestBody com.horsetrack.equinecare.modules.auth.dto.ProfileUpdateRequestDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã cập nhật thông tin cá nhân", accountService.updateMyProfile(request)));
+    }
+
+    // Ảnh đại diện: multipart field "file", PNG / JPEG / WEBP, tối đa 1 MB
+    @PostMapping(value = "/avatar", consumes = org.springframework.http.MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<ApiResponse<UserProfileResponseDTO>> updateAvatar(@RequestParam("file") org.springframework.web.multipart.MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã cập nhật ảnh đại diện", accountService.updateAvatar(file)));
+    }
+
     // Bước 1: gửi mã OTP đổi mật khẩu tới email của tài khoản đang đăng nhập
     @PostMapping("/change-password/otp")
     public ResponseEntity<ApiResponse<String>> requestChangePasswordOtp() {

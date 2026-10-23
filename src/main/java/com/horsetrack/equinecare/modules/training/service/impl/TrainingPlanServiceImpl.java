@@ -34,6 +34,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     private final UserRepository userRepository;
     private final GroomProfileRepository groomProfileRepository;
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
+    private final com.horsetrack.equinecare.modules.training.service.SessionReadingView sessionReadingView;
 
     // Thời lượng mặc định một buổi tập (bảng chỉ lưu giờ bắt đầu), dùng để kiểm tra trùng giờ
     @org.springframework.beans.factory.annotation.Value("${app.training.session-duration-minutes:60}")
@@ -155,6 +156,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         TrainingPlan plan = findPlan(planId);
         horseAccessGuard.checkAssigned(plan.getHorse());
 
+        var readings = sessionReadingView.load(plan.getSessions());
         List<TrainingSessionDTO> sessionDTOs = plan.getSessions().stream()
                 .map(s -> {
                     com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper.EvaluationData eval =
@@ -171,6 +173,13 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                             .evaluationComment(eval != null ? eval.getComment() : null)
                             .evaluatedBy(eval != null ? eval.getBy() : null)
                             .evaluatedAt(eval != null ? eval.getAt() : null)
+                            .maxHeartRate(sessionReadingView.maxHeartRate(s))
+                            .maxSpeedKmh(sessionReadingView.maxSpeedKmh(s))
+                            .startedAt(s.getStartedAt())
+                            .pausedAt(s.getPausedAt())
+                            .pausedReason(s.getPausedReason())
+                            .readings(sessionReadingView.phase(readings.get(s.getSessionId()), com.horsetrack.equinecare.modules.training.entity.SessionReading.PHASE_SESSION))
+                            .recovery(sessionReadingView.phase(readings.get(s.getSessionId()), com.horsetrack.equinecare.modules.training.entity.SessionReading.PHASE_RECOVERY))
                             .build();
                 })
                 .collect(Collectors.toList());
@@ -232,6 +241,8 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .sessionDate(request.getSessionDate())
                 .activityType(request.getActivityType())
                 .notes(request.getNotes())
+                .maxHeartRate(request.getMaxHeartRate() != null ? request.getMaxHeartRate() : sessionReadingView.maxHeartRate(new TrainingSession()))
+                .maxSpeedKmh(request.getMaxSpeedKmh() != null ? request.getMaxSpeedKmh() : sessionReadingView.maxSpeedKmh(new TrainingSession()))
                 .status("PENDING")
                 .trainingPlan(plan)
                 .assignedTo(assignee)

@@ -26,11 +26,13 @@ public class HorseResponseDTO {
     private Boolean isLocked;
     private BigDecimal prizeSharePct;
     private Integer ownerId;
+    private String ownerName;
     private Integer stallId;
     private String stallCode;
     private String approvalStatus; // PENDING: chờ duyệt; APPROVED: đã duyệt và cấp chuồng; REJECTED: bị từ chối
     private LocalDateTime createdAt;
     private String horseCode;          // HT-0001 do DB sinh
+    private java.util.List<com.horsetrack.equinecare.modules.medical.dto.InjuryDTO> injuries; // chỉ có ở GET /horses/{id}
     private String color;
     private BigDecimal heightHands;
     private String passportNo;

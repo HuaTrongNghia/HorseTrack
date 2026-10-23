@@ -25,7 +25,7 @@ public class AuditTrail {
     private final UserRepository userRepository;
 
     /**
-     * @param actionType  mã hành động, tối đa 20 ký tự (VD: APPROVE_HORSE, VET_LOCK)
+     * @param actionType  mã hành động, tối đa 50 ký tự (VD: APPROVE_HORSE, VET_LOCK)
      * @param targetTable bảng bị tác động (VD: Horses, Treatment_Protocols)
      * @param oldValue    trạng thái / giá trị trước (có thể null)
      * @param newValue    trạng thái / giá trị sau, kèm mã đối tượng và lý do

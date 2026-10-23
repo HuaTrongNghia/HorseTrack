@@ -29,7 +29,7 @@ public class AuditLogServiceImpl implements AuditLogService {
     public void log(Integer userId, String actionType, String targetTable, String oldValue, String newValue, String ipAddress) {
         AuditLog auditLog = AuditLog.builder()
                 .userId(userId)
-                .actionType(actionType != null && actionType.length() > 20 ? actionType.substring(0, 20) : actionType)
+                .actionType(actionType != null && actionType.length() > 50 ? actionType.substring(0, 50) : actionType)
                 .targetTable(targetTable != null && targetTable.length() > 50 ? targetTable.substring(0, 50) : targetTable)
                 .oldValue(oldValue)
                 .newValue(newValue)

@@ -27,4 +27,13 @@ public class TrainingSessionCreateRequestDTO {
 
     @NotNull(message = "Phải chọn nhân viên (Groom/Trainer) để gán việc")
     private Integer assignedToId;
+
+    // Ngưỡng của buổi tập; bỏ trống thì dùng mặc định (app.training.default-max-heart-rate / default-max-speed-kmh)
+    @jakarta.validation.constraints.Min(value = 60, message = "Ngưỡng nhịp tim tối thiểu 60 bpm")
+    @jakarta.validation.constraints.Max(value = 300, message = "Ngưỡng nhịp tim tối đa 300 bpm")
+    private Integer maxHeartRate;
+
+    @jakarta.validation.constraints.DecimalMin(value = "1.0", message = "Ngưỡng tốc độ tối thiểu 1 km/h")
+    @jakarta.validation.constraints.DecimalMax(value = "100.0", message = "Ngưỡng tốc độ tối đa 100 km/h")
+    private java.math.BigDecimal maxSpeedKmh;
 }

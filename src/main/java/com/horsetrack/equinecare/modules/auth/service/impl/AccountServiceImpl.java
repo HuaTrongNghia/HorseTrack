@@ -29,6 +29,10 @@ public class AccountServiceImpl implements AccountService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final OtpService otpService;
     private final EmailService emailService;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
+
+    private static final long AVATAR_MAX_BYTES = 1024 * 1024;
+    private static final java.util.Set<String> AVATAR_TYPES = java.util.Set.of("image/png", "image/jpeg", "image/webp");
 
     @Override
     @Transactional(readOnly = true)
@@ -45,6 +49,7 @@ public class AccountServiceImpl implements AccountService {
                 .phone(user.getPhone())
                 .roleName(user.getRoleName())
                 .isActive(user.getIsActive())
+                .avatarUrl(userRepository.findAvatarUrl(user.getUserId()))
                 .build();
 
         if ("Trainer".equalsIgnoreCase(user.getRoleName())) {
@@ -67,6 +72,46 @@ public class AccountServiceImpl implements AccountService {
         }
 
         return dto;
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponseDTO updateMyProfile(com.horsetrack.equinecare.modules.auth.dto.ProfileUpdateRequestDTO request) {
+        User user = currentUser();
+        String fullName = request.getFullName().trim();
+        String phone = StringUtils.hasText(request.getPhone()) ? request.getPhone().trim() : null;
+        if (phone != null && !phone.equals(user.getPhone()) && userRepository.existsByPhone(phone)) {
+            throw new IllegalArgumentException("Số điện thoại " + phone + " đã được tài khoản khác sử dụng.");
+        }
+        String before = "full_name=" + user.getFullName() + " | phone=" + user.getPhone();
+        user.setFullName(fullName);
+        user.setPhone(phone);
+        userRepository.save(user);
+        auditTrail.record("UPDATE_PROFILE", "Users", before, "full_name=" + fullName + " | phone=" + phone + " | " + user.getUsername());
+        return getMyProfile();
+    }
+
+    @Override
+    @Transactional
+    public UserProfileResponseDTO updateAvatar(org.springframework.web.multipart.MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new IllegalArgumentException("Chưa chọn ảnh đại diện.");
+        }
+        String type = file.getContentType() == null ? "" : file.getContentType().toLowerCase();
+        if (!AVATAR_TYPES.contains(type)) {
+            throw new IllegalArgumentException("Ảnh đại diện phải là PNG, JPEG hoặc WEBP.");
+        }
+        if (file.getSize() > AVATAR_MAX_BYTES) {
+            throw new IllegalArgumentException("Ảnh đại diện tối đa 1 MB.");
+        }
+        User user = currentUser();
+        try {
+            userRepository.updateAvatarUrl(user.getUserId(), "data:" + type + ";base64," + java.util.Base64.getEncoder().encodeToString(file.getBytes()));
+        } catch (java.io.IOException ex) {
+            throw new IllegalArgumentException("Không đọc được ảnh tải lên.");
+        }
+        auditTrail.record("UPDATE_AVATAR", "Users", null, "avatar " + type + " " + file.getSize() + " bytes | " + user.getUsername());
+        return getMyProfile();
     }
 
     @Override

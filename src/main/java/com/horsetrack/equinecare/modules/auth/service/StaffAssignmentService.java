@@ -34,7 +34,7 @@ import java.util.Objects;
 public class StaffAssignmentService {
 
     private static final List<String> OPEN_TASKS = List.of("TODO", "IN_PROGRESS");
-    private static final List<String> OPEN_SESSIONS = List.of("PENDING", "CONFIRMED");
+    private static final List<String> OPEN_SESSIONS = com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.ACTIVE_SESSION_STATUSES;
 
     private final UserRepository userRepository;
     private final GroomProfileRepository groomProfileRepository;
