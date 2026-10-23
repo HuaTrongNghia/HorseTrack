@@ -29,6 +29,9 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
     private final TrainingPlanRepository trainingPlanRepository;
     private final UserRepository userRepository;
     private final com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator planActivator;
+    private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
+    private final com.horsetrack.equinecare.modules.medical.repository.VetCaseRepository vetCaseRepository;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
 
     private User getLoggedInUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -80,12 +83,28 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         TrainingSession session = trainingSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new RuntimeException("Session not found"));
 
-        if (session.getAssignedTo() == null || !session.getAssignedTo().getUserId().equals(user.getUserId())) {
+        boolean isAssigned = session.getAssignedTo() != null && session.getAssignedTo().getUserId().equals(user.getUserId());
+        boolean isTrainerOrManager = "Trainer".equalsIgnoreCase(user.getRoleName()) || "Club Manager".equalsIgnoreCase(user.getRoleName());
+
+        if (!isAssigned && !isTrainerOrManager) {
             throw new AccessDeniedException("You are not assigned to this session");
         }
 
-        if (!TrainingPlanActivator.OPEN_SESSION_STATUSES.contains(String.valueOf(session.getStatus()).toUpperCase())) {
-            throw new IllegalArgumentException("Không thể cập nhật buổi tập đang ở trạng thái " + session.getStatus() + ".");
+        java.util.List<String> cancellableStatuses = java.util.List.of(
+                TrainingPlanActivator.SESSION_PENDING,
+                TrainingPlanActivator.SESSION_CONFIRMED,
+                "IN_PROGRESS",
+                "PAUSED",
+                "PAUSED_PENDING_TRAINER"
+        );
+        if ("CANCELLED".equalsIgnoreCase(request.getStatus())) {
+            if (!cancellableStatuses.contains(String.valueOf(session.getStatus()).toUpperCase())) {
+                throw new IllegalArgumentException("Không thể hủy buổi tập đang ở trạng thái " + session.getStatus() + ".");
+            }
+        } else {
+            if (!TrainingPlanActivator.OPEN_SESSION_STATUSES.contains(String.valueOf(session.getStatus()).toUpperCase())) {
+                throw new IllegalArgumentException("Không thể cập nhật buổi tập đang ở trạng thái " + session.getStatus() + ".");
+            }
         }
         // Buổi tập phải được Groom xác nhận (PUT /{sessionId}/confirm) trước khi thực hiện
         if ("COMPLETED".equalsIgnoreCase(request.getStatus()) && TrainingPlanActivator.SESSION_PENDING.equalsIgnoreCase(session.getStatus())) {
@@ -120,13 +139,85 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         if ("COMPLETED".equalsIgnoreCase(request.getStatus())) {
             TrainingPlan plan = session.getTrainingPlan();
             if (plan != null && TrainingPlanActivator.PLAN_ACTIVE.equalsIgnoreCase(plan.getStatus())) {
-                long openCount = trainingSessionRepository.countByTrainingPlan_PlanIdAndStatusIn(plan.getPlanId(), TrainingPlanActivator.OPEN_SESSION_STATUSES);
+                long openCount = trainingSessionRepository.countByTrainingPlan_PlanIdAndStatusIn(plan.getPlanId(), TrainingPlanActivator.UNFINISHED_SESSION_STATUSES);
                 if (openCount == 0) {
                     plan.setStatus("COMPLETED");
                     trainingPlanRepository.save(plan);
                 }
             }
+        } else if ("CANCELLED".equalsIgnoreCase(request.getStatus())) {
+            TrainingPlan plan = session.getTrainingPlan();
+            if (plan != null && (TrainingPlanActivator.PLAN_ACTIVE.equalsIgnoreCase(plan.getStatus()) || TrainingPlanActivator.PLAN_PENDING.equalsIgnoreCase(plan.getStatus()))) {
+                plan.setStatus("PAUSED");
+                trainingPlanRepository.save(plan);
+            }
         }
+    }
+
+    @Override
+    @Transactional
+    public String stopSession(Integer sessionId, com.horsetrack.equinecare.modules.training.dto.SessionStopRequestDTO request) {
+        User user = getLoggedInUser();
+        TrainingSession session = trainingSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new com.horsetrack.equinecare.common.exception.ResourceNotFoundException("Không tìm thấy buổi tập với ID: " + sessionId));
+        TrainingPlan plan = session.getTrainingPlan();
+        com.horsetrack.equinecare.modules.horse.entity.Horse horse = plan != null ? plan.getHorse() : null;
+
+        // HLV phụ trách ngựa, Quản lý CLB hoặc Groom được giao buổi tập
+        boolean isTrainer = "Trainer".equalsIgnoreCase(user.getRoleName());
+        boolean isManager = "Club Manager".equalsIgnoreCase(user.getRoleName());
+        boolean isAssignedGroom = session.getAssignedTo() != null && session.getAssignedTo().getUserId().equals(user.getUserId());
+        if (isTrainer) {
+            horseAccessGuard.checkAssigned(horse);
+        } else if (!isManager && !isAssignedGroom) {
+            throw new AccessDeniedException("Bạn không được phân công buổi tập này");
+        }
+        java.util.List<String> stoppableStatuses = java.util.List.of(
+                TrainingPlanActivator.SESSION_PENDING,
+                TrainingPlanActivator.SESSION_CONFIRMED,
+                "IN_PROGRESS",
+                "PAUSED",
+                "PAUSED_PENDING_TRAINER"
+        );
+        if (!stoppableStatuses.contains(String.valueOf(session.getStatus()).toUpperCase())) {
+            throw new IllegalArgumentException("Chỉ dừng được buổi tập chưa kết thúc (hiện tại: " + session.getStatus() + ").");
+        }
+
+        boolean requestVet = !Boolean.FALSE.equals(request.getRequestVet());
+        String readings = (request.getHeartRate() != null ? "nhịp tim " + request.getHeartRate() + " bpm" : "")
+                + (request.getSpeedKmh() != null ? (request.getHeartRate() != null ? ", " : "") + "tốc độ " + request.getSpeedKmh() + " km/h" : "");
+        String reason = request.getReason().trim();
+        String stopNote = "Dừng buổi tập (" + user.getFullName() + ")" + (readings.isEmpty() ? "" : " - " + readings) + ": " + reason;
+        session.setNotes(session.getNotes() == null || session.getNotes().isBlank() ? stopNote : session.getNotes() + " | " + stopNote);
+
+        String caseCode = null;
+        if (requestVet && horse != null) {
+            // Gửi ca cho bác sĩ; buổi tập chờ bác sĩ quyết định khóa hay không khóa huấn luyện
+            session.setStatus(TrainingPlanActivator.SESSION_WAITING_VET);
+            var vetCase = vetCaseRepository.saveAndFlush(com.horsetrack.equinecare.modules.medical.entity.VetCase.builder()
+                    .horse(horse)
+                    .reportedBy(user)
+                    .caseType("Vượt ngưỡng trong buổi tập")
+                    .description("Buổi tập #" + session.getSessionId() + " (" + session.getActivityType() + ", " + session.getSessionDate() + ")"
+                            + (readings.isEmpty() ? "" : " - " + readings) + ". " + reason)
+                    .severity(request.getSeverity() == null ? "HIGH" : request.getSeverity())
+                    .source("SESSION_STOP")
+                    .status("NEW")
+                    .reportedAt(LocalDateTime.now())
+                    .build());
+            caseCode = vetCase.getCaseCode() != null ? vetCase.getCaseCode() : "#" + vetCase.getCaseId();
+        } else {
+            session.setStatus(TrainingPlanActivator.SESSION_STOPPED);
+        }
+        if (plan != null && (TrainingPlanActivator.PLAN_ACTIVE.equalsIgnoreCase(plan.getStatus()) || TrainingPlanActivator.PLAN_PENDING.equalsIgnoreCase(plan.getStatus()))) {
+            plan.setStatus("PAUSED");
+            trainingPlanRepository.save(plan);
+        }
+        trainingSessionRepository.save(session);
+        auditTrail.record("STOP_SESSION", "training_sessions", "status=OPEN",
+                "status=" + session.getStatus() + " | buổi tập #" + session.getSessionId() + (horse != null ? " | ngựa " + horse.getHorseName() : "")
+                        + (caseCode != null ? " | ca " + caseCode : "") + " | " + reason);
+        return session.getStatus();
     }
 
     @Override
@@ -142,8 +233,8 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         if (!TrainingPlanActivator.SESSION_PENDING.equalsIgnoreCase(session.getStatus())) {
             throw new IllegalArgumentException("Chỉ xác nhận được buổi tập đang chờ xác nhận (hiện tại: " + session.getStatus() + ").");
         }
-        if (session.getSessionDate() != null && session.getSessionDate().isBefore(LocalDateTime.now())) {
-            throw new IllegalArgumentException("Buổi tập lúc " + session.getSessionDate() + " đã qua giờ, không thể xác nhận. Hãy báo HLV xếp lại lịch.");
+        if (session.getSessionDate() != null && session.getSessionDate().toLocalDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Buổi tập ngày " + session.getSessionDate().toLocalDate() + " đã qua ngày, không thể xác nhận. Hãy báo HLV xếp lại lịch.");
         }
         TrainingPlan plan = session.getTrainingPlan();
         if (plan != null && plan.getHorse() != null && Boolean.TRUE.equals(plan.getHorse().getIsLocked())) {
@@ -159,5 +250,29 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         // Đã có Groom xác nhận: giáo án chạy ngay nếu đã tới ngày bắt đầu, nếu chưa thì tác vụ định kỳ sẽ kích hoạt đúng ngày
         planActivator.tryActivate(plan, LocalDate.now());
         return plan != null ? plan.getStatus() : null;
+    }
+
+    @Override
+    @Transactional
+    public void evaluateSession(Integer sessionId, com.horsetrack.equinecare.modules.training.dto.SessionEvaluateRequestDTO request) {
+        User user = getLoggedInUser();
+        TrainingSession session = trainingSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new com.horsetrack.equinecare.common.exception.ResourceNotFoundException("Không tìm thấy buổi tập với ID: " + sessionId));
+
+        if (!"COMPLETED".equalsIgnoreCase(session.getStatus())) {
+            throw new IllegalArgumentException("Chỉ đánh giá được phiên đã hoàn thành.");
+        }
+
+        String nowStr = LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM HH:mm"));
+        String updatedNotes = com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper.attachEvaluation(
+                session.getNotes(),
+                request.getScore(),
+                request.getComment(),
+                user.getFullName() != null ? user.getFullName() : user.getUsername(),
+                nowStr
+        );
+
+        session.setNotes(updatedNotes);
+        trainingSessionRepository.save(session);
     }
 }
