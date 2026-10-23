@@ -61,6 +61,7 @@ public class ProtocolController {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final VetCaseRepository vetCaseRepository;
     private final UserRepository userRepository;
+    private final com.horsetrack.equinecare.modules.auth.repository.GroomProfileRepository groomProfileRepository;
 
     // Phác đồ đang mở (tab chứa "đóng" thì trả phác đồ đã đóng), lọc theo quyền xem ngựa
     @GetMapping
@@ -80,12 +81,18 @@ public class ProtocolController {
     @GetMapping("/shipments")
     @Transactional(readOnly = true)
     public ResponseEntity<ApiResponse<List<ShipmentLotDTO>>> getRelatedShipments() {
-        Map<Integer, String> protocolCodes = protocolRepository.findAll().stream()
+        User user = currentUser();
+        Map<Integer, TreatmentProtocol> protocols = protocolRepository.findAll().stream()
+                .collect(Collectors.toMap(TreatmentProtocol::getProtocolId, p -> p, (a, b) -> a));
+        Map<Integer, String> protocolCodes = protocols.values().stream()
                 .collect(Collectors.toMap(TreatmentProtocol::getProtocolId, p -> Objects.toString(p.getProtocolCode(), "PD-" + p.getProtocolId()), (a, b) -> a));
         LocalDate today = LocalDate.now();
         List<ShipmentLotDTO> list = purchaseOrderRepository.findAll().stream()
                 .filter(o -> OPEN_PO.contains(o.getStatus()))
                 .filter(o -> o.getProtocolId() != null || "PROTOCOL".equals(o.getPurpose()))
+                // Chỉ lô hàng phục vụ phác đồ của ngựa người gọi được xem
+                .filter(o -> o.getProtocolId() == null ? !isScopedRole(user)
+                        : protocols.containsKey(o.getProtocolId()) && canView(user, protocols.get(o.getProtocolId()).getHorse()))
                 .sorted(Comparator.comparing(PurchaseOrder::getExpectedDeliveryDate, Comparator.nullsLast(Comparator.naturalOrder())))
                 .map(o -> toShipment(o, protocolCodes, today))
                 .collect(Collectors.toList());
@@ -147,7 +154,19 @@ public class ProtocolController {
         if ("Trainer".equals(role)) {
             return horse.getAssignedTrainer() != null && horse.getAssignedTrainer().getUserId().equals(user.getUserId());
         }
+        if ("Groom".equals(role)) {
+            // Groom chỉ xem ngựa trong khu chuồng mình phụ trách
+            String zone = groomProfileRepository.findById(user.getUserId()).map(g -> g.getAssignedBarnZone()).orElse(null);
+            String horseZone = horse.getStall() != null ? horse.getStall().getBarnZone() : null;
+            return zone != null && horseZone != null && zone.trim().equalsIgnoreCase(horseZone.trim());
+        }
         return true;
+    }
+
+    // Vai trò chỉ được xem dữ liệu của một số ngựa (không xem lô hàng không gắn phác đồ)
+    private static boolean isScopedRole(User user) {
+        String role = user == null ? "" : Objects.toString(user.getRoleName(), "");
+        return "Horse Owner".equals(role) || "Trainer".equals(role) || "Groom".equals(role) || user == null;
     }
 
     private User currentUser() {
