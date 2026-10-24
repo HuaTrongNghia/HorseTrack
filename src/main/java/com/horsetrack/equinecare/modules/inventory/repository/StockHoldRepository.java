@@ -14,8 +14,5 @@ public interface StockHoldRepository extends JpaRepository<StockHold, Integer> {
     // Các dòng còn hiệu lực (HELD/SHORT) của một phác đồ
     List<StockHold> findByProtocolIdAndStatusIn(Integer protocolId, Collection<String> statuses);
 
-    @org.springframework.data.jpa.repository.Query("SELECT DISTINCT h.protocolId FROM StockHold h WHERE h.status IN :statuses")
-    List<Integer> findProtocolIdsByStatusIn(@org.springframework.data.repository.query.Param("statuses") Collection<String> statuses);
-
     List<StockHold> findByPurchaseOrderIdAndStatus(Integer purchaseOrderId, String status);
 }

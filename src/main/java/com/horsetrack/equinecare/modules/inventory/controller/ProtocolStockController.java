@@ -24,7 +24,7 @@ public class ProtocolStockController {
     private final ProtocolStockService protocolStockService;
 
     @GetMapping
-    @Operation(summary = "Phác đồ chờ kho xử lý", description = "Mặc định: WAITING_STOCK_CHECK, WAITING_RESTOCK, REQUIRES_VET_REVIEW, VET_CONFIRMED. Truyền state để lọc một trạng thái.")
+    @Operation(summary = "Phác đồ chờ kho xử lý", description = "Mặc định trả mọi trạng thái của màn hình kho (chờ kiểm tồn, đủ / thiếu hàng, chờ hàng, VET_CONFIRMED chờ cấp phát, IN_TREATMENT đã cấp phát, ON_HOLD_PAYMENT, COMPLETED, SUPERSEDED, CANCELLED). state lọc một hoặc nhiều trạng thái, cách nhau dấu phẩy.")
     public ResponseEntity<ApiResponse<List<TreatmentProtocolDTO>>> getQueue(@RequestParam(required = false) String state) {
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách phác đồ chờ kho thành công", protocolStockService.getQueue(state)));
     }

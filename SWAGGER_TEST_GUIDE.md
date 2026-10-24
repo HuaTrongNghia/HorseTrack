@@ -1495,7 +1495,7 @@ Phần việc của kho trong luồng ở mục 12. Kho **không có quyền quy
 
 ### 12E.1 Xem phác đồ chờ kho
 
-- `GET /api/v1/inventory/protocols`: mặc định các phác đồ `WAITING_STOCK_CHECK`, `WAITING_RESTOCK`, `REQUIRES_VET_REVIEW`, `VET_CONFIRMED`, cùng các phác đồ `IN_TREATMENT` có **thuốc bổ sung chờ cấp** (`pendingSupplement = true`, 12.10), sắp theo ngày cần thuốc. Thêm `?state=...` để lọc một trạng thái.
+- `GET /api/v1/inventory/protocols`: mặc định trả **mọi phác đồ** (trừ bản nháp) để màn hình kho chia tab: chờ kiểm tồn `WAITING_STOCK_CHECK`, đủ / thiếu hàng `STOCK_AVAILABLE` / `STOCK_SHORTAGE`, chờ hàng `WAITING_RESTOCK` / `REQUIRES_VET_REVIEW`, **bác sĩ đã xác nhận - chờ cấp phát `VET_CONFIRMED`** (không phải `READY_FOR_DISPENSING`), đã cấp phát `IN_TREATMENT` (có `pendingSupplement = true` nếu còn thuốc bổ sung chờ cấp, 12.10), tạm dừng chờ thanh toán `ON_HOLD_PAYMENT`, hoàn tất `COMPLETED`, bác sĩ đã đổi / hủy `SUPERSEDED` / `CANCELLED`. Sắp theo ngày cần thuốc. Lọc bằng `?state=VET_CONFIRMED` hoặc nhiều trạng thái `?state=STOCK_SHORTAGE,WAITING_RESTOCK`.
 - `GET /api/v1/inventory/protocols/{protocolId}`: thuốc theo giai đoạn và kết quả kiểm kho gần nhất.
 
 ### 12E.2 `PUT /api/v1/inventory/protocols/{protocolId}/stock-check` — Kiểm kho

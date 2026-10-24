@@ -30,8 +30,12 @@ import static com.horsetrack.equinecare.modules.inventory.service.StockLedgerSer
 @RequiredArgsConstructor
 public class ProtocolStockServiceImpl implements ProtocolStockService {
 
-    // Phác đồ đang chờ kho xử lý (hàng đợi mặc định của màn hình 73)
-    private static final List<String> QUEUE_STATES = List.of("WAITING_STOCK_CHECK", "WAITING_RESTOCK", "REQUIRES_VET_REVIEW", "VET_CONFIRMED");
+    // Màn hình kho (73) chia tab theo trạng thái nên mặc định trả mọi phác đồ (trừ bản nháp): chờ kiểm tồn, đủ / thiếu hàng,
+    // chờ hàng, bác sĩ đã xác nhận (chờ cấp phát), đang điều trị (đã cấp phát), tạm dừng chờ thanh toán, hoàn tất, bác sĩ đã đổi / hủy
+    private static final List<String> QUEUE_STATES = List.of("WAITING_STOCK_CHECK", "STOCK_AVAILABLE", "STOCK_SHORTAGE", "WAITING_RESTOCK",
+            "REQUIRES_VET_REVIEW", "VET_CONFIRMED", "READY_FOR_DISPENSING", "IN_TREATMENT", "ON_HOLD_PAYMENT", "COMPLETED", "SUPERSEDED", "CANCELLED");
+    // Bác sĩ đã xác nhận phương án kho, kho được cấp thuốc (READY_FOR_DISPENSING là tên cũ của cùng trạng thái)
+    private static final Set<String> DISPENSABLE_STATES = Set.of("VET_CONFIRMED", "READY_FOR_DISPENSING");
     // Được kiểm kho (lần đầu hoặc kiểm lại khi hàng về)
     private static final Set<String> CHECKABLE_STATES = Set.of("WAITING_STOCK_CHECK", "STOCK_SHORTAGE", "WAITING_RESTOCK", "REQUIRES_VET_REVIEW");
     private static final Set<String> OPEN_PO_STATUSES = Set.of("ORDERED", "IN_TRANSIT", "DELAYED", "PARTIALLY_RECEIVED");
@@ -46,16 +50,11 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
     @Override
     @Transactional(readOnly = true)
     public List<TreatmentProtocolDTO> getQueue(String state) {
-        List<String> states = StringUtils.hasText(state) ? List.of(state.trim().toUpperCase()) : QUEUE_STATES;
-        List<TreatmentProtocol> list = new ArrayList<>(protocolRepository.findByStateInOrderByRequiredByAscCreatedAtAsc(states));
-        if (!StringUtils.hasText(state)) {
-            // Phác đồ đang điều trị có thuốc bổ sung chờ kho cấp
-            Set<Integer> pending = new HashSet<>(holdRepository.findProtocolIdsByStatusIn(List.of("HELD", "SHORT")));
-            protocolRepository.findByStateInOrderByRequiredByAscCreatedAtAsc(List.of("IN_TREATMENT")).stream()
-                    .filter(p -> pending.contains(p.getProtocolId()))
-                    .forEach(list::add);
-        }
-        return mapper.toSummaryList(list);
+        // state: một hoặc nhiều trạng thái cách nhau bằng dấu phẩy; bỏ trống = mọi trạng thái của màn hình kho
+        List<String> states = StringUtils.hasText(state)
+                ? Arrays.stream(state.split(",")).map(s -> s.trim().toUpperCase()).filter(StringUtils::hasText).toList()
+                : QUEUE_STATES;
+        return mapper.toSummaryList(protocolRepository.findByStateInOrderByRequiredByAscCreatedAtAsc(states));
     }
 
     @Override
@@ -180,7 +179,7 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
             return dispenseSupplement(protocol);
         }
         // BR_07: chỉ cấp thuốc sau khi bác sĩ xác nhận phương án kho
-        if (!"VET_CONFIRMED".equals(protocol.getState())) {
+        if (!DISPENSABLE_STATES.contains(protocol.getState())) {
             throw new IllegalArgumentException("Chỉ cấp thuốc khi bác sĩ đã xác nhận phác đồ (VET_CONFIRMED). Hiện tại: " + protocol.getState() + ".");
         }
         List<StockHold> holds = holdRepository.findByProtocolIdAndStatusIn(protocolId, List.of("HELD", "SHORT"));
