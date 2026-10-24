@@ -17,6 +17,9 @@ public interface ProtocolStockService {
     /** Trả lại toàn bộ hàng đang giữ của phác đồ (dùng khi hủy hoặc tạo phiên bản mới). */
     void releaseHolds(Integer protocolId, String note);
 
+    /** Lịch sử cấp phát thuốc của phác đồ: từng dòng xuất kho (thời điểm, người cấp, số lô, hạn dùng, số lượng) */
+    List<com.horsetrack.equinecare.modules.inventory.service.DispensingHistory.Record> dispensingHistory(Integer protocolId);
+
     /**
      * Thuốc bổ sung khi phác đồ đang điều trị: giữ ngay phần đang có trong kho (HELD) hoặc ghi thiếu (SHORT);
      * kho cấp phần bổ sung bằng dispense khi phác đồ IN_TREATMENT.

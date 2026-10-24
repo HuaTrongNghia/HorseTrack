@@ -24,6 +24,7 @@ public class TreatmentProtocolMapper {
     private final StockHoldRepository holdRepository;
     private final ProtocolProgressNoteRepository noteRepository;
     private final com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling phaseBilling;
+    private final com.horsetrack.equinecare.modules.inventory.service.DispensingHistory dispensingHistory;
 
     public TreatmentProtocolDTO toDTO(TreatmentProtocol p, boolean detail) {
         TreatmentProtocol replacedBy = protocolRepository.findByReplacesProtocol_ProtocolId(p.getProtocolId()).orElse(null);
@@ -84,8 +85,18 @@ public class TreatmentProtocolMapper {
                             .build()).collect(Collectors.toList()))
                     .build()).collect(Collectors.toList()));
 
+            var issues = dispensingHistory.byHold(p.getProtocolId());
             dto.setStockAnswer(holdRepository.findByProtocolIdOrderByHoldIdAsc(p.getProtocolId()).stream()
-                    .map(TreatmentProtocolMapper::toStockAnswer)
+                    .map(h -> {
+                        TreatmentProtocolDTO.StockAnswer a = toStockAnswer(h);
+                        var lines = issues.get(h.getHoldId());
+                        if (lines != null && !lines.isEmpty()) {
+                            a.setIssuedAt(lines.get(0).getIssuedAt());
+                            a.setIssuedByName(lines.get(0).getIssuedByName());
+                            a.setIssuedLots(lines.stream().map(com.horsetrack.equinecare.modules.inventory.service.DispensingHistory.Record::lotLabel).toList());
+                        }
+                        return a;
+                    })
                     .collect(Collectors.toList()));
 
             dto.setProgressNotes(noteRepository.findByProtocol_ProtocolIdOrderByWrittenAtAsc(p.getProtocolId()).stream()

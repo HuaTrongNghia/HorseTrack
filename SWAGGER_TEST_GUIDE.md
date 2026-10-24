@@ -2,7 +2,7 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **163 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **164 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 > **Bắt buộc trước khi chạy bản backend này:** chạy `DATABASE_fe_requests_schema.sql` trên DB (thêm cột ngưỡng / tạm dừng cho buổi tập, `Session_Readings.session_id`, chấn thương gắn với ngựa, `Users.avatar_url`, `Competition_Entries.proposal_note`). Chưa chạy script thì các API buổi tập, chấn thương, hồ sơ cá nhân, đề xuất thi đấu trả `500` "Invalid column name".
 >
@@ -676,10 +676,20 @@ Chỉ `Trainer` được gọi. Người đang đăng nhập sẽ được ghi l
   "planName": "Giáo án tăng sức bền tháng 11",
   "startDate": "2026-10-21",
   "endDate": "2026-11-30",
-  "goal": "Tăng sức bền cho cự ly 1600m"
+  "goal": "Tăng sức bền cho cự ly 1600m",
+  "type": "Chuẩn bị thi đấu",
+  "phases": [
+    { "name": "Nền tảng", "weeks": 3, "intensity": "MEDIUM", "distanceM": 2000, "targetSpeedKmh": 40, "trackType": "DIRT", "sessionsPerWeek": 4, "maxHeartRate": 170 },
+    { "name": "Tăng tốc", "weeks": 2, "intensity": "HIGH", "distanceM": 1600, "sessionsPerWeek": 5, "maxHeartRate": 185 },
+    { "name": "Hồi phục", "weeks": 1, "intensity": "LOW", "sessionsPerWeek": 3, "maxHeartRate": 150 }
+  ]
 }
 ```
 
+- `type` (tùy chọn, tối đa 50 ký tự): loại giáo án, lưu cột `plan_type` (không cần ghi vào đầu `goal` nữa).
+- `phases` (tùy chọn, tối đa 12, lưu bảng `Training_Plan_Phases`): đánh số theo thứ tự gửi lên. `weeks` 1–52; `intensity` `LOW` / `MEDIUM` / `HIGH` (hoặc Thấp / Trung bình / Cao); `trackType` `SYNTHETIC` / `DIRT` / `TURF`; `sessionsPerWeek` 1–14; `maxHeartRate` 40–260. **Tổng số tuần không vượt thời gian giáo án** → vượt thì `400`.
+- `GET /training-plans` (6.2) và `GET /training-plans/{planId}` (6.3) trả `type` và `phases[]`, mỗi giai đoạn có thêm `startDate`, `endDate` (tính từ ngày bắt đầu giáo án và số tuần các giai đoạn trước) và `current` (giai đoạn của hôm nay). Mỗi buổi tập trong 6.3 có `phaseNo`.
+- **Ngưỡng buổi tập theo giai đoạn:** phân công buổi tập (6.5) không gửi `maxHeartRate` thì lấy `maxHeartRate` của giai đoạn chứa ngày tập (rồi mới tới mặc định 180).
 - **Mong đợi:** `201` "Tạo giáo án huấn luyện thành công", `data` là `planId`. Giáo án mới có trạng thái **`PENDING` (đang chờ)**, chỉ chuyển `ACTIVE` theo 7.2; DB tự sinh mã `plan_code` dạng `KH-0002`.
 - **Ghi lại `planId`** để dùng cho 6.3 và 6.5.
 - **Test lỗi:**
@@ -1546,6 +1556,8 @@ Hệ thống tự cộng số lượng từng thuốc qua các giai đoạn và 
 
 - Chỉ khi bác sĩ đã xác nhận (`VET_CONFIRMED`). Xuất toàn bộ phần đã giữ: `heldStock` và `currentStock` cùng giảm, nhật ký kho có dòng `ISSUE` với `refType = "PROTOCOL"`.
 - **Mong đợi:** `200`, phác đồ chuyển `IN_TREATMENT`, các dòng `stockAnswer` chuyển `ISSUED`.
+- **Xuất theo lô hết hạn trước (FEFO):** mỗi lô một dòng `ISSUE` kèm số lô (lô không có hạn dùng dùng sau cùng; phần vượt số lượng các lô đang ghi nhận ghi dòng không có lô). Dòng `stockAnswer` đã cấp có thêm `issuedAt`, `issuedByName`, `issuedLots` (ví dụ `["LOT-01 x 2 (HSD 30/06/2027)", "LOT-02 x 1 (HSD 31/12/2027)"]`).
+- **`GET /api/v1/inventory/protocols/{protocolId}/dispensing`** (`Warehouse Manager`, `Veterinarian`, `Club Manager`): lịch sử cấp phát của phác đồ, mỗi dòng `txCode, holdId, itemId, itemName, unit, quantity, lotNo, expiryDate, issuedAt, issuedByName, note`, theo thời gian. Phác đồ không tồn tại → `404`; role khác → `403`.
 - Cấp khi chưa xác nhận → `400`.
 - **Phác đồ `IN_TREATMENT` có thuốc bổ sung (12.10):** gọi cùng API này để cấp **phần bổ sung**. Dòng `SHORT` được bù từ tồn kho hiện tại; vẫn thiếu → `400` "Kho chưa đủ ...". Hóa đơn thuốc bổ sung (`...-BS<n>`) phải được chủ ngựa thanh toán trước → nếu chưa: `400` "Chủ ngựa chưa thanh toán hóa đơn thuốc bổ sung ..." (ca cấp cứu `CRITICAL` được cấp trước - BR_17). Cấp xong: phác đồ vẫn `IN_TREATMENT`, `pendingSupplement = false`. Không còn thuốc bổ sung chờ cấp → `400`.
 
@@ -1666,9 +1678,9 @@ Báo cáo tài chính từ dữ liệu thật; tiền đã thu **chỉ tính gia
 
 ---
 
-## 13–17. Các API dữ liệu giả (mock) — trừ mục 13, 14 đã dùng dữ liệu thật
+## 13–17. Các API dữ liệu giả (mock) — trừ mục 13, 14, 15 đã dùng dữ liệu thật
 
-Các API dưới đây (trừ mục 13, 14) **không đọc/ghi database**. Dữ liệu được code cứng hoặc nằm trong RAM. Chỉ cần kiểm tra là gọi được và trả đúng format. Tất cả yêu cầu đã login (role nào cũng được).
+Các API dưới đây (trừ mục 13, 14, 15) **không đọc/ghi database**. Dữ liệu được code cứng hoặc nằm trong RAM. Chỉ cần kiểm tra là gọi được và trả đúng format. Tất cả yêu cầu đã login (role nào cũng được).
 
 ### 13. Giải đấu, đề xuất thi đấu và khám tiền thi đấu — DỮ LIỆU THẬT (`External_Competitions`, `Competition_Entries`)
 
@@ -1719,17 +1731,18 @@ Danh sách tóm tắt cho mọi vai trò đã đăng nhập, đọc từ `Treatm
 - **Phạm vi:** Horse Owner chỉ thấy phác đồ / lô hàng của ngựa mình; Trainer chỉ ngựa được phân công; Groom chỉ ngựa trong khu phụ trách; Veterinarian, Club Manager, Warehouse Manager thấy tất cả.
 - Để có dữ liệu test: bác sĩ lập phác đồ (12.2), kho kiểm hàng (12E). Thiếu hàng → kho tạo đơn mua cho phác đồ (12B) → xuất hiện ở `/protocols/shipments`.
 
-### 15. Vaccinations
+### 15. Vaccinations — ĐÃ DÙNG DỮ LIỆU THẬT (bảng `Vaccinations`)
 
-- **`GET /api/v1/vaccinations?tab=upcoming`** → luôn trả 2 bản ghi cố định (`VC-036`, `VC-033`).
-- **`POST /api/v1/vaccinations/VC-036/execute`** → luôn `200`, kể cả mã không tồn tại.
-- **`POST /api/v1/vaccinations/schedule`** với body:
+- **`GET /api/v1/vaccinations?tab=&horseId=&kind=`** (Veterinarian, Club Manager, Trainer, Groom, Horse Owner): `tab` = `due` (quá hạn hoặc đến hạn trong 7 ngày), `upcoming` (sau 7 ngày), `done`, bỏ trống = tất cả; `kind` = `VACCINE` / `DEWORM`. **Lọc theo quyền xem ngựa:** bác sĩ / quản lý xem tất cả, HLV ngựa được phân công, Groom ngựa trong khu phụ trách, chủ ngựa ngựa của mình. Kho → `403`.
+  - Mỗi dòng: `id`, `recordCode` (`VC-0001`), `horseId`, `horseName`, `kind`, `typeName`, `category`, `dueDate`, `expectedDate` (dd/MM/yyyy), `countdown` ("còn 3 ngày" / "hôm nay" / "quá hạn 2 ngày"), `cycleMonths`, `statusCode` (`OVERDUE`, `DUE_SOON`, `SCHEDULED`, `POSTPONED`, `DONE`, `SKIPPED`), `status` (nhãn tiếng Việt), `doneAt`, `doneByName`, `lotNo`, `itemId`, `itemName`, `note`.
+- **`POST /api/v1/vaccinations/schedule`** (`Veterinarian`):
 
   ```json
-  { "horseIds": [1, 2, 3], "medicineName": "Vaccine cúm ngựa", "scheduledDate": "2026-11-01", "notes": "Mũi nhắc lại" }
+  { "horseIds": [21], "kind": "VACCINE", "medicineName": "Vaccine cúm ngựa", "scheduledDate": "2026-11-01", "cycleMonths": 12, "itemId": null, "notes": "Mũi nhắc lại" }
   ```
 
-  → `200` "Đã tạo lịch Vaccine cúm ngựa thành công cho 3 ngựa.". Gửi `"horseIds": []` → `400` "Vui lòng chọn ít nhất một ngựa!".
+  → `201`, `data` là các mũi vừa tạo. `scheduledDate` nhận `yyyy-MM-dd` hoặc `dd/MM/yyyy`. Lỗi: `horseIds` rỗng, ngày ở quá khứ, chu kỳ vaccine ngoài 1–24 / tẩy giun ngoài 3–6, ngựa chưa duyệt, ngựa đã có lịch cùng tên chưa thực hiện, `itemId` không phải thuốc / vaccine → `400`; ngựa không tồn tại → `404`; role khác bác sĩ → `403`.
+- **`POST /api/v1/vaccinations/{recordCode}/execute`** (`Veterinarian`, mã `VC-0001` hoặc ID), body tùy chọn `{ "doneAt": "2026-10-25", "lotNo": "LOT-01", "note": "..." }` (`doneAt` bỏ trống = hôm nay): mũi chuyển `DONE`, ghi người tiêm. **Có `cycleMonths` thì tự tạo mũi nhắc lại** ngày = ngày tiêm + `cycleMonths` tháng. `data` = [mũi vừa tiêm, mũi nhắc lại]. Lỗi: đã ghi nhận → `400`; `doneAt` sau hôm nay → `400`; mã không tồn tại → `404`.
 
 ---
 

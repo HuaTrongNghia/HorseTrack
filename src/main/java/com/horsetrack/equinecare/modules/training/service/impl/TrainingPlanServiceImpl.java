@@ -116,6 +116,8 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                     .endDate(plan.getEndDate())
                     .status(plan.getStatus())
                     .progress(progress)
+                    .type(plan.getPlanType())
+                    .phases(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.toDtos(plan))
                     .build();
         });
     }
@@ -180,6 +182,8 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                             .pausedReason(s.getPausedReason())
                             .readings(sessionReadingView.phase(readings.get(s.getSessionId()), com.horsetrack.equinecare.modules.training.entity.SessionReading.PHASE_SESSION))
                             .recovery(sessionReadingView.phase(readings.get(s.getSessionId()), com.horsetrack.equinecare.modules.training.entity.SessionReading.PHASE_RECOVERY))
+                            .phaseNo(s.getSessionDate() == null ? null : com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases
+                                    .phaseOn(plan, s.getSessionDate().toLocalDate()).map(ph -> ph.getPhaseNo()).orElse(null))
                             .build();
                 })
                 .collect(Collectors.toList());
@@ -192,7 +196,9 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .startDate(plan.getStartDate())
                 .endDate(plan.getEndDate())
                 .goal(plan.getGoal())
+                .type(plan.getPlanType())
                 .status(plan.getStatus())
+                .phases(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.toDtos(plan))
                 .sessions(sessionDTOs)
                 .build();
     }
@@ -243,7 +249,10 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .sessionDate(request.getSessionDate())
                 .activityType(request.getActivityType())
                 .notes(request.getNotes())
-                .maxHeartRate(request.getMaxHeartRate() != null ? request.getMaxHeartRate() : sessionReadingView.maxHeartRate(new TrainingSession()))
+                .maxHeartRate(request.getMaxHeartRate() != null ? request.getMaxHeartRate()
+                        : com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.phaseOn(plan, day)
+                                .map(ph -> ph.getHrLimitBpm()).filter(java.util.Objects::nonNull)
+                                .orElse(sessionReadingView.maxHeartRate(new TrainingSession())))
                 .maxSpeedKmh(request.getMaxSpeedKmh() != null ? request.getMaxSpeedKmh() : sessionReadingView.maxSpeedKmh(new TrainingSession()))
                 .status("PENDING")
                 .trainingPlan(plan)
@@ -299,12 +308,14 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
                 .goal(request.getGoal())
+                .planType(request.getType() != null && !request.getType().isBlank() ? request.getType().trim() : null)
                 // Giáo án mới ở trạng thái chờ; chỉ chạy khi Groom xác nhận buổi tập và tới ngày bắt đầu
                 .status(com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.PLAN_PENDING)
                 .createdAt(LocalDateTime.now())
                 .horse(horse)
                 .headTrainer(trainer)
                 .build();
+        plan.getPhases().addAll(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.build(plan, request.getPhases()));
 
         return trainingPlanRepository.save(plan).getPlanId();
     }

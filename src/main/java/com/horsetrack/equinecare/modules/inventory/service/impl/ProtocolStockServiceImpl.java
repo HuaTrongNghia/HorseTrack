@@ -10,6 +10,7 @@ import com.horsetrack.equinecare.modules.inventory.repository.PurchaseOrderRepos
 import com.horsetrack.equinecare.modules.inventory.repository.StockHoldRepository;
 import com.horsetrack.equinecare.modules.inventory.service.ProtocolStockService;
 import com.horsetrack.equinecare.modules.inventory.service.StockLedgerService;
+import com.horsetrack.equinecare.modules.inventory.service.DispensingHistory;
 import com.horsetrack.equinecare.modules.medical.dto.TreatmentProtocolDTO;
 import com.horsetrack.equinecare.modules.medical.entity.ProtocolItem;
 import com.horsetrack.equinecare.modules.medical.entity.TreatmentProtocol;
@@ -46,6 +47,7 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
     private final StockLedgerService stockLedger;
     private final TreatmentProtocolMapper mapper;
     private final com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling phaseBilling;
+    private final DispensingHistory dispensingHistory;
 
     @Override
     @Transactional(readOnly = true)
@@ -189,13 +191,21 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
 
         String note = "Cấp thuốc cho phác đồ " + protocol.getProtocolCode();
         for (StockHold h : holds) {
-            stockLedger.issueHeld(h.getItem().getItemId(), h.getQtyHeld(), "PROTOCOL", protocolId, note);
+            var issued = stockLedger.issueHeldFefo(h.getItem().getItemId(), h.getQtyHeld(), "PROTOCOL", protocolId, note + " " + DispensingHistory.holdTag(h.getHoldId()));
+            issued.stream().map(t -> t.getLot()).filter(java.util.Objects::nonNull).findFirst().ifPresent(h::setLot);
             h.setStatus("ISSUED");
             holdRepository.save(h);
         }
         protocol.setState("IN_TREATMENT");
         protocolRepository.save(protocol);
         return mapper.toDTO(protocol, true);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<DispensingHistory.Record> dispensingHistory(Integer protocolId) {
+        findProtocol(protocolId);
+        return dispensingHistory.records(protocolId);
     }
 
     @Override
@@ -266,7 +276,8 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
         }
         String note = "Cấp thuốc bổ sung cho phác đồ " + protocol.getProtocolCode();
         for (StockHold h : pending) {
-            stockLedger.issueHeld(h.getItem().getItemId(), h.getQtyHeld(), "PROTOCOL", protocolId, note);
+            var issued = stockLedger.issueHeldFefo(h.getItem().getItemId(), h.getQtyHeld(), "PROTOCOL", protocolId, note + " " + DispensingHistory.holdTag(h.getHoldId()));
+            issued.stream().map(t -> t.getLot()).filter(java.util.Objects::nonNull).findFirst().ifPresent(h::setLot);
             h.setStatus("ISSUED");
             h.setCheckedBy(stockLedger.currentUser());
             h.setCheckedAt(LocalDateTime.now());

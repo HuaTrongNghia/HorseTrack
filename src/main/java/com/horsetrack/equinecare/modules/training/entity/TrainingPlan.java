@@ -41,6 +41,10 @@ public class TrainingPlan {
     @Column(name = "goal", columnDefinition = "NVARCHAR(500)")
     private String goal;
 
+    // Loại giáo án (ví dụ Duy trì, Tăng sức bền, Chuẩn bị thi đấu, Phục hồi)
+    @Column(name = "plan_type", length = 50)
+    private String planType;
+
     @Column(name = "status", nullable = false, length = 20)
     private String status; // PENDING (chờ Groom xác nhận / chờ tới ngày bắt đầu), ACTIVE, PAUSED (ngựa bị VetLock), COMPLETED, CANCELLED
 
@@ -62,6 +66,12 @@ public class TrainingPlan {
     @Builder.Default
     @OneToMany(mappedBy = "trainingPlan", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<TrainingSession> sessions = new ArrayList<>();
+
+    // Giai đoạn của giáo án (Training_Plan_Phases)
+    @Builder.Default
+    @OneToMany(mappedBy = "plan", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("phaseNo ASC")
+    private List<TrainingPlanPhase> phases = new ArrayList<>();
 
     public void addSession(TrainingSession session) {
         if (sessions == null) {

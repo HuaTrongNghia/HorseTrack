@@ -30,4 +30,5 @@ public class TrainingSessionDTO {
     private String pausedReason;
     private java.util.List<SessionReadingDTO> readings;
     private java.util.List<SessionReadingDTO> recovery;
+    private Integer phaseNo;   // giai đoạn giáo án chứa ngày tập (null nếu giáo án không chia giai đoạn)
 }

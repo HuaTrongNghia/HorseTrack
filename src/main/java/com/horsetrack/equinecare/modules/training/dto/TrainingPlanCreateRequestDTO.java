@@ -33,4 +33,13 @@ public class TrainingPlanCreateRequestDTO {
 
     @Size(max = 500, message = "Mục tiêu (goal) không được vượt quá 500 ký tự")
     private String goal;
+
+    // Loại giáo án, ví dụ "Duy trì", "Chuẩn bị thi đấu" (không cần ghi vào đầu goal nữa)
+    @Size(max = 50, message = "Loại giáo án (type) không được vượt quá 50 ký tự")
+    private String type;
+
+    // Các giai đoạn theo thứ tự; tổng số tuần không vượt thời gian giáo án
+    @jakarta.validation.Valid
+    @Size(max = 12, message = "Giáo án tối đa 12 giai đoạn")
+    private java.util.List<TrainingPlanPhaseDTO> phases;
 }

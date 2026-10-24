@@ -189,6 +189,45 @@ public class StockLedgerService {
     }
 
     /**
+     * Cấp hàng đã giữ, trừ lô theo hạn dùng gần nhất trước (FEFO; lô không có hạn dùng sau cùng).
+     * Mỗi lô ghi một dòng ISSUE kèm số lô; phần vượt số lượng các lô đang ghi nhận thì ghi một dòng không có lô.
+     */
+    public java.util.List<StockTransaction> issueHeldFefo(Integer itemId, double quantity, String refType, Integer refId, String note) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Số lượng cấp phải lớn hơn 0.");
+        }
+        InventoryItem item = lockItem(itemId);
+        double held = value(item.getHeldStock());
+        double onHand = value(item.getCurrentStock());
+        if (quantity > held + 0.001 || quantity > onHand + 0.001) {
+            throw new IllegalArgumentException(String.format("Số lượng đã giữ của %s không khớp (đang giữ %s, đang có %s, cần cấp %s).",
+                    item.getItemName(), fmt(held), fmt(onHand), fmt(quantity)));
+        }
+        item.setHeldStock(round2(held - quantity));
+        java.util.List<InventoryLot> lots = lotRepository.findByItem_ItemIdOrderByExpiryDateAscLotIdAsc(itemId).stream()
+                .filter(l -> value(l.getQuantity()) > 0)
+                .sorted(java.util.Comparator.comparing(InventoryLot::getExpiryDate, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                        .thenComparing(InventoryLot::getLotId))
+                .toList();
+        java.util.List<StockTransaction> result = new java.util.ArrayList<>();
+        double remaining = round2(quantity);
+        for (InventoryLot lot : lots) {
+            if (remaining <= 0) {
+                break;
+            }
+            double take = round2(Math.min(remaining, value(lot.getQuantity())));
+            lot.setQuantity(round2(lot.getQuantity() - take));
+            lotRepository.save(lot);
+            result.add(applyChange(item, lot, "ISSUE", take, -take, refType, refId, note));
+            remaining = round2(remaining - take);
+        }
+        if (remaining > 0) {
+            result.add(applyChange(item, null, "ISSUE", remaining, -remaining, refType, refId, note));
+        }
+        return result;
+    }
+
+    /**
      * Đặt tồn kho về đúng số lượng thực tế (dùng khi chốt kiểm kê).
      * Khóa dòng rồi mới tính chênh lệch so với tồn kho hiện tại; trả về null nếu không chênh lệch.
      */

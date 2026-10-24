@@ -12,6 +12,9 @@ import java.time.LocalDateTime;
 @Repository
 public interface StockTransactionRepository extends JpaRepository<StockTransaction, Long> {
 
+    // Lịch sử cấp phát của một phác đồ / yêu cầu... (ref_type + ref_id), theo thời gian
+    java.util.List<StockTransaction> findByRefTypeAndRefIdAndTxTypeOrderByPerformedAtAscTransactionIdAsc(String refType, Integer refId, String txType);
+
     // Nhật ký kho, mới nhất trước; tham số null thì bỏ qua
     @Query("SELECT t FROM StockTransaction t " +
             "WHERE (:itemId IS NULL OR t.item.itemId = :itemId) " +
