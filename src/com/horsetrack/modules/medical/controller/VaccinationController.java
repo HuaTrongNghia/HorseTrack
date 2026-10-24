@@ -1,57 +1,54 @@
-package com.horsetrack.controller;
+package com.horsetrack.equinecare.modules.medical.controller;
 
-import com.horsetrack.dto.CreateScheduleRequestDTO;
-import com.horsetrack.dto.VaccinationRecordDTO;
-import com.horsetrack.response.ApiResponse;
+import com.horsetrack.equinecare.common.base.ApiResponse;
+import com.horsetrack.equinecare.modules.medical.dto.CreateScheduleRequestDTO;
+import com.horsetrack.equinecare.modules.medical.dto.VaccinationExecuteDTO;
+import com.horsetrack.equinecare.modules.medical.dto.VaccinationRecordDTO;
+import com.horsetrack.equinecare.modules.medical.service.VaccinationService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.Arrays;
 import java.util.List;
 
+/** Lịch tiêm phòng / tẩy giun (bảng Vaccinations) */
 @RestController
-@RequestMapping("/api/vaccinations")
-@CrossOrigin("*")
+@RequestMapping({"/api/v1/vaccinations", "/api/vaccinations"})
+@RequiredArgsConstructor
 public class VaccinationController {
 
-    // Lấy danh sách lịch tiêm theo Tab (Đến hạn trong 7 ngày / Sắp tới / Đã thực hiện)
+    private final VaccinationService vaccinationService;
+
+    // tab: due (quá hạn / đến hạn trong 7 ngày), upcoming, done, bỏ trống = tất cả; lọc theo quyền xem ngựa
     @GetMapping
-    public ResponseEntity<ApiResponse<List<VaccinationRecordDTO>>> getVaccinationRecords(@RequestParam String tab) {
-
-        VaccinationRecordDTO v1 = new VaccinationRecordDTO();
-        v1.setRecordCode("VC-036"); v1.setHorseName("Bolt");
-        v1.setTypeName("Uốn ván"); v1.setCategory("Vaccine");
-        v1.setExpectedDate("04/10/2026"); v1.setCountdown("còn 1 ngày");
-        v1.setCycleMonths(12); v1.setStatus("Sắp đến hạn");
-
-        VaccinationRecordDTO v2 = new VaccinationRecordDTO();
-        v2.setRecordCode("VC-033"); v2.setHorseName("Arrow");
-        v2.setTypeName("Tẩy giun định kỳ"); v2.setCategory("Tẩy giun");
-        v2.setExpectedDate("09/10/2026"); v2.setCountdown("còn 6 ngày");
-        v2.setCycleMonths(3); v2.setStatus("Sắp đến hạn");
-
-        return ResponseEntity.ok(new ApiResponse<>(200, "Thành công", Arrays.asList(v1, v2)));
+    @PreAuthorize("hasAnyAuthority('Veterinarian', 'Club Manager', 'Trainer', 'Groom', 'Horse Owner')")
+    public ResponseEntity<ApiResponse<List<VaccinationRecordDTO>>> getVaccinationRecords(
+            @RequestParam(required = false) String tab,
+            @RequestParam(required = false) Integer horseId,
+            @RequestParam(required = false) String kind) {
+        return ResponseEntity.ok(ApiResponse.ok("Lấy lịch tiêm phòng thành công", vaccinationService.list(tab, horseId, kind)));
     }
 
-    // Ghi nhận đã tiêm một mũi cụ thể (Nút "Ghi nhận đã tiêm")
-    @PostMapping("/{recordCode}/execute")
-    public ResponseEntity<ApiResponse<String>> executeVaccination(@PathVariable String recordCode) {
-        // TODO: Cập nhật DB trạng thái thành "Đã thực hiện" và tự động sinh ra mũi nhắc lại
-        return ResponseEntity.ok(new ApiResponse<>(200, "Đã ghi nhận tiêm thành công và tạo lịch nhắc lại!", null));
-    }
-
-    // Tạo lịch tiêm mới hàng loạt cho nhiều ngựa (Từ Modal)
+    // Bác sĩ tạo lịch tiêm / tẩy giun cho nhiều ngựa
     @PostMapping("/schedule")
-    public ResponseEntity<ApiResponse<String>> createMassSchedule(@RequestBody CreateScheduleRequestDTO dto) {
-        try {
-            if (dto.getHorseIds() == null || dto.getHorseIds().isEmpty()) {
-                return ResponseEntity.badRequest().body(new ApiResponse<>(400, "Vui lòng chọn ít nhất một ngựa!", null));
-            }
+    @PreAuthorize("hasAuthority('Veterinarian')")
+    public ResponseEntity<ApiResponse<List<VaccinationRecordDTO>>> createMassSchedule(@Valid @RequestBody CreateScheduleRequestDTO dto) {
+        List<VaccinationRecordDTO> created = vaccinationService.schedule(dto);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.ok("Đã tạo lịch " + dto.getMedicineName().trim() + " cho " + created.size() + " ngựa.", created));
+    }
 
-            // TODO: Vòng lặp for để tạo bản ghi cho từng horseId vào Database
-            return ResponseEntity.ok(new ApiResponse<>(200, "Đã tạo lịch " + dto.getMedicineName() + " thành công cho " + dto.getHorseIds().size() + " ngựa.", null));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(new ApiResponse<>(400, e.getMessage(), null));
-        }
+    // Ghi nhận đã tiêm (mã VC-0001 hoặc ID); có chu kỳ thì tự tạo mũi nhắc lại
+    @PostMapping("/{recordCode}/execute")
+    @PreAuthorize("hasAuthority('Veterinarian')")
+    public ResponseEntity<ApiResponse<List<VaccinationRecordDTO>>> executeVaccination(@PathVariable String recordCode,
+                                                                                      @Valid @RequestBody(required = false) VaccinationExecuteDTO dto) {
+        List<VaccinationRecordDTO> result = vaccinationService.execute(recordCode, dto);
+        return ResponseEntity.ok(ApiResponse.ok(result.size() > 1
+                ? "Đã ghi nhận tiêm và tạo lịch nhắc lại ngày " + result.get(1).getExpectedDate() + "."
+                : "Đã ghi nhận tiêm.", result));
     }
 }
