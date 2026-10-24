@@ -20,6 +20,11 @@ public class TrainingSession {
     @Column(name = "session_id")
     private Integer sessionId;
 
+    // QA H3: khóa lạc quan - hai thao tác đồng thời trên cùng dòng thì thao tác sau bị từ chối (409) thay vì ghi đè
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     @Column(name = "session_date", nullable = false)
     private LocalDateTime sessionDate;
 

@@ -221,7 +221,8 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
 
         // Người được gán phải là Groom đang hoạt động, phụ trách đúng khu chuồng của ngựa
         String barnZone = horseBarnZone(plan);
-        User assignee = userRepository.findById(request.getAssignedToId())
+        // QA H3: khóa dòng Groom để 2 buổi tập phân công song song cho cùng Groom không cùng qua kiểm tra trùng giờ
+        User assignee = userRepository.findByIdForUpdate(request.getAssignedToId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên với ID: " + request.getAssignedToId()));
         if (!"Groom".equals(assignee.getRoleName())) {
             throw new IllegalArgumentException("Chỉ được phân công buổi tập cho Groom (người được chọn có vai trò " + assignee.getRoleName() + ").");
@@ -270,7 +271,8 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         User trainer = userRepository.findByUsername(username)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + username));
 
-        Horse horse = horseRepository.findById(request.getHorseId())
+        // QA H3: khóa dòng ngựa để 2 yêu cầu lập giáo án song song không cùng qua kiểm tra (chỉ mục UX_plan_open_per_horse chặn thêm ở DB)
+        Horse horse = horseRepository.findByIdForUpdate(request.getHorseId())
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngựa với ID: " + request.getHorseId()));
         // Trainer chỉ lập giáo án cho ngựa được Club Manager phân công cho mình
         horseAccessGuard.checkAssigned(horse);

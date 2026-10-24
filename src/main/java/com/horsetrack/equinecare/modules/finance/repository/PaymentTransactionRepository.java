@@ -10,6 +10,9 @@ import java.util.Optional;
 
 public interface PaymentTransactionRepository extends JpaRepository<PaymentTransaction, Integer> {
 
+    // Giao dịch VNPay đang chờ của một hóa đơn, mới nhất trước (để dùng lại khi chủ ngựa bấm thanh toán lần nữa)
+    List<PaymentTransaction> findByInvoice_InvoiceIdAndPaymentStatusOrderByPaidAtDesc(Integer invoiceId, String paymentStatus);
+
     Optional<PaymentTransaction> findByTransactionRef(String transactionRef);
 
     List<PaymentTransaction> findByInvoice_Owner_UserIdAndPaymentStatusInOrderByPaidAtDesc(Integer ownerId, Collection<String> statuses);

@@ -8,6 +8,11 @@ import java.util.List;
 
 @Repository
 public interface HorseRepository extends JpaRepository<Horse, Integer> {
+
+    // QA H3: khóa dòng tới hết transaction để các yêu cầu đồng thời trên cùng ngựa chạy lần lượt
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT e FROM Horse e WHERE e.horseId = :id")
+    java.util.Optional<Horse> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Integer id);
     List<Horse> findByOwnerUserId(Integer ownerId);
     long countByOwnerUserId(Integer ownerId);
     List<Horse> findByIsLockedTrue();

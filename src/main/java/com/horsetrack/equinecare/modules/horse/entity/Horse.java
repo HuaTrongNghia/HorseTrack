@@ -21,6 +21,11 @@ public class Horse {
     @Column(name = "horse_id")
     private Integer horseId;
 
+    // QA H3: khóa lạc quan - hai thao tác đồng thời trên cùng dòng thì thao tác sau bị từ chối (409) thay vì ghi đè
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     @Column(name = "horse_name", nullable = false, length = 100)
     private String horseName;
 

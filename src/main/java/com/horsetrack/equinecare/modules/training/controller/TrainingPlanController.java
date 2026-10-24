@@ -27,6 +27,7 @@ import java.util.List;
 public class TrainingPlanController {
 
     private final TrainingPlanService trainingPlanService;
+    private final com.horsetrack.equinecare.modules.training.service.TrainingPlanLifecycle planLifecycle;
 
     // Trainer chỉ nhận số liệu và giáo án của các ngựa được phân công
     @GetMapping("/dashboard-stats")
@@ -89,6 +90,23 @@ public class TrainingPlanController {
         trainingPlanService.addTrainingSessionToPlan(planId, request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Đã thêm buổi tập vào lịch thành công!", null));
+    }
+
+    // Hủy giáo án đang chờ / đang chạy / tạm dừng: các buổi chưa thực hiện bị hủy, ngựa lập được giáo án mới
+    @PutMapping("/{planId}/cancel")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Club Manager')")
+    public ResponseEntity<ApiResponse<String>> cancelPlan(@PathVariable Integer planId,
+                                                          @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.PlanCancelRequestDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã hủy giáo án", planLifecycle.cancel(planId, request.getReason())));
+    }
+
+    // Cho giáo án tạm dừng chạy lại (ngựa không bị khóa, không còn buổi tập chờ bác sĩ)
+    @PutMapping("/{planId}/resume")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Club Manager')")
+    public ResponseEntity<ApiResponse<String>> resumePlan(@PathVariable Integer planId) {
+        String status = planLifecycle.resume(planId);
+        return ResponseEntity.ok(ApiResponse.ok("ACTIVE".equals(status)
+                ? "Giáo án đang chạy lại." : "Giáo án chuyển về chờ: chạy khi Groom xác nhận buổi tập và tới ngày bắt đầu.", status));
     }
 }
 

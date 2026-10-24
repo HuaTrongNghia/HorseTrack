@@ -34,6 +34,11 @@ public class Invoice {
     @Column(name = "invoice_id")
     private Integer invoiceId;
 
+    // QA H3: khóa lạc quan - hai thao tác đồng thời trên cùng dòng thì thao tác sau bị từ chối (409) thay vì ghi đè
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     @Column(name = "invoice_code", nullable = false, length = 30, unique = true)
     private String invoiceCode;
 

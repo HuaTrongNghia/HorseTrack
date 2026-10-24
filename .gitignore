@@ -44,3 +44,9 @@ build/
 
 # Log files
 *.log
+
+### Bi mat cau hinh may ca nhan (QA H4) ###
+config/secrets.properties
+
+# Subfolder mirror
+HorseTrack/

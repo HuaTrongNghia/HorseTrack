@@ -53,8 +53,6 @@ public class MedicalService {
     public void applyVetLock(VetLockRequestDTO dto) throws Exception {
         Horse horse = horseRepository.findById(dto.getHorseId())
                 .orElseThrow(() -> new Exception("Không tìm thấy ngựa với ID: " + dto.getHorseId()));
-        // Trainer chỉ khóa khẩn cấp ngựa được phân công cho mình
-        horseAccessGuard.checkAssigned(horse);
 
         if (Boolean.TRUE.equals(horse.getIsLocked())) {
             throw new Exception("Ngựa này hiện đang bị khóa y tế rồi!");
@@ -62,10 +60,8 @@ public class MedicalService {
 
         horse.setIsLocked(true);
 
-        // Chỉ Bác sĩ thú y mới kết luận chấn thương (INJURED).
-        // Trainer/Groom bấm khẩn cấp thì chỉ khóa tập và chuyển sang WATCH để chờ bác sĩ khám.
-        boolean isVet = isCurrentUserVeterinarian();
-        horse.setHealthStatus(isVet ? "INJURED" : "WATCH");
+        // Chỉ Bác sĩ thú y khóa huấn luyện (MedicalController), kết luận ngựa chấn thương
+        horse.setHealthStatus("INJURED");
 
         horseRepository.save(horse);
 
@@ -75,7 +71,7 @@ public class MedicalService {
                         + ") | hủy " + cancelled + " buổi tập | Lý do: " + dto.getReason());
 
         log.warn("EMERGENCY VETLOCK: Ngựa ID {} đã bị khóa bởi {} ({})! Lý do: {}", horse.getHorseId(),
-                SecurityContextHolder.getContext().getAuthentication().getName(), isVet ? "INJURED" : "WATCH", dto.getReason());
+                SecurityContextHolder.getContext().getAuthentication().getName(), horse.getHealthStatus(), dto.getReason());
     }
 
     // 2. Hàm mở khóa y tế (Hồi phục)

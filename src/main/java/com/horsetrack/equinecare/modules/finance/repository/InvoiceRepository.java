@@ -13,6 +13,11 @@ import java.util.List;
 
 public interface InvoiceRepository extends JpaRepository<Invoice, Integer> {
 
+    // QA H3: khóa dòng tới hết transaction để các yêu cầu đồng thời trên cùng hóa đơn chạy lần lượt
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT e FROM Invoice e WHERE e.invoiceId = :id")
+    java.util.Optional<Invoice> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Integer id);
+
     boolean existsByInvoiceCode(String invoiceCode);
 
     // Mỗi ngựa chỉ có một hóa đơn tháng (mã HD-..., chưa hủy) cho mỗi kỳ; hóa đơn giai đoạn phác đồ có mã GD-...

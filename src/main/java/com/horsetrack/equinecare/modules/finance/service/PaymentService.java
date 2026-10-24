@@ -58,6 +58,8 @@ public class PaymentService {
         }
         Invoice invoice = invoiceService.findInvoice(invoiceId);
         invoiceService.checkOwner(invoice);
+        // QA M4: khóa dòng hóa đơn để 2 lần bấm song song không cùng tạo giao dịch
+        invoiceRepository.findByIdForUpdate(invoiceId);
         if (!invoice.isOpen()) {
             throw new IllegalArgumentException("Hóa đơn " + invoice.getInvoiceCode() + " không ở trạng thái chờ thanh toán (hiện tại: " + invoice.getPaymentStatus() + ").");
         }
@@ -67,6 +69,27 @@ public class PaymentService {
         }
 
         LocalDateTime nowVn = LocalDateTime.now(VnPayGateway.VN_ZONE);
+        // QA M4: còn giao dịch đang chờ, chưa hết hạn, cùng số tiền thì trả lại đúng URL đó (cùng vnp_TxnRef, vnp_CreateDate)
+        // thay vì tạo giao dịch mới - tránh chủ ngựa trả 2 lần cho 1 hóa đơn
+        for (PaymentTransaction pending : transactionRepository.findByInvoice_InvoiceIdAndPaymentStatusOrderByPaidAtDesc(
+                invoice.getInvoiceId(), PaymentTransaction.PENDING_VERIFICATION)) {
+            LocalDateTime createdVn = createdAtVn(pending.getTransactionRef());
+            if (createdVn == null || pending.getAmountPaid() == null || pending.getAmountPaid().compareTo(amount) != 0) {
+                continue;
+            }
+            LocalDateTime expireVn = createdVn.plusMinutes(vnPay.getExpireMinutes());
+            // Chừa 1 phút để chủ ngựa kịp thanh toán trước khi URL hết hạn
+            if (expireVn.minusMinutes(1).isAfter(nowVn)) {
+                return VnPayPaymentDTO.builder()
+                        .transactionId(pending.getTransactionId())
+                        .txnRef(pending.getTransactionRef())
+                        .amount(amount)
+                        .paymentUrl(vnPay.buildPaymentUrl(pending.getTransactionRef(), amount, orderInfo(invoice), clientIp, createdVn))
+                        .expireAt(LocalDateTime.now().plus(java.time.Duration.between(nowVn, expireVn)))
+                        .reused(true)
+                        .build();
+            }
+        }
         // vnp_TxnRef duy nhất: <invoice_id>-<thời điểm tạo theo giờ VN>; phần thời điểm dùng lại cho truy vấn querydr
         String txnRef = invoice.getInvoiceId() + "-" + nowVn.format(VnPayGateway.VNP_TIME);
         PaymentTransaction tx = transactionRepository.save(PaymentTransaction.builder()
@@ -87,6 +110,19 @@ public class PaymentService {
                 .paymentUrl(url)
                 .expireAt(LocalDateTime.now().plusMinutes(vnPay.getExpireMinutes()))
                 .build();
+    }
+
+    // vnp_TxnRef = <invoice_id>-<yyyyMMddHHmmss giờ VN lúc tạo>; null nếu không đúng định dạng
+    private static LocalDateTime createdAtVn(String txnRef) {
+        int dash = txnRef == null ? -1 : txnRef.lastIndexOf('-');
+        if (dash < 0) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(txnRef.substring(dash + 1), VnPayGateway.VNP_TIME);
+        } catch (java.time.format.DateTimeParseException ex) {
+            return null;
+        }
     }
 
     /** IPN: VNPay gọi server-to-server. Trả về RspCode theo quy ước của VNPay. */

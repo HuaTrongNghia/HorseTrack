@@ -10,6 +10,11 @@ import java.util.Optional;
 @Repository
 public interface UserRepository extends JpaRepository<User, Integer> {
 
+    // QA H3: khóa dòng tới hết transaction để các yêu cầu đồng thời trên cùng nhân viên chạy lần lượt
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @org.springframework.data.jpa.repository.Query("SELECT e FROM User e WHERE e.userId = :id")
+    java.util.Optional<User> findByIdForUpdate(@org.springframework.data.repository.query.Param("id") Integer id);
+
     // Kiểm tra trùng Email
     boolean existsByEmail(String email);
 

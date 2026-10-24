@@ -90,6 +90,24 @@ public class GlobalExceptionHandler {
     }
 
     // Bắt lỗi nghiệp vụ RuntimeException (ResourceNotFoundException -> 404, BusinessException -> 400)
+    // QA H3: dòng dữ liệu vừa bị người khác cập nhật (khóa lạc quan @Version)
+    @ExceptionHandler({org.springframework.orm.ObjectOptimisticLockingFailureException.class, jakarta.persistence.OptimisticLockException.class})
+    public ResponseEntity<ApiResponse<Void>> handleConcurrentUpdate(Exception ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(ApiResponse.error("Dữ liệu vừa được người khác cập nhật. Vui lòng tải lại và thử lại."));
+    }
+
+    // QA H3: vi phạm chỉ mục duy nhất khi 2 yêu cầu song song cùng ghi
+    @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
+    public ResponseEntity<ApiResponse<Void>> handleDataIntegrity(org.springframework.dao.DataIntegrityViolationException ex) {
+        String msg = String.valueOf(ex.getMostSpecificCause().getMessage());
+        if (msg.contains("UX_plan_open_per_horse")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error("Ngựa này đang có một giáo án PENDING, ACTIVE hoặc PAUSED. Hãy hoàn thành hoặc hủy giáo án cũ trước."));
+        }
+        return handleRuntimeException(ex);
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ResponseEntity<ApiResponse<Void>> handleRuntimeException(RuntimeException ex) {
         String msg = ex.getMessage();

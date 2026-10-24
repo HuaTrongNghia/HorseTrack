@@ -2,9 +2,13 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **152 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **154 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 > **Bắt buộc trước khi chạy bản backend này:** chạy `DATABASE_fe_requests_schema.sql` trên DB (thêm cột ngưỡng / tạm dừng cho buổi tập, `Session_Readings.session_id`, chấn thương gắn với ngựa, `Users.avatar_url`, `Competition_Entries.proposal_note`). Chưa chạy script thì các API buổi tập, chấn thương, hồ sơ cá nhân, đề xuất thi đấu trả `500` "Invalid column name".
+>
+> **Và `DATABASE_qa_concurrency.sql`** (cột `version` cho `Training_Sessions`, `Training_Plans`, `Horses`, `Invoices` + chỉ mục `UX_plan_open_per_horse`). Chưa chạy thì mọi API đọc ngựa, giáo án, buổi tập, hóa đơn trả `500` "Invalid column name 'version'".
+>
+> **Mật khẩu DB và JWT secret không còn trong `application.properties`.** Máy cá nhân: sao chép `config/secrets.example.properties` thành `config/secrets.properties` (đã gitignore) và điền `DB_PASSWORD`, `JWT_SECRET`; hoặc đặt biến môi trường cùng tên. Thiếu thì server không khởi động ("Could not resolve placeholder 'DB_PASSWORD'"). Server: đặt GitHub Secrets `DB_PASSWORD`, `JWT_SECRET` (tùy chọn `DB_URL`, `DB_USERNAME`); thiếu thì bước deploy dừng trước khi gỡ container đang chạy.
 
 ---
 
@@ -47,6 +51,7 @@ Mọi response đều có dạng:
 | 401 | Chưa Authorize, token sai/hết hạn/đã logout, hoặc sai mật khẩu khi login |
 | 403 | Đúng token nhưng **sai role**, hoặc vi phạm luật nghiệp vụ (không phải chủ ngựa...) |
 | 404 | Không tìm thấy (chỉ phần Nutrition dùng 404) |
+| 409 | Hai người cùng sửa một dòng ("Dữ liệu vừa được người khác cập nhật. Vui lòng tải lại và thử lại."), hoặc 2 yêu cầu song song cùng lập giáo án cho một ngựa |
 | 500 | `"Lỗi máy chủ: ..."`. **Chú ý:** nhiều lỗi nghiệp vụ như "Horse not found" hiện cũng trả 500 (xem L4) |
 
 ### 0.4 Thứ tự test khuyến nghị
@@ -645,9 +650,9 @@ Sau khi tạo, ngựa sẽ biến mất khỏi `GET /api/v1/horses/available-for
 |---|---|
 | `PENDING` (đang chờ) | Vừa tạo; hoặc sau khi bác sĩ mở khóa VetLock |
 | `ACTIVE` (đang chạy) | Có ít nhất 1 buổi tập Groom đã **xác nhận** (7.2) **và** đã tới `startDate`. Xác nhận khi đã tới ngày thì chuyển ngay; chưa tới ngày thì hệ thống tự chuyển (kiểm tra mỗi 5 phút, `app.training.activate-check-ms`) |
-| `PAUSED` | Ngựa bị VetLock khi giáo án đang chạy |
-| `COMPLETED` | Buổi tập cuối cùng chưa kết thúc được hoàn thành |
-| `CANCELLED` | Đã hủy |
+| `PAUSED` | Ngựa bị VetLock khi giáo án đang chạy, hoặc có buổi tập dừng & gửi bác sĩ (7.3, `requestVet: true`). **Hủy một buổi tập hoặc dừng không gửi bác sĩ không làm giáo án `PAUSED`.** |
+| `COMPLETED` | Không còn buổi chưa kết thúc và đã có ít nhất 1 buổi hoàn thành |
+| `CANCELLED` | HLV phụ trách / Club Manager hủy (6.6), hoặc bác sĩ xử lý ca mà chưa có buổi nào hoàn thành |
 
 ### 6.1 `GET /api/v1/training-plans/dashboard-stats` (Club Manager, Trainer, Groom, Veterinarian)
 
@@ -707,6 +712,22 @@ Chỉ `Trainer`.
   - `assignedToId` không tồn tại → `404`.
   - Groom đã có buổi tập khác trong khoảng ±60 phút (F21-05, BR34) → `400` "Groom ... đã có buổi tập lúc ..., trùng khung giờ 60 phút". Thời lượng chỉnh bằng `app.training.session-duration-minutes`.
 
+### 6.6 Hủy / chạy lại giáo án (`Trainer` phụ trách ngựa, `Club Manager`)
+
+**`PUT /api/v1/training-plans/{planId}/cancel`**
+
+```json
+{ "reason": "Đổi mục tiêu thi đấu" }
+```
+
+- Giáo án `PENDING` / `ACTIVE` / `PAUSED` → `CANCELLED`; các buổi `PENDING` / `CONFIRMED` chưa thực hiện bị hủy (ghi chú "Hủy do giáo án bị hủy: ..."). Ngựa lập được giáo án mới ngay. Nhật ký `CANCEL_TRAINING_PLAN`.
+- **Test lỗi:** lý do dưới 5 ký tự → `400`; giáo án đã `COMPLETED` / `CANCELLED` → `400`; còn buổi tập đang `IN_PROGRESS`, `PAUSED_PENDING_TRAINER` hoặc `WAITING_VET` → `400` (xử lý buổi tập / chờ bác sĩ trước); HLV không phụ trách ngựa → `403`; Groom / bác sĩ → `403`.
+
+**`PUT /api/v1/training-plans/{planId}/resume`** (không cần body)
+
+- Chỉ giáo án `PAUSED`. Chuyển `PENDING`, rồi `ACTIVE` ngay nếu đã tới `startDate` và có buổi đã xác nhận. Nhật ký `RESUME_TRAINING_PLAN`.
+- **Test lỗi:** giáo án không `PAUSED` → `400`; ngựa đang VetLock → `400` (chạy lại khi bác sĩ mở khóa); giáo án đã quá `endDate` → `400` (hủy rồi lập mới); còn buổi chờ bác sĩ / đang tập → `400`; HLV không phụ trách → `403`.
+
 ---
 
 ## 7. Training Session — `/api/v1/training-sessions` (`Trainer` hoặc `Groom`)
@@ -743,7 +764,8 @@ Không cần body. Buổi tập HLV vừa phân công (6.5) ở trạng thái `P
 { "reason": "Nhịp tim vượt ngưỡng 210 bpm, ngựa thở gấp", "requestVet": true, "severity": "HIGH", "heartRate": 210, "speedKmh": 52 }
 ```
 
-- `requestVet` (mặc định `true`): buổi tập chuyển **`WAITING_VET`** (đã dừng, chờ bác sĩ) và hệ thống tự tạo ca khám nguồn `SESSION_STOP` trong hộp thư bác sĩ (`GET /medical/cases`). `requestVet: false`: buổi tập chuyển `STOPPED` ngay.
+- `requestVet` (mặc định `true`): buổi tập chuyển **`WAITING_VET`** (đã dừng, chờ bác sĩ) và hệ thống tự tạo ca khám nguồn `SESSION_STOP` trong hộp thư bác sĩ (`GET /medical/cases`). `requestVet: false`: buổi tập chuyển `STOPPED` ngay, **giáo án giữ nguyên** (các buổi khác vẫn thực hiện được).
+- Chỉ khi `requestVet: true` giáo án mới chuyển `PAUSED` (`pausedReason` "Buổi tập #... chờ bác sĩ xử lý ca ...") cho tới khi bác sĩ ra quyết định.
 - Khi bác sĩ ra quyết định, **dù khóa hay không khóa huấn luyện**, buổi tập chờ bác sĩ chuyển **`STOPPED`** (đã kết thúc), các buổi chưa thực hiện của giáo án bị hủy và **giáo án kết thúc** (`COMPLETED` nếu đã có buổi hoàn thành, ngược lại `CANCELLED`). HLV nhận email.
   - **Không khóa:** bác sĩ đóng ca `PUT /medical/cases/{caseId}/close` → lập được giáo án mới ngay.
   - **Khóa:** `POST /medical/vet-lock` (hoặc bệnh án chỉ định khóa tập, hoặc `PUT /horses/{id}` với `isLocked: true`) → giáo án đóng, không chuyển `PAUSED`; lập giáo án mới sau khi bác sĩ mở khóa (10.2).
@@ -759,7 +781,9 @@ Không cần body. Buổi tập HLV vừa phân công (6.5) ở trạng thái `P
 - `status` chỉ nhận `COMPLETED` hoặc `CANCELLED`.
 - **Hoàn thành (`COMPLETED`) khi buổi đã được xác nhận (`CONFIRMED`) hoặc đang tập (`IN_PROGRESS`) và giáo án đang `ACTIVE`. Buổi đang `PAUSED_PENDING_TRAINER` phải được HLV cho tập tiếp (7.8) hoặc dừng (7.3) trước. Hủy (`CANCELLED`) được mọi buổi chưa kết thúc.**
 - `notes` được **nối thêm** vào ghi chú cũ (ngăn bằng ` | `), không ghi đè ghi chú HLV đặt lúc phân công.
-- **Mong đợi:** `200`. Nếu không còn buổi `PENDING` / `CONFIRMED` nào, giáo án tự chuyển sang `COMPLETED` (kiểm tra lại bằng 6.2).
+- **Mong đợi:** `200`. Nếu không còn buổi chưa kết thúc và đã có buổi hoàn thành, giáo án tự chuyển sang `COMPLETED` (kiểm tra lại bằng 6.2).
+- **Hủy một buổi tập không tạm dừng giáo án:** giáo án vẫn `ACTIVE`, các buổi còn lại hoàn thành được. Hủy hết mà chưa có buổi hoàn thành thì giáo án giữ `ACTIVE` để HLV thêm buổi hoặc hủy giáo án (6.6).
+- **Phạm vi:** Groom chỉ thao tác buổi được giao; Trainer chỉ buổi tập của ngựa được phân công cho mình (khác → `403`); Club Manager không giới hạn.
 - **Test lỗi:**
   - `COMPLETED` khi buổi còn `PENDING` (chưa xác nhận) → `400` "Buổi tập chưa được xác nhận...".
   - `COMPLETED` khi giáo án còn `PENDING` (chưa tới ngày bắt đầu) → `400`.
@@ -767,6 +791,16 @@ Không cần body. Buổi tập HLV vừa phân công (6.5) ở trạng thái `P
   - Nhân viên khác (không được gán) gọi → `403`.
   - `"status": "CANCELLED"` mà không có `notes` → `400` "Phải ghi lý do (notes) khi hủy buổi tập".
   - `"status": "COMPLETED"` khi ngựa đang VetLock (F22-01) → `400`. Chỉ được hủy buổi tập.
+  - Trainer gọi buổi tập của ngựa không phụ trách → `403`.
+
+### 7.4A `PUT /api/v1/training-sessions/{sessionId}/evaluate`: đánh giá phong độ (`Trainer` phụ trách ngựa, `Club Manager`)
+
+```json
+{ "score": 8, "comment": "Bứt tốc tốt ở 400m cuối" }
+```
+
+- Chỉ buổi `COMPLETED`, **mỗi buổi đánh giá một lần**. **Mong đợi:** `200`; đánh giá trả về trong `evaluationScore`, `evaluationComment`, `evaluatedBy`, `evaluatedAt` của 6.3 / 7.1.
+- **Test lỗi:** buổi chưa hoàn thành → `400`; đánh giá lần 2 → `400` "Buổi tập này đã được đánh giá..."; Trainer không phụ trách ngựa → `403`; Groom → `403`.
 
 ### 7.5 `PUT /api/v1/training-sessions/{sessionId}/start`: Groom bắt đầu buổi tập (`Groom` được giao)
 
@@ -882,25 +916,18 @@ Chỉ `Trainer` được gọi. Lấy `groomId` từ `GET /training-plans/assign
 
 ## 10. Medical (VetLock) — `/api/v1/medical`
 
-### 10.1 `POST /api/v1/medical/vet-lock` — Khóa tập khẩn cấp (`Veterinarian`, `Trainer`, `Groom`)
-> **Phạm vi Trainer:** Trainer gọi với ngựa không được Club Manager phân công cho mình (3.8) → `403`.
+### 10.1 `POST /api/v1/medical/vet-lock` — Khóa huấn luyện (chỉ `Veterinarian`)
 
-Nhân viên trực tiếp chăm sóc hoặc huấn luyện được bấm khi phát hiện chấn thương. Owner hoặc Club Manager gọi → `403`.
+Chỉ bác sĩ thú y quyết định khóa. Trainer hoặc Groom phát hiện chấn thương thì **báo sự cố** bằng `POST /api/v1/medical/cases` (10.3) để bác sĩ khám và quyết định. Trainer, Groom, Owner, Club Manager gọi → `403`.
 
 ```json
 { "horseId": 1, "reason": "Nghi chấn thương chân trước" }
 ```
 
-- **Mong đợi:** `200`. Kiểm tra bằng 3.4: ngựa có `isLocked = true`, và `healthStatus` tùy người bấm:
+- **Mong đợi:** `200`. Kiểm tra bằng 3.4: ngựa có `isLocked = true`, `healthStatus = INJURED`.
 - **Tự động khi khóa (F3-03):** mọi buổi tập chưa thực hiện (`PENDING` và `CONFIRMED`) của ngựa chuyển `CANCELLED` (ghi chú "Hủy tự động do ngựa bị khóa huấn luyện…"), giáo án đang chạy chuyển **`PAUSED`**, HLV phụ trách và chủ ngựa nhận email. Thao tác được ghi Audit Log (`VET_LOCK`).
 - **Khi bác sĩ mở khóa (10.2):** giáo án `PAUSED` về **`PENDING`**; HLV phân công lại buổi tập, Groom xác nhận thì giáo án chạy lại. HLV và chủ ngựa nhận email, ghi Audit Log (`VET_UNLOCK`).
 
-| Người bấm | `healthStatus` sau khi khóa |
-|---|---|
-| Veterinarian | `INJURED` (bác sĩ kết luận chấn thương) |
-| Trainer hoặc Groom | `WATCH` (chỉ khóa tập, chờ bác sĩ khám) |
-
-  Sau khi Trainer hoặc Groom khóa, bác sĩ khám rồi đổi sang `INJURED` qua `PUT /horses/{id}` (3.6) nếu đúng là chấn thương, hoặc mở khóa (10.2) nếu ngựa ổn.
 - **Test lỗi:** khóa lại lần nữa → `400` "Ngựa này hiện đang bị khóa y tế rồi!".
 
 ### 10.2 `POST /api/v1/medical/release-lock/{horseId}` — Mở khóa (`Veterinarian`)
@@ -1527,6 +1554,7 @@ Dùng các bảng có sẵn `Invoices`, `Invoice_Line_Items`, `Payment_Transacti
 ### 12F.6 Thanh toán: `POST /api/v1/owner/invoices/{id}/vnpay` (`Horse Owner`)
 
 1. Gọi API → `201`, `data.paymentUrl`. Giao dịch được tạo ở trạng thái `PENDING_VERIFICATION`, số tiền = `amountDue` tại thời điểm tạo.
+   - **Bấm thanh toán lần nữa** khi giao dịch trước còn hạn (`app.vnpay.expire-minutes`, chừa 1 phút) và cùng số tiền: trả lại **đúng giao dịch cũ** (cùng `txnRef`, `transactionId`, `paymentUrl`), `data.reused = true`, không tạo giao dịch mới. Hết hạn hoặc số tiền đã đổi (phát sinh phí trễ hạn) thì tạo giao dịch mới, `reused = false`.
 2. Mở `paymentUrl` trên trình duyệt → trang VNPay Sandbox → chọn ngân hàng NCB, nhập thẻ test ở 12F.0.
 3. VNPay chuyển về `GET /api/v1/payments/vnpay/return?...`. Server kiểm tra chữ ký rồi **hỏi lại VNPay bằng `querydr`**. Chỉ khi VNPay xác nhận thành công và đúng số tiền thì giao dịch mới thành `VERIFIED` và hóa đơn thành `PAID`. Kết quả trả JSON `status = SUCCESS | FAILED | PENDING | INVALID`; nếu đặt `VNPAY_FRONTEND_RESULT_URL` thì chuyển hướng về trang đó kèm `?status=&invoiceId=&txnRef=`.
 4. Kiểm tra lại bằng 12F.5: hóa đơn biến khỏi danh sách mở, xuất hiện trong lịch sử thanh toán. Chủ ngựa nhận email biên nhận.
@@ -1657,7 +1685,7 @@ Sau khi test chức năng chính, thử gọi mỗi API sau bằng **sai role** 
 | `POST /medical-management/protocols` và các thao tác trên phác đồ (confirm, wait-restock, new-version, progress-notes, complete, cancel) | Veterinarian |
 | `GET /medical-management/medications`, `GET /medical-management/protocols/**` | Veterinarian, Club Manager (chỉ xem) |
 | `POST /medical/vet-lock`, `POST /medical/cases` (Trainer), `POST /nutrition-plans`, `POST /care-tasks` | Trainer chỉ với ngựa được phân công |
-| `POST /medical/vet-lock` | Veterinarian, Trainer, Groom |
+| `POST /medical/vet-lock` | Veterinarian (Trainer, Groom báo sự cố qua `POST /medical/cases`) |
 | `GET /medical/cases` | Veterinarian (mọi ca), Groom và Trainer (ca của mình) |
 | `POST /medical/cases` | Groom, Trainer |
 | `POST /medical/cases/action`, `PUT /medical/cases/{caseId}/close` | Veterinarian |

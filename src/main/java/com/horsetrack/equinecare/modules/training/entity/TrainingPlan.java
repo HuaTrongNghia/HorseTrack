@@ -24,6 +24,11 @@ public class TrainingPlan {
     @Column(name = "plan_id")
     private Integer planId;
 
+    // QA H3: khóa lạc quan - hai thao tác đồng thời trên cùng dòng thì thao tác sau bị từ chối (409) thay vì ghi đè
+    @Version
+    @Column(name = "version")
+    private Long version;
+
     @Column(name = "plan_name", nullable = false, length = 150)
     private String planName;
 
