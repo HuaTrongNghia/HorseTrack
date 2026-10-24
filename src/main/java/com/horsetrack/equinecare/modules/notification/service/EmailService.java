@@ -37,6 +37,7 @@ public class EmailService {
     private final String fromName;
     private final long otpTtlSeconds;
     private final long waitSeconds;
+    private final EmailLogService emailLogService;
 
     /** Kết quả gửi sau khi chờ tối đa app.mail.wait-seconds. */
     public enum Delivery { SENT, FAILED, PENDING }
@@ -53,13 +54,15 @@ public class EmailService {
                         @Value("${app.mail.from:}") String fromAddress,
                         @Value("${app.mail.from-name:HorseTrack EquineCare}") String fromName,
                         @Value("${app.otp.ttl-seconds:300}") long otpTtlSeconds,
-                        @Value("${app.mail.wait-seconds:8}") long waitSeconds) {
+                        @Value("${app.mail.wait-seconds:8}") long waitSeconds,
+                        EmailLogService emailLogService) {
         this.mailSender = mailSender;
         this.smtpUsername = smtpUsername;
         this.fromAddress = StringUtils.hasText(fromAddress) ? fromAddress : smtpUsername;
         this.fromName = fromName;
         this.otpTtlSeconds = otpTtlSeconds;
         this.waitSeconds = waitSeconds;
+        this.emailLogService = emailLogService;
         if (!isConfigured()) {
             log.warn("EMAIL CHẠY CHẾ ĐỘ DEV: chưa đặt MAIL_USERNAME/MAIL_PASSWORD, email (kể cả OTP) chỉ được in ra console. KHÔNG dùng chế độ này khi triển khai thật.");
         }
@@ -82,7 +85,7 @@ public class EmailService {
                 <p>Mã có hiệu lực trong <b>%s</b> và chỉ dùng được <b>một lần</b>.</p>
                 <p>Nếu bạn không yêu cầu, hãy bỏ qua email này; mật khẩu của bạn không thay đổi.</p>
                 """.formatted(esc(fullName), esc(purposeLabel), esc(otp), OtpService.formatDuration(otpTtlSeconds));
-        return sendAsync(to, "[HorseTrack] Mã OTP " + purposeLabel, wrap(body));
+        return sendAsync("OTP", to, "[HorseTrack] Mã OTP " + purposeLabel, wrap(body));
     }
 
     /** Gửi tài khoản nhân viên do Club Manager tạo: tên đăng nhập, email, mật khẩu và nút xác nhận tài khoản. */
@@ -102,16 +105,19 @@ public class EmailService {
                 </table>
                 <p>Vì lý do bảo mật, hãy <b>đổi mật khẩu ngay</b> sau lần đăng nhập đầu tiên, và xóa email này.</p>
                 """.formatted(esc(fullName), esc(roleName), esc(confirmLink), confirmTtlHours, esc(confirmLink), esc(username), esc(loginEmail), esc(rawPassword));
-        return sendAsync(to, "[HorseTrack] Tài khoản nhân viên của bạn", wrap(body));
+        return sendAsync("STAFF_ACCOUNT", to, "[HorseTrack] Tài khoản nhân viên của bạn", wrap(body));
     }
 
     // ==========================================
     // GỬI
     // ==========================================
 
-    /** Gửi trên luồng email; lỗi gửi làm future hoàn tất với EmailSendException. */
-    public CompletableFuture<Void> sendAsync(String to, String subject, String html) {
-        return CompletableFuture.runAsync(() -> send(to, subject, html), executor);
+    /**
+     * Gửi trên luồng email; lỗi gửi làm future hoàn tất với EmailSendException.
+     * purpose: mục đích (OTP, STAFF_ACCOUNT, BILLING...) ghi vào nhật ký email (F1).
+     */
+    public CompletableFuture<Void> sendAsync(String purpose, String to, String subject, String html) {
+        return CompletableFuture.runAsync(() -> send(purpose, to, subject, html), executor);
     }
 
     /** Chờ kết quả gửi tối đa app.mail.wait-seconds; quá thời gian thì email vẫn tiếp tục gửi ở nền (PENDING). */
@@ -134,8 +140,10 @@ public class EmailService {
         executor.shutdown();
     }
 
-    public void send(String to, String subject, String html) {
+    /** Gửi đồng bộ và ghi nhật ký email: SENT / FAILED, hoặc SKIPPED khi chạy chế độ dev */
+    public void send(String purpose, String to, String subject, String html) {
         if (!isConfigured()) {
+            emailLogService.record(to, purpose, subject, "SKIPPED", "Chế độ dev: chưa cấu hình MAIL_USERNAME, email chỉ in ra console");
             log.warn("""
 
                     ===== [DEV] EMAIL KHÔNG GỬI THẬT =====
@@ -154,8 +162,10 @@ public class EmailService {
             helper.setText(html, true);
             mailSender.send(message);
             log.info("Đã gửi email '{}' tới {}", subject, to);
+            emailLogService.record(to, purpose, subject, "SENT", null);
         } catch (Exception ex) {
             log.error("Gửi email tới {} thất bại: {}", to, ex.getMessage());
+            emailLogService.record(to, purpose, subject, "FAILED", ex.getClass().getSimpleName() + ": " + ex.getMessage());
             throw new EmailSendException("Không gửi được email tới " + to + ". Vui lòng thử lại sau.", ex);
         }
     }

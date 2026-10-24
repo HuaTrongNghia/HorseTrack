@@ -93,7 +93,7 @@ public class StaffAssignmentService {
 
         if (StringUtils.hasText(groom.getEmail())) {
             try {
-                emailService.sendAsync(groom.getEmail(), "[HorseTrack] Cập nhật khu chăm sóc",
+                emailService.sendAsync("GROOM_ZONE", groom.getEmail(), "[HorseTrack] Cập nhật khu chăm sóc",
                         "<p>Xin chào <b>" + HtmlUtils.htmlEscape(groom.getFullName()) + "</b>,</p>"
                                 + (newZone == null
                                 ? "<p>Club Manager đã bỏ phân công khu chăm sóc của bạn" + (oldZone != null ? " (" + HtmlUtils.htmlEscape(oldZone) + ")" : "") + ".</p>"

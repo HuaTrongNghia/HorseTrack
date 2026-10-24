@@ -167,7 +167,7 @@ public class InvoiceGenerator {
             return;
         }
         try {
-            emailService.sendAsync(invoice.getOwner().getEmail(),
+            emailService.sendAsync("INVOICE", invoice.getOwner().getEmail(),
                     "[HorseTrack] Hóa đơn " + invoice.getInvoiceCode() + " kỳ " + period.format(MONTH_VN),
                     "<p>Xin chào <b>" + HtmlUtils.htmlEscape(invoice.getOwner().getFullName()) + "</b>,</p>"
                             + "<p>CLB đã phát hành hóa đơn <b>" + invoice.getInvoiceCode() + "</b> cho ngựa <b>"

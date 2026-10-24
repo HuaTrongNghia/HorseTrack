@@ -87,7 +87,7 @@ public class NutritionLockHandler {
             return;
         }
         try {
-            emailService.sendAsync(user.getEmail(), subject, "<p>Xin chào <b>" + HtmlUtils.htmlEscape(user.getFullName()) + "</b>,</p>" + body);
+            emailService.sendAsync("NUTRITION", user.getEmail(), subject, "<p>Xin chào <b>" + HtmlUtils.htmlEscape(user.getFullName()) + "</b>,</p>" + body);
         } catch (Exception ex) {
             log.warn("Không gửi được email khẩu phần tới {}: {}", user.getEmail(), ex.getMessage());
         }

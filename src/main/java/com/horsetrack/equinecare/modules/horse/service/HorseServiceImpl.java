@@ -210,7 +210,7 @@ public class HorseServiceImpl implements HorseService {
                 "assigned_trainer_id=null | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ")");
         if (StringUtils.hasText(previous.getEmail())) {
             try {
-                emailService.sendAsync(previous.getEmail(), "[HorseTrack] Bạn không còn phụ trách ngựa " + horse.getHorseName(),
+                emailService.sendAsync("TRAINER_ASSIGNMENT", previous.getEmail(), "[HorseTrack] Bạn không còn phụ trách ngựa " + horse.getHorseName(),
                         "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(previous.getFullName()) + "</b>,</p>"
                                 + "<p>Club Manager đã bỏ phân công bạn phụ trách huấn luyện ngựa <b>"
                                 + org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName()) + "</b>.</p>");
@@ -262,7 +262,7 @@ public class HorseServiceImpl implements HorseService {
 
         if (StringUtils.hasText(trainer.getEmail())) {
             try {
-                emailService.sendAsync(trainer.getEmail(), "[HorseTrack] Bạn được phân công phụ trách ngựa " + horse.getHorseName(),
+                emailService.sendAsync("TRAINER_ASSIGNMENT", trainer.getEmail(), "[HorseTrack] Bạn được phân công phụ trách ngựa " + horse.getHorseName(),
                         "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(trainer.getFullName()) + "</b>,</p>"
                                 + "<p>Club Manager đã phân công bạn phụ trách huấn luyện ngựa <b>"
                                 + org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName()) + "</b>"

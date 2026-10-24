@@ -80,7 +80,7 @@ public class SessionIncidentHandler {
             return;
         }
         try {
-            emailService.sendAsync(plan.getHeadTrainer().getEmail(), "[HorseTrack] Bác sĩ đã xử lý sự cố của ngựa " + horse.getHorseName(),
+            emailService.sendAsync("TRAINING_INCIDENT", plan.getHeadTrainer().getEmail(), "[HorseTrack] Bác sĩ đã xử lý sự cố của ngựa " + horse.getHorseName(),
                     "<p>Xin chào <b>" + HtmlUtils.htmlEscape(plan.getHeadTrainer().getFullName()) + "</b>,</p>"
                             + "<p>" + HtmlUtils.htmlEscape(decision) + ".</p>"
                             + "<p>Buổi tập bị dừng đã kết thúc; giáo án <b>" + HtmlUtils.htmlEscape(plan.getPlanName()) + "</b> chuyển <b>"

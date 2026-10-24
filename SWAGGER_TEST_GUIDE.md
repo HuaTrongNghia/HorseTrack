@@ -2,9 +2,11 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **162 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **163 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 > **Bắt buộc trước khi chạy bản backend này:** chạy `DATABASE_fe_requests_schema.sql` trên DB (thêm cột ngưỡng / tạm dừng cho buổi tập, `Session_Readings.session_id`, chấn thương gắn với ngựa, `Users.avatar_url`, `Competition_Entries.proposal_note`). Chưa chạy script thì các API buổi tập, chấn thương, hồ sơ cá nhân, đề xuất thi đấu trả `500` "Invalid column name".
+>
+> **Và `DATABASE_email_logs.sql`** (bảng nhật ký gửi email `Email_Logs`). Chưa chạy thì email vẫn gửi bình thường, chỉ không ghi được nhật ký và `GET /email-logs` trả `500`.
 >
 > **Và `DATABASE_staff_email_confirmation.sql`** (cột xác nhận email của `Users`; tài khoản đã có được coi là đã xác nhận). Chưa chạy thì đăng nhập và mọi API đọc người dùng trả `500` "Invalid column name 'email_verified_at'".
 >
@@ -334,6 +336,17 @@ Phục vụ màn hình **Người dùng & phân quyền** của FE (5.1, 5.2, 5.
   - Tự động tạo hồ sơ profile tương ứng (`TrainerProfile`, `VeterinarianProfile`...) nếu chưa có.
   - Thu hồi refresh token để người dùng đăng nhập lại nhận vai trò mới và ghi `Audit_Logs`.
 - **Mong đợi:** `200`, `roleName` và `role` được cập nhật.
+
+### 2B.8 `GET /api/v1/email-logs` — Nhật ký gửi email (`Club Manager`)
+
+Mọi email hệ thống gửi (OTP, tài khoản nhân viên, hóa đơn, phân công, cảnh báo...) đều được ghi vào bảng `Email_Logs`, kể cả khi gửi thất bại.
+
+- Tham số lọc (đều tùy chọn): `userId`, `purpose`, `status`, `toEmail` (chứa chuỗi, không phân biệt hoa thường), `fromDate`, `toDate` (`yyyy-MM-dd`), `page` (mặc định 0), `size` (mặc định 20, tối đa 100). Ví dụ: `GET /api/v1/email-logs?userId=49&purpose=OTP`.
+- Mỗi dòng: `logId, toEmail, userId, userFullName, purpose, subject, status, error, sentAt`, mới nhất trước.
+- `status`: `SENT` (gửi thành công), `FAILED` (máy chủ thư báo lỗi, `error` ghi lý do), `SKIPPED` (server chưa cấu hình `MAIL_USERNAME`, chỉ in ra console, không gửi thật).
+- `purpose`: `OTP`, `STAFF_ACCOUNT`, `BILLING`, `INVOICE`, `TRAINER_ASSIGNMENT`, `GROOM_ZONE`, `CARE_TASK_OVERDUE`, `NUTRITION`, `RACE_PROPOSAL`, `TRAINING_INCIDENT`, `TRAINING_PAUSE`, `VET_LOCK`.
+- `userId` gắn theo email người nhận; email chưa có tài khoản (ví dụ OTP đăng ký chủ ngựa) thì `userId = null`.
+- **Test lỗi:** `status` khác 3 giá trị trên → `400`; `toDate` trước `fromDate` → `400`; role khác Club Manager → `403`.
 
 ### 2B.7 `GET /api/v1/audit-logs` — Xem nhật ký kiểm toán hệ thống (BR_10)
 - **Mong đợi:** `200`, danh sách các hành động gần nhất trên hệ thống (ai thực hiện, thao tác gì, bảng nào, giá trị cũ/mới, IP, thời gian).

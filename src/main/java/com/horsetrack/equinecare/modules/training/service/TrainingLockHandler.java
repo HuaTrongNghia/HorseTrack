@@ -113,7 +113,7 @@ public class TrainingLockHandler {
         }
         recipients.values().forEach(u -> {
             try {
-                emailService.sendAsync(u.getEmail(), subject, "<p>Xin chào <b>" + esc(u.getFullName()) + "</b>,</p>" + body);
+                emailService.sendAsync("VET_LOCK", u.getEmail(), subject, "<p>Xin chào <b>" + esc(u.getFullName()) + "</b>,</p>" + body);
             } catch (Exception ex) {
                 log.warn("Không gửi được thông báo VetLock tới {}: {}", u.getEmail(), ex.getMessage());
             }

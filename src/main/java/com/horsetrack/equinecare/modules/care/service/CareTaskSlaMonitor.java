@@ -80,7 +80,7 @@ public class CareTaskSlaMonitor {
                 continue;
             }
             try {
-                emailService.sendAsync(m.getEmail(), "[HorseTrack] " + late.size() + " việc chăm sóc trễ hạn",
+                emailService.sendAsync("CARE_TASK_OVERDUE", m.getEmail(), "[HorseTrack] " + late.size() + " việc chăm sóc trễ hạn",
                         "<p>Xin chào <b>" + esc(m.getFullName()) + "</b>,</p>" + body);
             } catch (Exception ex) {
                 log.warn("Không gửi được cảnh báo SLA tới {}: {}", m.getEmail(), ex.getMessage());

@@ -232,7 +232,7 @@ public class SessionMonitorService {
         }
         String horseName = horse != null ? horse.getHorseName() : "?";
         try {
-            emailService.sendAsync(trainer.getEmail(), "[HorseTrack] Buổi tập của ngựa " + horseName + " tạm dừng do vượt ngưỡng",
+            emailService.sendAsync("TRAINING_PAUSE", trainer.getEmail(), "[HorseTrack] Buổi tập của ngựa " + horseName + " tạm dừng do vượt ngưỡng",
                     "<p>Xin chào <b>" + HtmlUtils.htmlEscape(String.valueOf(trainer.getFullName())) + "</b>,</p>"
                             + "<p>Buổi tập #" + session.getSessionId() + " (" + HtmlUtils.htmlEscape(session.getActivityType()) + ") của ngựa <b>"
                             + HtmlUtils.htmlEscape(horseName) + "</b> đã tự tạm dừng: " + HtmlUtils.htmlEscape(reason) + ".</p>"

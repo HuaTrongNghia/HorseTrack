@@ -351,7 +351,7 @@ public class RaceProposalService {
             return;
         }
         try {
-            emailService.sendAsync(to.getEmail(), subject, "<p>Xin chào <b>" + esc(to.getFullName()) + "</b>,</p>" + html);
+            emailService.sendAsync("RACE_PROPOSAL", to.getEmail(), subject, "<p>Xin chào <b>" + esc(to.getFullName()) + "</b>,</p>" + html);
         } catch (Exception ex) {
             log.warn("Không gửi được email đề xuất thi đấu: {}", ex.getMessage());
         }
