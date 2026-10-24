@@ -79,7 +79,7 @@ public class AccountServiceImpl implements AccountService {
     public UserProfileResponseDTO updateMyProfile(com.horsetrack.equinecare.modules.auth.dto.ProfileUpdateRequestDTO request) {
         User user = currentUser();
         String fullName = request.getFullName().trim();
-        String phone = StringUtils.hasText(request.getPhone()) ? request.getPhone().trim() : null;
+        String phone = com.horsetrack.equinecare.modules.auth.service.AuthServiceImpl.normalizePhone(request.getPhone());
         if (phone != null && !phone.equals(user.getPhone()) && userRepository.existsByPhone(phone)) {
             throw new IllegalArgumentException("Số điện thoại " + phone + " đã được tài khoản khác sử dụng.");
         }
@@ -166,12 +166,7 @@ public class AccountServiceImpl implements AccountService {
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
 
-    // Che bớt email trong phản hồi: nguyenvana@gmail.com -> ng*******@gmail.com
     private static String maskEmail(String email) {
-        int at = email.indexOf('@');
-        if (at <= 2) {
-            return email;
-        }
-        return email.substring(0, 2) + "*".repeat(at - 2) + email.substring(at);
+        return OtpService.maskEmail(email);
     }
 }

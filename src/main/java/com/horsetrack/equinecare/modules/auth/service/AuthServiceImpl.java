@@ -43,6 +43,10 @@ public class AuthServiceImpl implements AuthService {
     private final OtpService otpService;
     private final EmailService emailService;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
+    private final com.horsetrack.equinecare.modules.notification.service.EmailDomainVerifier emailDomainVerifier;
+
+    /** Số điện thoại Việt Nam: 0xxxxxxxxx hoặc +84xxxxxxxxx */
+    private static final java.util.regex.Pattern PHONE = java.util.regex.Pattern.compile("^(0|\\+84)\\d{9,10}$");
 
     // ==========================================
     // QUÊN MẬT KHẨU (OTP qua email)
@@ -86,24 +90,48 @@ public class AuthServiceImpl implements AuthService {
         refreshTokenRepository.revokeAllByUserId(user.getUserId());
     }
 
+    // ==========================================
+    // ĐĂNG KÝ CHỦ NGỰA (xác thực email bằng OTP)
+    // ==========================================
+
+    @Override
+    public String requestOwnerRegistrationOtp(OwnerRegisterRequestDTO request) {
+        String email = normalizeEmail(request.getEmail());
+        checkOwnerUnique(request.getUsername().trim(), email, normalizePhone(request.getPhone()));
+        // Tên miền không nhận thư (gõ sai, không tồn tại) thì báo ngay
+        emailDomainVerifier.checkDeliverable(email);
+        otpService.checkAndMarkCooldown(email, OtpService.Purpose.REGISTER);
+        String otp = otpService.issue(email, OtpService.Purpose.REGISTER);
+        java.util.concurrent.CompletableFuture<Void> sending = emailService.sendOtp(email, request.getFullName().trim(), otp, OtpService.Purpose.REGISTER.getLabel())
+                .whenComplete((ok, ex) -> {
+                    if (ex != null) {
+                        otpService.invalidate(email, OtpService.Purpose.REGISTER);
+                    }
+                });
+        // Máy chủ thư từ chối địa chỉ thì báo lại ngay cho người đăng ký
+        if (emailService.await(sending) == EmailService.Delivery.FAILED) {
+            otpService.invalidate(email, OtpService.Purpose.REGISTER);
+            throw new IllegalArgumentException("Không gửi được mã OTP tới " + email + ". Email có thể không tồn tại, vui lòng kiểm tra lại.");
+        }
+        return OtpService.maskEmail(email);
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void registerOwner(OwnerRegisterRequestDTO request) {
-        if (userRepository.existsByUsername(request.getUsername().trim())) {
-            throw new IllegalArgumentException("Tên đăng nhập đã tồn tại.");
+        String email = normalizeEmail(request.getEmail());
+        String phone = normalizePhone(request.getPhone());
+        checkOwnerUnique(request.getUsername().trim(), email, phone);
+        if (!StringUtils.hasText(request.getOtp())) {
+            throw new IllegalArgumentException("Thiếu mã OTP xác thực email.");
         }
-        if (userRepository.existsByEmail(request.getEmail().trim())) {
-            throw new IllegalArgumentException("Email đã được sử dụng.");
-        }
-        if (StringUtils.hasText(request.getPhone()) && userRepository.existsByPhone(request.getPhone().trim())) {
-            throw new IllegalArgumentException("Số điện thoại đã được sử dụng.");
-        }
+        otpService.verify(email, OtpService.Purpose.REGISTER, request.getOtp().trim());
 
         User newUser = User.builder()
                 .username(request.getUsername().trim())
                 .fullName(request.getFullName().trim())
-                .email(request.getEmail().trim())
-                .phone(request.getPhone() != null ? request.getPhone().trim() : null)
+                .email(email)
+                .phone(phone)
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .roleName("Horse Owner")
                 .isActive(true)
@@ -120,6 +148,37 @@ public class AuthServiceImpl implements AuthService {
                 .build();
 
         horseOwnerRepo.save(ownerProfile);
+        auditTrail.record("REGISTER_OWNER", "Users", null,
+                "Chủ ngựa tự đăng ký " + savedUser.getUsername() + " (user_id=" + savedUser.getUserId() + ", email đã xác thực OTP)");
+    }
+
+    // Không trùng tên đăng nhập, email, số điện thoại (không kiểm tra trùng họ tên)
+    private void checkOwnerUnique(String username, String email, String phone) {
+        if (PHONE.matcher(username).matches()) {
+            throw new IllegalArgumentException("Tên đăng nhập không được có dạng số điện thoại.");
+        }
+        if (userRepository.existsByUsername(username)) {
+            throw new IllegalArgumentException("Tên đăng nhập đã tồn tại.");
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("Email đã được sử dụng.");
+        }
+        if (phone != null && userRepository.existsByPhone(phone)) {
+            throw new IllegalArgumentException("Số điện thoại đã được sử dụng.");
+        }
+    }
+
+    private static String normalizeEmail(String email) {
+        return email.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    // Bỏ khoảng trắng, dấu chấm, gạch; +84 -> 0
+    public static String normalizePhone(String phone) {
+        if (!StringUtils.hasText(phone)) {
+            return null;
+        }
+        String p = phone.trim().replaceAll("[\\s.\\-]", "");
+        return p.startsWith("+84") ? "0" + p.substring(3) : p;
     }
 
     @Override
@@ -185,8 +244,8 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public LoginResponseDTO login(LoginDTO request) {
-        // Bước 1: Lấy thông tin user từ DB dựa trên username từ LoginDTO
-        User user = userRepository.findByUsername(request.getUsername().trim())
+        // Bước 1: tìm tài khoản theo tên đăng nhập, email hoặc số điện thoại
+        User user = findByLoginId(request.getUsername().trim())
                 .orElseThrow(() -> new BadCredentialsException("Tên đăng nhập hoặc mật khẩu không chính xác"));
 
         // Kiểm tra xem tài khoản có đang hoạt động hay không
@@ -201,6 +260,18 @@ public class AuthServiceImpl implements AuthService {
 
         // Bước 3, 4 & 5: Sinh JWT Token (chứa sub, userId, role) + refresh token và trả về kèm thông tin hạn dùng
         return buildLoginResponse(user);
+    }
+
+    private java.util.Optional<User> findByLoginId(String loginId) {
+        if (loginId.contains("@")) {
+            return userRepository.findByEmail(normalizeEmail(loginId));
+        }
+        java.util.Optional<User> byUsername = userRepository.findByUsername(loginId);
+        if (byUsername.isPresent()) {
+            return byUsername;
+        }
+        String phone = normalizePhone(loginId);
+        return phone != null && PHONE.matcher(phone).matches() ? userRepository.findByPhone(phone) : java.util.Optional.empty();
     }
 
     @Override

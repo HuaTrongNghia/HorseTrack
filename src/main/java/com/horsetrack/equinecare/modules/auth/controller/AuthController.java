@@ -36,12 +36,18 @@ public class AuthController {
     }
 
     @PostMapping("/register-owner")
-    @Operation(summary = "Khách hàng tự đăng ký", description = "Dành cho Horse Owner tự tạo tài khoản.")
-    public ResponseEntity<ApiResponse<Void>> registerOwner(@Valid @RequestBody OwnerRegisterRequestDTO request) {
+    @Operation(summary = "Khách hàng tự đăng ký (2 bước, xác thực email bằng OTP)",
+            description = "Bước 1: gửi thông tin, bỏ trống otp -> 200, mã OTP gửi tới email. Bước 2: gửi lại cùng thông tin kèm otp -> 201, tạo tài khoản.")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> registerOwner(@Valid @RequestBody OwnerRegisterRequestDTO request) {
         try {
+            if (request.getOtp() == null || request.getOtp().isBlank()) {
+                String masked = authService.requestOwnerRegistrationOtp(request);
+                return ResponseEntity.ok(ApiResponse.ok("Đã gửi mã OTP tới " + masked + ". Nhập mã để hoàn tất đăng ký (hiệu lực " + otpService.ttlText() + ").",
+                        java.util.Map.of("otpRequired", true, "email", masked, "ttlSeconds", otpService.getTtlSeconds())));
+            }
             authService.registerOwner(request);
             return ResponseEntity.status(HttpStatus.CREATED)
-                    .body(ApiResponse.ok("Tạo tài khoản chủ ngựa thành công!", null));
+                    .body(ApiResponse.ok("Đăng ký tài khoản chủ ngựa thành công!", java.util.Map.of("otpRequired", false)));
         } catch (IllegalArgumentException ex) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.error(ex.getMessage()));

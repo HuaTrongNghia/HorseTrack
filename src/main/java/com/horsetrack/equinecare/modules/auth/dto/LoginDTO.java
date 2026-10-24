@@ -6,7 +6,8 @@ import lombok.Data;
 @Data
 public class LoginDTO {
 
-    @NotBlank(message = "Username không được để trống")
+    // Tên đăng nhập, email hoặc số điện thoại
+    @NotBlank(message = "Tên đăng nhập / email / số điện thoại không được để trống")
     private String username;
 
     @NotBlank(message = "Password không được để trống")

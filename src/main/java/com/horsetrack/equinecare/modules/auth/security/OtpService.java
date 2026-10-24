@@ -25,6 +25,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class OtpService {
 
     public enum Purpose {
+        REGISTER("xác thực email đăng ký"),
         RESET_PASSWORD("đặt lại mật khẩu"),
         CHANGE_PASSWORD("đổi mật khẩu");
 
@@ -127,6 +128,15 @@ public class OtpService {
     /** Thời hạn mã dạng chữ, ví dụ "5 phút" hoặc "90 giây". */
     public String ttlText() {
         return formatDuration(ttlSeconds);
+    }
+
+    // Che bớt email trong phản hồi: nguyenvana@gmail.com -> ng*******@gmail.com
+    public static String maskEmail(String email) {
+        int at = email.indexOf('@');
+        if (at <= 2) {
+            return email;
+        }
+        return email.substring(0, 2) + "*".repeat(at - 2) + email.substring(at);
     }
 
     public static String formatDuration(long seconds) {

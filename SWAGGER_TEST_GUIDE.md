@@ -2,9 +2,11 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **154 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **158 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 > **Bắt buộc trước khi chạy bản backend này:** chạy `DATABASE_fe_requests_schema.sql` trên DB (thêm cột ngưỡng / tạm dừng cho buổi tập, `Session_Readings.session_id`, chấn thương gắn với ngựa, `Users.avatar_url`, `Competition_Entries.proposal_note`). Chưa chạy script thì các API buổi tập, chấn thương, hồ sơ cá nhân, đề xuất thi đấu trả `500` "Invalid column name".
+>
+> **Và `DATABASE_owner_horse_registration.sql`** (cột `Horses.height_cm`, `Registration_Attachments.file_content`, chỉ mục số điện thoại không trùng `UX_Users_phone`). Chưa chạy thì API ngựa và giấy tờ hồ sơ trả `500` "Invalid column name".
 >
 > **Và `DATABASE_qa_concurrency.sql`** (cột `version` cho `Training_Sessions`, `Training_Plans`, `Horses`, `Invoices` + chỉ mục `UX_plan_open_per_horse`). Chưa chạy thì mọi API đọc ngựa, giáo án, buổi tập, hóa đơn trả `500` "Invalid column name 'version'".
 >
@@ -97,21 +99,34 @@ Server đọc tài khoản email từ **biến môi trường**, không ghi tron
 
 ## 1. Authentication — `/api/v1/auth` (không cần token, trừ 1.3 và 1.5)
 
-### 1.1 `POST /api/v1/auth/register-owner` — Chủ ngựa tự đăng ký
+### 1.1 `POST /api/v1/auth/register-owner` — Chủ ngựa tự đăng ký (xác thực email bằng OTP, 2 bước)
+
+**Bước 1:** gửi thông tin, **không có `otp`**:
 
 ```json
 {
   "username": "owner01",
   "password": "owner123",
   "fullName": "Nguyen Van Owner",
-  "email": "owner01@test.com",
+  "email": "owner01@gmail.com",
   "phone": "0901234567"
 }
 ```
 
-- **Mong đợi:** `201`, message "Tạo tài khoản chủ ngựa thành công!".
+- **Mong đợi:** `200` "Đã gửi mã OTP tới ow*****@gmail.com...", `data = { otpRequired: true, email, ttlSeconds }`. **Chưa tạo tài khoản.** FE hiển thị ô nhập OTP.
+- Trước khi gửi mã: kiểm tra trùng **tên đăng nhập, email, số điện thoại** (không kiểm tra trùng họ tên); tên miền email phải nhận được thư (bản ghi MX/A, tắt bằng `app.mail.verify-domain=false`); máy chủ thư từ chối gửi → `400` "Không gửi được mã OTP tới ... Email có thể không tồn tại". Chưa cấu hình `MAIL_USERNAME` thì mã chỉ in ra log server.
+- Gọi lại bước 1 để **gửi lại mã** (cách nhau tối thiểu `app.otp.resend-cooldown-seconds`, mặc định 30 giây).
+
+**Bước 2:** gửi lại **cùng thông tin kèm `"otp": "123456"`** (mã trong email, hiệu lực 5 phút, sai tối đa 5 lần).
+
+- **Mong đợi:** `201` "Đăng ký tài khoản chủ ngựa thành công!". `phone` được chuẩn hóa (`+84 912 345 678` → `0912345678`). Ghi nhật ký `REGISTER_OWNER`.
 - **Test lỗi:**
-  - Gửi lại y hệt → `400` "Tên đăng nhập đã tồn tại."
+  - Sai OTP → `400` "Mã OTP không đúng. Bạn còn ... lần thử."; hết hạn → `400`.
+  - Email tên miền không có thật (ví dụ `abc@gmail.con`) → `400` "Email ... không có thật: tên miền ... không nhận thư".
+  - `phone` bỏ trống hoặc sai định dạng → `400` (số điện thoại bắt buộc, dùng cho hồ sơ ngựa).
+  - `username` có dạng số điện thoại (ví dụ `0912345678`) → `400`.
+  - Họ tên trùng với người khác → **vẫn đăng ký được**.
+  - Gửi lại y hệt sau khi đã tạo → `400` "Tên đăng nhập đã tồn tại."
   - Đổi username nhưng giữ email → `400` "Email đã được sử dụng."
   - Số điện thoại đã có tài khoản khác dùng (GEN-01) → `400` "Số điện thoại đã được sử dụng." (áp dụng cả khi tạo nhân viên ở 1.3).
   - Bỏ trống `fullName` hoặc `email: "abc"` → `400`, `data` chỉ ra field lỗi.
@@ -124,6 +139,7 @@ Server đọc tài khoản email từ **biến môi trường**, không ghi tron
 { "username": "owner01", "password": "owner123" }
 ```
 
+- Trường `username` nhận **tên đăng nhập, email hoặc số điện thoại** (`"owner01@gmail.com"`, `"0901234567"`, `"+84901234567"` đều được).
 - **Mong đợi:** `200`. `data` gồm `accessToken`, `refreshToken`, `expiresIn` (900), `role`, `userId`.
 - **Ghi lại `userId`** của owner. Mục 3.1 và 3.2 sẽ cần nó.
 - **Test lỗi:** sai mật khẩu → `401` "Tên đăng nhập hoặc mật khẩu không chính xác".
@@ -329,11 +345,17 @@ Mỗi API có phân quyền riêng, xem bảng ở mục 18.
   "breed": "Thoroughbred",
   "pedigree": "Sire X - Dam Y",
   "weightKg": 480.5,
-  "ownerId": 0
+  "heightCm": 165,
+  "color": "Hồng",
+  "note": "Ngựa nhập từ Úc"
 }
 ```
 
-- Thay `ownerId` bằng `userId` của owner (lấy ở mục 1.2).
+- **Horse Owner không cần gửi `ownerId`** (lấy tài khoản đang đăng nhập). Club Manager đăng ký hộ thì bắt buộc `ownerId`.
+- **Số điện thoại chủ ngựa lấy từ hồ sơ tài khoản**, không nhập trên hồ sơ ngựa; response có `ownerPhone`. Tài khoản chưa có số điện thoại → `400` (cập nhật bằng `PUT /account/my-profile`).
+- **Chiều cao thống nhất theo cm:** `heightCm` 120–205. Response trả `heightCm`. (FE cũ gửi `heightHands` vẫn được nhận và đổi sang cm, 1 hand = 10.16 cm.)
+- **Đã bỏ hộ chiếu và giấy chứng nhận sức khỏe**: `passportNo`, `healthCertIssuer`, `healthCertExpiry` không còn trong request / response.
+- Giấy tờ sở hữu đính kèm bằng 3.11 sau khi đăng ký.
 - `gender` chỉ nhận `Colt`, `Filly`, `Stallion`, `Mare` hoặc `Gelding`.
 - **Mong đợi:** `201`. **Ghi lại `data.horseId`**. Ngựa mới có `approvalStatus = "PENDING"`, `stallId` và `stallCode` đều `null` (đang chờ Club Manager duyệt).
 - **Test lỗi:**
@@ -375,7 +397,7 @@ Club Manager, Veterinarian, Groom xem được mọi ngựa. Horse Owner xem ng�
 
 Mỗi lần chủ ngựa nộp (3.1) hoặc nộp lại tạo một **hồ sơ** trong bảng `Horse_Registrations`, mã `REG-0001`. Luồng: `PENDING` → `APPROVED` (cấp chuồng), hoặc `REJECTED` (kèm lý do, có thể cho nộp lại) → nộp lại → `PENDING` …
 
-Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (màu lông), `heightHands` (chiều cao, đơn vị hand, ví dụ `15.2`), `passportNo` (số hộ chiếu, không được trùng giữa các ngựa), `healthCertIssuer`, `healthCertExpiry`, `note`.
+Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (màu lông), `heightCm` (chiều cao, cm), `note`. Giấy tờ đính kèm xem ở 3.11.
 
 **a) `PUT /api/v1/horses/{id}/approve`: duyệt và cấp chuồng (`Club Manager`)**
 
@@ -384,14 +406,13 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
   "stallId": 1,
   "checks": [
     { "checkKey": "IDENTITY", "passed": true },
-    { "checkKey": "HEALTH", "passed": true, "detail": "Giấy còn hạn đến 2027" },
-    { "checkKey": "OWNERSHIP", "passed": true }
+    { "checkKey": "OWNERSHIP", "passed": true, "detail": "Hợp đồng mua bán hợp lệ" }
   ],
   "note": "Hồ sơ đầy đủ"
 }
 ```
 
-- `checks` tùy chọn. Nếu gửi thì phải đủ 3 mục `IDENTITY`, `HEALTH`, `OWNERSHIP` và **tất cả đều đạt** (SRS). Có mục `passed: false` → `400`, hãy từ chối thay vì duyệt.
+- `checks` tùy chọn. Nếu gửi thì phải đủ 2 mục `IDENTITY`, `OWNERSHIP` (không còn mục giấy sức khỏe) và **tất cả đều đạt** (SRS). Trước khi duyệt, xem giấy tờ chủ ngựa đính kèm ở 3.11. Có mục `passed: false` → `400`, hãy từ chối thay vì duyệt.
 - Lấy `stallId` có `currentHorseId = null` từ mục 4.1.
 - **Mong đợi:** `200`, `approvalStatus = "APPROVED"`, có `stallCode`.
 - **Test lỗi:** hồ sơ không ở trạng thái chờ duyệt (đã duyệt hoặc đã từ chối) → `400`; chuồng đã có ngựa → `400`.
@@ -401,9 +422,9 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 
 ```json
 {
-  "reason": "Thiếu giấy chứng nhận sức khỏe còn hiệu lực",
+  "reason": "Giấy tờ sở hữu không rõ chữ ký bên bán",
   "allowResubmit": true,
-  "checks": [ { "checkKey": "HEALTH", "passed": false, "detail": "Giấy hết hạn" } ]
+  "checks": [ { "checkKey": "OWNERSHIP", "passed": false, "detail": "Thiếu chữ ký" } ]
 }
 ```
 
@@ -414,10 +435,11 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 **c) `PUT /api/v1/horses/{id}/resubmit`: chủ ngựa nộp lại (`Horse Owner`, chỉ ngựa của mình)**
 
 ```json
-{ "healthCertIssuer": "Chi cục Thú y TP.HCM", "healthCertExpiry": "2027-06-30", "note": "Đã bổ sung giấy sức khỏe mới" }
+{ "heightCm": 166, "note": "Đã bổ sung hợp đồng có chữ ký" }
 ```
 
-- Field nào gửi lên mới được cập nhật: `weightKg`, `pedigree`, `color`, `heightHands`, `passportNo`, `healthCertIssuer`, `healthCertExpiry`.
+- Field nào gửi lên mới được cập nhật: `weightKg`, `pedigree`, `color`, `heightCm`.
+- Hồ sơ mới chưa có giấy tờ: tải lại giấy tờ bằng 3.11 sau khi nộp lại.
 - **Mong đợi:** `200`, `approvalStatus` quay về `"PENDING"`, có hồ sơ mới (`registrationCode` mới).
 - **Test lỗi:**
   - Hồ sơ bị từ chối với `allowResubmit: false` → `400` "Quản lý CLB không cho phép nộp lại hồ sơ này".
@@ -429,6 +451,14 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 - **Mong đợi:** `200`, mỗi lần nộp gồm `registrationCode`, `submittedAt`, `status`, `ownerNote`, `decisionNote`, `decidedByName`, `decidedAt` và `checks`, mới nhất trước.
 
 **e) Lọc danh sách (3.3):** `GET /api/v1/horses?status=PENDING | APPROVED | REJECTED`.
+
+### 3.11 Giấy tờ đính kèm hồ sơ đăng ký ngựa — `Registration_Attachments`
+
+- **`POST /api/v1/horses/{horseId}/registration-attachments`** (`Horse Owner` của ngựa): `multipart/form-data`, trường `file` (PDF / JPG / PNG, tối đa 10 MB, tối đa 10 tệp mỗi hồ sơ), `docType` = `OWNERSHIP` (mặc định) hoặc `OTHER`. Chỉ khi hồ sơ mới nhất đang `PENDING_REVIEW`. Hệ thống kiểm tra **nội dung thật** của tệp (không tin đuôi tệp). **Mong đợi:** `201`, `{ attachmentId, registrationId, registrationCode, docType, fileName, mimeType, fileSizeKb, fileUrl, uploadedAt }`.
+  - Lỗi: tệp không phải PDF/JPG/PNG (kể cả đổi đuôi) → `400`; trên 10 MB → `400`; `docType` khác `OWNERSHIP`/`OTHER` → `400`; hồ sơ đã duyệt / từ chối → `400`; ngựa của người khác → `403`.
+- **`GET /api/v1/horses/{horseId}/registration-attachments`** (`Club Manager`, chủ ngựa): mọi giấy tờ của mọi hồ sơ, mới nhất trước. Chủ ngựa khác → `403`. `GET /horses/{id}/registrations` (lịch sử hồ sơ) cũng trả `attachments[]` theo từng hồ sơ.
+- **`GET /api/v1/horses/registration-attachments/{attachmentId}/file`** (`Club Manager`, chủ ngựa): trả nội dung tệp để xem trên trình duyệt; `?download=true` để tải về. FE gọi kèm header `Authorization` (ví dụ `fetch` → `blob` → `URL.createObjectURL`).
+- **`DELETE /api/v1/horses/{horseId}/registration-attachments/{attachmentId}`** (`Horse Owner`): gỡ tệp khi hồ sơ còn chờ duyệt; đã xử lý → `400`.
 
 ### 3.6 `PUT /api/v1/horses/{id}` — Cập nhật ngựa
 

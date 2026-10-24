@@ -90,6 +90,13 @@ public class GlobalExceptionHandler {
     }
 
     // Bắt lỗi nghiệp vụ RuntimeException (ResourceNotFoundException -> 404, BusinessException -> 400)
+    // Tệp tải lên vượt giới hạn multipart (spring.servlet.multipart.*)
+    @ExceptionHandler(org.springframework.web.multipart.MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUploadTooLarge(org.springframework.web.multipart.MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(ApiResponse.error("Tệp tải lên quá lớn (giấy tờ tối đa 10 MB, ảnh đại diện tối đa 1 MB)."));
+    }
+
     // QA H3: dòng dữ liệu vừa bị người khác cập nhật (khóa lạc quan @Version)
     @ExceptionHandler({org.springframework.orm.ObjectOptimisticLockingFailureException.class, jakarta.persistence.OptimisticLockException.class})
     public ResponseEntity<ApiResponse<Void>> handleConcurrentUpdate(Exception ex) {

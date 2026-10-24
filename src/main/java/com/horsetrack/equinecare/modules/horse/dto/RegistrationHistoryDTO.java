@@ -27,4 +27,5 @@ public class RegistrationHistoryDTO {
     private String decidedByName;
     private LocalDateTime decidedAt;
     private List<RegistrationCheckDTO> checks;
+    private List<RegistrationAttachmentDTO> attachments;   // giấy tờ chủ ngựa đính kèm hồ sơ này
 }

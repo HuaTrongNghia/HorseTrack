@@ -27,6 +27,7 @@ public class HorseResponseDTO {
     private BigDecimal prizeSharePct;
     private Integer ownerId;
     private String ownerName;
+    private String ownerPhone;         // lấy từ hồ sơ chủ ngựa
     private Integer stallId;
     private String stallCode;
     private String approvalStatus; // PENDING: chờ duyệt; APPROVED: đã duyệt và cấp chuồng; REJECTED: bị từ chối
@@ -34,10 +35,7 @@ public class HorseResponseDTO {
     private String horseCode;          // HT-0001 do DB sinh
     private java.util.List<com.horsetrack.equinecare.modules.medical.dto.InjuryDTO> injuries; // chỉ có ở GET /horses/{id}
     private String color;
-    private BigDecimal heightHands;
-    private String passportNo;
-    private String healthCertIssuer;
-    private LocalDate healthCertExpiry;
+    private BigDecimal heightCm;       // chiều cao đến vai (cm)
     // Hồ sơ đăng ký mới nhất
     private Integer registrationId;
     private String registrationCode;

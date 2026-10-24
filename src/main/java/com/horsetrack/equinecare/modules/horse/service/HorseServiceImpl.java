@@ -22,7 +22,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -34,7 +36,9 @@ public class HorseServiceImpl implements HorseService {
     private static final String ROLE_OWNER = "Horse Owner";
     private static final String ROLE_VET = "Veterinarian";
     // 3 mục kiểm tra bắt buộc của hồ sơ (Registration_Checks.check_key)
-    private static final Set<String> REQUIRED_CHECKS = Set.of("IDENTITY", "HEALTH", "OWNERSHIP");
+    // Không còn kiểm tra giấy chứng nhận sức khỏe (đã bỏ khỏi hồ sơ đăng ký)
+    private static final Set<String> REQUIRED_CHECKS = Set.of("IDENTITY", "OWNERSHIP");
+    private static final BigDecimal CM_PER_HAND = new BigDecimal("10.16");
 
     private final HorseRepository horseRepository;
     private final UserRepository userRepository;
@@ -47,6 +51,7 @@ public class HorseServiceImpl implements HorseService {
     private final com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository;
     private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
     private final com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService;
+    private final RegistrationAttachmentService attachmentService;
 
     public HorseServiceImpl(HorseRepository horseRepository, UserRepository userRepository, StallRepository stallRepository,
                             HorseRegistrationRepository registrationRepository, EntityManager entityManager,
@@ -55,7 +60,8 @@ public class HorseServiceImpl implements HorseService {
                             HorseAccessGuard horseAccessGuard,
                             com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository,
                             com.horsetrack.equinecare.modules.notification.service.EmailService emailService,
-                            com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService) {
+                            com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService,
+                            RegistrationAttachmentService attachmentService) {
         this.horseRepository = horseRepository;
         this.userRepository = userRepository;
         this.stallRepository = stallRepository;
@@ -67,6 +73,7 @@ public class HorseServiceImpl implements HorseService {
         this.trainingPlanRepository = trainingPlanRepository;
         this.emailService = emailService;
         this.injuryService = injuryService;
+        this.attachmentService = attachmentService;
     }
 
     private boolean currentUserHasRole(String role) {
@@ -112,16 +119,15 @@ public class HorseServiceImpl implements HorseService {
                 .prizeSharePct(horse.getPrizeSharePct())
                 .ownerId(horse.getOwner().getUserId())
                 .ownerName(horse.getOwner().getFullName())
+                .ownerPhone(horse.getOwner().getPhone())
                 .stallId(horse.getStall() != null ? horse.getStall().getStallId() : null)
                 .stallCode(horse.getStall() != null ? horse.getStall().getStallCode() : null)
                 .approvalStatus(horse.getApprovalStatus())
                 .createdAt(horse.getCreatedAt())
                 .horseCode(horse.getHorseCode())
                 .color(horse.getColor())
-                .heightHands(horse.getHeightHands())
-                .passportNo(horse.getPassportNo())
-                .healthCertIssuer(horse.getHealthCertIssuer())
-                .healthCertExpiry(horse.getHealthCertExpiry())
+                .heightCm(horse.getHeightCm() != null ? horse.getHeightCm()
+                        : horse.getHeightHands() != null ? horse.getHeightHands().multiply(CM_PER_HAND).setScale(1, java.math.RoundingMode.HALF_UP) : null)
                 .registrationId(latest != null ? latest.getRegistrationId() : null)
                 .registrationCode(latest != null ? latest.getRegistrationCode() : null)
                 .rejectReason(rejected ? latest.getDecisionNote() : null)
@@ -275,19 +281,31 @@ public class HorseServiceImpl implements HorseService {
     @Override
     @Transactional
     public HorseResponseDTO registerHorse(HorseRegistrationRequestDTO request) {
-        checkOwnerAccess(request.getOwnerId(), "Chủ ngựa chỉ được đăng ký ngựa cho chính mình (ownerId phải là userId của bạn)");
-        if (horseRepository.existsByHorseNameAndOwner_UserId(request.getHorseName(), request.getOwnerId())) {
+        // Chủ ngựa đăng ký cho chính mình (không cần gửi ownerId); Club Manager đăng ký hộ thì phải chọn chủ ngựa
+        Integer ownerId = request.getOwnerId();
+        if (currentUserHasRole(ROLE_OWNER)) {
+            Integer me = currentUser().getUserId();
+            if (ownerId != null && !ownerId.equals(me)) {
+                throw new AccessDeniedException("Chủ ngựa chỉ được đăng ký ngựa cho chính mình (ownerId phải là userId của bạn)");
+            }
+            ownerId = me;
+        } else if (ownerId == null) {
+            throw new IllegalArgumentException("Phải chọn chủ ngựa (ownerId).");
+        }
+        if (horseRepository.existsByHorseNameAndOwner_UserId(request.getHorseName(), ownerId)) {
             throw new IllegalArgumentException("Bạn đã có ngựa tên '" + request.getHorseName() + "'.");
         }
-        User owner = userRepository.findById(request.getOwnerId())
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chủ ngựa với ID: " + request.getOwnerId()));
+        Integer finalOwnerId = ownerId;
+        User owner = userRepository.findById(ownerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chủ ngựa với ID: " + finalOwnerId));
         if (!ROLE_OWNER.equals(owner.getRoleName())) {
-            throw new IllegalArgumentException("Người dùng ID " + request.getOwnerId() + " không phải chủ ngựa.");
+            throw new IllegalArgumentException("Người dùng ID " + ownerId + " không phải chủ ngựa.");
         }
-        String passport = trimToNull(request.getPassportNo());
-        if (passport != null && horseRepository.existsByPassportNoIgnoreCase(passport)) {
-            throw new IllegalArgumentException("Số hộ chiếu '" + passport + "' đã được dùng cho ngựa khác.");
+        // Số điện thoại liên hệ lấy từ hồ sơ chủ ngựa, không nhập lại trên hồ sơ ngựa
+        if (!StringUtils.hasText(owner.getPhone())) {
+            throw new IllegalArgumentException("Tài khoản chủ ngựa chưa có số điện thoại. Cập nhật tại Hồ sơ cá nhân (PUT /api/v1/account/my-profile) trước khi đăng ký ngựa.");
         }
+        BigDecimal heightCm = heightCm(request.getHeightCm(), request.getHeightHands());
 
         Horse horse = Horse.builder()
                 .horseName(request.getHorseName().trim())
@@ -297,10 +315,8 @@ public class HorseServiceImpl implements HorseService {
                 .pedigree(trimToNull(request.getPedigree()))
                 .weightKg(request.getWeightKg())
                 .color(trimToNull(request.getColor()))
-                .heightHands(request.getHeightHands())
-                .passportNo(passport)
-                .healthCertIssuer(trimToNull(request.getHealthCertIssuer()))
-                .healthCertExpiry(request.getHealthCertExpiry())
+                .heightCm(heightCm)
+                .heightHands(toHands(heightCm))
                 .healthStatus("HEALTHY")
                 .isLocked(false)
                 .prizeSharePct(java.math.BigDecimal.ZERO)
@@ -336,7 +352,7 @@ public class HorseServiceImpl implements HorseService {
         if (request.getChecks() != null && !request.getChecks().isEmpty()) {
             Set<String> keys = request.getChecks().stream().map(c -> c.getCheckKey().toUpperCase()).collect(Collectors.toSet());
             if (!keys.containsAll(REQUIRED_CHECKS)) {
-                throw new IllegalArgumentException("Checklist phải có đủ 3 mục IDENTITY, HEALTH, OWNERSHIP.");
+                throw new IllegalArgumentException("Checklist phải có đủ 2 mục IDENTITY, OWNERSHIP.");
             }
             if (request.getChecks().stream().anyMatch(c -> !Boolean.TRUE.equals(c.getPassed()))) {
                 throw new IllegalArgumentException("Chỉ được duyệt khi mọi mục kiểm tra đều đạt. Hãy từ chối hồ sơ nếu có mục chưa đạt.");
@@ -413,15 +429,10 @@ public class HorseServiceImpl implements HorseService {
         if (request.getWeightKg() != null) horse.setWeightKg(request.getWeightKg());
         if (request.getPedigree() != null) horse.setPedigree(trimToNull(request.getPedigree()));
         if (request.getColor() != null) horse.setColor(trimToNull(request.getColor()));
-        if (request.getHeightHands() != null) horse.setHeightHands(request.getHeightHands());
-        if (request.getHealthCertIssuer() != null) horse.setHealthCertIssuer(trimToNull(request.getHealthCertIssuer()));
-        if (request.getHealthCertExpiry() != null) horse.setHealthCertExpiry(request.getHealthCertExpiry());
-        if (request.getPassportNo() != null) {
-            String passport = trimToNull(request.getPassportNo());
-            if (passport != null && horseRepository.existsByPassportNoIgnoreCaseAndHorseIdNot(passport, horseId)) {
-                throw new IllegalArgumentException("Số hộ chiếu '" + passport + "' đã được dùng cho ngựa khác.");
-            }
-            horse.setPassportNo(passport);
+        BigDecimal heightCm = heightCm(request.getHeightCm(), request.getHeightHands());
+        if (heightCm != null) {
+            horse.setHeightCm(heightCm);
+            horse.setHeightHands(toHands(heightCm));
         }
         horseRepository.save(horse);
 
@@ -442,7 +453,10 @@ public class HorseServiceImpl implements HorseService {
     public List<RegistrationHistoryDTO> getRegistrationHistory(Integer horseId) {
         Horse horse = findHorse(horseId);
         checkOwnerAccess(horse.getOwner().getUserId(), "Bạn không phải chủ của ngựa này");
-        return registrationRepository.findByHorse_HorseIdOrderByRegistrationIdDesc(horseId).stream()
+        List<HorseRegistration> regs = registrationRepository.findByHorse_HorseIdOrderByRegistrationIdDesc(horseId);
+        Map<Integer, List<com.horsetrack.equinecare.modules.horse.dto.RegistrationAttachmentDTO>> attachments =
+                attachmentService.byRegistration(regs.stream().map(HorseRegistration::getRegistrationId).toList());
+        return regs.stream()
                 .map(r -> RegistrationHistoryDTO.builder()
                         .registrationId(r.getRegistrationId())
                         .registrationCode(r.getRegistrationCode())
@@ -465,6 +479,7 @@ public class HorseServiceImpl implements HorseService {
                                         .checkedAt(c.getCheckedAt())
                                         .build())
                                 .collect(Collectors.toList()))
+                        .attachments(attachments.getOrDefault(r.getRegistrationId(), List.of()))
                         .build())
                 .collect(Collectors.toList());
     }
@@ -554,6 +569,25 @@ public class HorseServiceImpl implements HorseService {
         Horse horse = findHorse(horseId);
         horse.setIsLocked(true);
         horseRepository.save(horse);
+    }
+
+    // Chiều cao theo cm; FE cũ gửi heightHands thì đổi sang cm
+    private static BigDecimal heightCm(BigDecimal cm, BigDecimal hands) {
+        if (cm != null) {
+            return cm.setScale(1, java.math.RoundingMode.HALF_UP);
+        }
+        if (hands == null) {
+            return null;
+        }
+        BigDecimal converted = hands.multiply(CM_PER_HAND).setScale(1, java.math.RoundingMode.HALF_UP);
+        if (converted.compareTo(new BigDecimal("120")) < 0 || converted.compareTo(new BigDecimal("205")) > 0) {
+            throw new IllegalArgumentException("Chiều cao phải từ 120 đến 205 cm (gửi heightCm theo cm).");
+        }
+        return converted;
+    }
+
+    private static BigDecimal toHands(BigDecimal cm) {
+        return cm == null ? null : cm.divide(CM_PER_HAND, 1, java.math.RoundingMode.HALF_UP);
     }
 
     private static String trimToNull(String s) {

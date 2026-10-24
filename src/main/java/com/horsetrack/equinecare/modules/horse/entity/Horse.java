@@ -76,17 +76,12 @@ public class Horse {
     @Column(name = "color", length = 50)
     private String color;
 
+    // Chiều cao đến vai theo cm (đơn vị thống nhất); height_hands giữ đồng bộ cho dữ liệu cũ
+    @Column(name = "height_cm", precision = 5, scale = 1)
+    private BigDecimal heightCm;
+
     @Column(name = "height_hands", precision = 4, scale = 1)
     private BigDecimal heightHands;
-
-    @Column(name = "passport_no", length = 50)
-    private String passportNo;
-
-    @Column(name = "health_cert_issuer", length = 150)
-    private String healthCertIssuer;
-
-    @Column(name = "health_cert_expiry")
-    private LocalDate healthCertExpiry;
 
     // Trạng thái hồ sơ đăng ký mới nhất (Horse_Registrations), chỉ đọc
     @org.hibernate.annotations.Formula("(SELECT TOP 1 r.status FROM Horse_Registrations r WHERE r.horse_id = horse_id ORDER BY r.registration_id DESC)")

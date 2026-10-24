@@ -7,6 +7,9 @@ import com.horsetrack.equinecare.modules.auth.dto.RefreshTokenRequestDTO;
 import com.horsetrack.equinecare.modules.auth.dto.StaffCreateRequestDTO;
 
 public interface AuthService {
+    /** Bước 1 đăng ký chủ ngựa: kiểm tra trùng, kiểm tra email nhận được thư, gửi OTP. Trả về email đã che bớt. */
+    String requestOwnerRegistrationOtp(OwnerRegisterRequestDTO request);
+    /** Bước 2: xác thực OTP rồi tạo tài khoản. */
     void registerOwner(OwnerRegisterRequestDTO request);
     void createStaff(StaffCreateRequestDTO request);
     LoginResponseDTO login(LoginDTO request);

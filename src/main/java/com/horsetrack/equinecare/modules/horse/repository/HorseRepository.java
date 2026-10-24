@@ -33,9 +33,7 @@ public interface HorseRepository extends JpaRepository<Horse, Integer> {
     @org.springframework.data.jpa.repository.Query("SELECT h FROM Horse h WHERE h.latestRegistrationStatus = 'REJECTED'")
     org.springframework.data.domain.Page<Horse> findRejected(org.springframework.data.domain.Pageable pageable);
 
-    boolean existsByPassportNoIgnoreCase(String passportNo);
 
-    boolean existsByPassportNoIgnoreCaseAndHorseIdNot(String passportNo, Integer horseId);
 
     long countByHealthStatus(String healthStatus);
 
