@@ -151,6 +151,8 @@ public class UserServiceImpl implements UserService {
                 .experienceYears(experienceYears)
                 .lastLogin("—")
                 .createdAt(user.getCreatedAt())
+                .emailConfirmed(user.getEmailVerifiedAt() != null)
+                .emailVerifiedAt(user.getEmailVerifiedAt())
                 .build();
     }
 

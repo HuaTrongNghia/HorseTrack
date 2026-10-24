@@ -2,9 +2,11 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **159 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **162 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 > **Bắt buộc trước khi chạy bản backend này:** chạy `DATABASE_fe_requests_schema.sql` trên DB (thêm cột ngưỡng / tạm dừng cho buổi tập, `Session_Readings.session_id`, chấn thương gắn với ngựa, `Users.avatar_url`, `Competition_Entries.proposal_note`). Chưa chạy script thì các API buổi tập, chấn thương, hồ sơ cá nhân, đề xuất thi đấu trả `500` "Invalid column name".
+>
+> **Và `DATABASE_staff_email_confirmation.sql`** (cột xác nhận email của `Users`; tài khoản đã có được coi là đã xác nhận). Chưa chạy thì đăng nhập và mọi API đọc người dùng trả `500` "Invalid column name 'email_verified_at'".
 >
 > **Và `DATABASE_owner_horse_registration.sql`** (cột `Horses.height_cm`, `Registration_Attachments.file_content`, chỉ mục số điện thoại không trùng `UX_Users_phone`). Chưa chạy thì API ngựa và giấy tờ hồ sơ trả `500` "Invalid column name".
 >
@@ -154,20 +156,27 @@ Cần **Authorize bằng token Club Manager**.
   "username": "groom01",
   "password": "groom123",
   "fullName": "Tran Van Groom",
-  "email": "groom01@test.com",
+  "email": "groom01@gmail.com",
   "phone": "0907654321",
   "roleName": "Groom",
-  "licenseNumber": null,
-  "specialization": "Khu A"
+  "licenseNumber": null
 }
 ```
 
 - `roleName` chỉ nhận `Trainer`, `Veterinarian`, `Groom` hoặc `Warehouse Manager`.
-- Lặp lại để tạo `vet01` (`"roleName": "Veterinarian"`, `"licenseNumber": "VET-001"`) và `trainer01` (`"roleName": "Trainer"`).
-- **Mong đợi:** `201` "Tạo tài khoản nhân viên thành công! Đã gửi tên đăng nhập và mật khẩu tới groom01@test.com."
-- Sau khi lưu tài khoản, hệ thống **gửi email** cho nhân viên gồm vai trò, tên đăng nhập và mật khẩu, kèm lời nhắc đổi mật khẩu sau lần đăng nhập đầu.
-  - Chế độ dev: message ghi "(Chế độ dev: email chưa gửi thật...)", nội dung email in trong console server.
-  - SMTP lỗi: tài khoản **vẫn được tạo**, message báo "KHÔNG gửi được email..." để Club Manager báo thông tin cho nhân viên theo cách khác.
+- `username`, `password` **bắt buộc** (Club Manager nhập). Nhân viên đăng nhập bằng tên đăng nhập, email hoặc số điện thoại cùng mật khẩu.
+- **Groom không còn được gán khu chuồng lúc tạo** (`specialization` bị bỏ qua với Groom); phân công khu bằng 3.9 sau khi Groom xác nhận.
+- **Mong đợi:** `201` "Tạo tài khoản nhân viên thành công! Nhân viên cần nhấn \"Xác nhận tài khoản\"... Đã gửi email xác nhận tới groom01@gmail.com."
+- **Email gửi nhân viên:** vai trò, nút **"Xác nhận tài khoản"** (hiệu lực `app.staff.confirm-ttl-hours` = 72 giờ), **tên đăng nhập, email và mật khẩu**, lời nhắc đổi mật khẩu sau lần đăng nhập đầu.
+  - Chế độ dev: liên kết xác nhận và mật khẩu in trong console server.
+  - SMTP lỗi: tài khoản **vẫn được tạo**, message báo "KHÔNG gửi được email..." → dùng gửi lại (dưới).
+- **Chưa xác nhận:**
+  - Đăng nhập → `403` "Tài khoản chưa được xác nhận. Hãy mở email từ HorseTrack và nhấn \"Xác nhận tài khoản\"."
+  - **HLV / Groom chưa được phân công** → `400` "Nhân viên ... chưa xác nhận tài khoản qua email, chưa thể ...": phân công HLV cho ngựa (3.8), khu chuồng cho Groom (3.9), buổi tập (6.5), việc chăm sóc (9.0). Groom chưa xác nhận không hiện trong 6.4 và `GET /horses/{id}/grooms`, không nhận việc cho ăn tự động.
+  - `GET /users`, `GET /users/{id}` có `emailConfirmed` (false) và `emailVerifiedAt` để FE hiển thị "Chờ xác nhận" và khóa nút phân công.
+- **Xác nhận:** nhân viên nhấn nút trong email → `GET /api/v1/auth/confirm-account?token=...` (không cần đăng nhập) → trang "Xác nhận thành công"; đặt `STAFF_LOGIN_URL` thì chuyển về trang đăng nhập FE kèm `?confirmed=true&message=...`. FE tự làm trang xác nhận thì gọi `POST /api/v1/auth/confirm-account` `{ "token": "..." }`. Liên kết chỉ dùng 1 lần; sai / đã dùng / hết hạn → `400`.
+- **Gửi lại email xác nhận:** `POST /api/v1/users/{id}/resend-confirmation` (`Club Manager`): gửi lại tên đăng nhập, **mật khẩu tạm mới** (hệ thống không lưu mật khẩu gốc nên không gửi lại được mật khẩu cũ) và liên kết mới (liên kết cũ hết hiệu lực). Nhân viên đã xác nhận → `400`.
+- Khi triển khai: đặt `STAFF_CONFIRM_URL` = địa chỉ công khai, ví dụ `http://103.245.237.252:8080/api/v1/auth/confirm-account` (mặc định `localhost` chỉ mở được trên máy chạy backend).
 - **Test lỗi:**
   - Không Authorize → `401`.
   - Authorize bằng owner → `403`.

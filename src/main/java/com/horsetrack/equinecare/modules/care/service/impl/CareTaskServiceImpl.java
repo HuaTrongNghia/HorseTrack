@@ -148,6 +148,7 @@ public class CareTaskServiceImpl implements CareTaskService {
         if (Boolean.FALSE.equals(groom.getIsActive())) {
             throw new IllegalArgumentException("Tài khoản Groom này đã bị vô hiệu hóa.");
         }
+        com.horsetrack.equinecare.modules.auth.service.StaffAccountService.requireConfirmed(groom, "giao việc chăm sóc");
 
         // F4-03 (BR35): Groom chỉ chăm sóc ngựa thuộc khu chuồng mình phụ trách
         String horseZone = horse.getStall().getBarnZone();

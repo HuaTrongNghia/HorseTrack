@@ -31,4 +31,6 @@ public class UserResponseDTO {
     private Integer experienceYears;
     private String lastLogin;
     private LocalDateTime createdAt;
+    private Boolean emailConfirmed;        // false: nhân viên chưa nhấn xác nhận trong email (HLV / Groom chưa phân công được)
+    private LocalDateTime emailVerifiedAt;
 }

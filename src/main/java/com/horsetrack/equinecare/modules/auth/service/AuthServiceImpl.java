@@ -44,6 +44,7 @@ public class AuthServiceImpl implements AuthService {
     private final EmailService emailService;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.notification.service.EmailDomainVerifier emailDomainVerifier;
+    private final StaffAccountService staffAccountService;
 
     /** Số điện thoại Việt Nam: 0xxxxxxxxx hoặc +84xxxxxxxxx */
     private static final java.util.regex.Pattern PHONE = java.util.regex.Pattern.compile("^(0|\\+84)\\d{9,10}$");
@@ -132,6 +133,7 @@ public class AuthServiceImpl implements AuthService {
                 .fullName(request.getFullName().trim())
                 .email(email)
                 .phone(phone)
+                .emailVerifiedAt(LocalDateTime.now())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .roleName("Horse Owner")
                 .isActive(true)
@@ -183,27 +185,36 @@ public class AuthServiceImpl implements AuthService {
 
     @Override
     @Transactional(rollbackFor = Exception.class)
-    public void createStaff(StaffCreateRequestDTO request) {
-        if (userRepository.existsByUsername(request.getUsername().trim())) {
+    public StaffAccountService.CreatedStaff createStaff(StaffCreateRequestDTO request) {
+        String email = normalizeEmail(request.getEmail());
+        String phone = normalizePhone(request.getPhone());
+        String username = request.getUsername().trim();
+        if (PHONE.matcher(username).matches()) {
+            throw new IllegalArgumentException("Tên đăng nhập không được có dạng số điện thoại.");
+        }
+        if (userRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Tên đăng nhập đã tồn tại.");
         }
-        if (userRepository.existsByEmail(request.getEmail().trim())) {
+        if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Email đã được sử dụng.");
         }
-        if (StringUtils.hasText(request.getPhone()) && userRepository.existsByPhone(request.getPhone().trim())) {
+        if (phone != null && userRepository.existsByPhone(phone)) {
             throw new IllegalArgumentException("Số điện thoại đã được sử dụng.");
         }
+        String rawPassword = request.getPassword();
 
         User newUser = User.builder()
-                .username(request.getUsername().trim())
+                .username(username)
                 .fullName(request.getFullName().trim())
-                .email(request.getEmail().trim())
-                .phone(request.getPhone() != null ? request.getPhone().trim() : null)
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .email(email)
+                .phone(phone)
+                .passwordHash(passwordEncoder.encode(rawPassword))
                 .roleName(request.getRoleName())
                 .isActive(true)
                 .createdAt(LocalDateTime.now())
                 .build();
+        // Chưa xác nhận: chưa đăng nhập, chưa được phân công tới khi nhân viên nhấn nút trong email
+        String rawToken = staffAccountService.newConfirmationToken(newUser);
 
         User savedUser = userRepository.save(newUser);
 
@@ -225,9 +236,9 @@ public class AuthServiceImpl implements AuthService {
                 vetRepo.save(vetProfile);
                 break;
             case "Groom":
+                // Khu chuồng phân công sau khi Groom xác nhận tài khoản (PUT /users/{id}/barn-zone)
                 GroomProfile groomProfile = GroomProfile.builder()
                 .user(savedUser)
-                .assignedBarnZone(request.getSpecialization())
                 .build();
                 groomRepo.save(groomProfile);
                 break;
@@ -238,7 +249,8 @@ public class AuthServiceImpl implements AuthService {
                 throw new IllegalArgumentException("Vai trò không hợp lệ: " + request.getRoleName());
         }
         auditTrail.record("CREATE_STAFF", "Users", null,
-                "Tạo tài khoản " + savedUser.getUsername() + " (user_id=" + savedUser.getUserId() + ", vai trò " + request.getRoleName() + ")");
+                "Tạo tài khoản " + savedUser.getEmail() + " (user_id=" + savedUser.getUserId() + ", vai trò " + request.getRoleName() + ") - chờ nhân viên xác nhận qua email");
+        return new StaffAccountService.CreatedStaff(savedUser, rawPassword, rawToken);
     }
 
     @Override
@@ -256,6 +268,10 @@ public class AuthServiceImpl implements AuthService {
         // Bước 2: So khớp mật khẩu raw với password_hash từ Database bằng PasswordEncoder
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new BadCredentialsException("Tên đăng nhập hoặc mật khẩu không chính xác");
+        }
+        // Nhân viên chưa nhấn "Xác nhận tài khoản" trong email
+        if (user.getEmailVerifiedAt() == null) {
+            throw new DisabledException("Tài khoản chưa được xác nhận. Hãy mở email từ HorseTrack và nhấn \"Xác nhận tài khoản\".");
         }
 
         // Bước 3, 4 & 5: Sinh JWT Token (chứa sub, userId, role) + refresh token và trả về kèm thông tin hạn dùng

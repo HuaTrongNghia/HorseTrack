@@ -25,6 +25,7 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final com.horsetrack.equinecare.modules.auth.service.StaffAccountService staffAccountService;
 
     private String getClientIp(HttpServletRequest request) {
         String xf = request.getHeader("X-Forwarded-For");
@@ -63,6 +64,17 @@ public class UserController {
     public ResponseEntity<ApiResponse<UserResponseDTO>> getUserById(@PathVariable Integer id) {
         UserResponseDTO response = userService.getUserById(id);
         return ResponseEntity.ok(ApiResponse.ok("Lấy chi tiết người dùng thành công", response));
+    }
+
+    // Nhân viên chưa xác nhận (mất email / liên kết hết hạn): tạo mật khẩu tạm mới và gửi lại email xác nhận
+    @PostMapping("/{id}/resend-confirmation")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @Operation(summary = "Gửi lại email xác nhận tài khoản nhân viên", description = "Chỉ khi nhân viên chưa xác nhận. Mật khẩu tạm mới và liên kết xác nhận mới được gửi trong email; liên kết cũ hết hiệu lực.")
+    public ResponseEntity<ApiResponse<Void>> resendConfirmation(@PathVariable Integer id) {
+        var created = staffAccountService.resend(id);
+        String message = staffAccountService.emailResultMessage(staffAccountService.sendAccountEmail(created), created.user().getEmail(),
+                "Đã tạo liên kết xác nhận và mật khẩu tạm mới.");
+        return ResponseEntity.ok(ApiResponse.ok(message, null));
     }
 
     @PutMapping("/{id}/lock")

@@ -20,6 +20,7 @@ public class StaffCreateRequestDTO {
     @ValidUsername
     private String username;
 
+    // Gửi trong email cùng tên đăng nhập và nút xác nhận tài khoản
     @NotBlank(message = "Mật khẩu là bắt buộc")
     @StrongPassword
     private String password;

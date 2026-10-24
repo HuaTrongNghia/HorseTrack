@@ -47,6 +47,8 @@ jobs:
           VNPAY_RETURN_URL: ${{ secrets.VNPAY_RETURN_URL }}
           VNPAY_FRONTEND_RESULT_URL: ${{ secrets.VNPAY_FRONTEND_RESULT_URL }}
           CORS_ALLOWED_ORIGINS: ${{ secrets.CORS_ALLOWED_ORIGINS }}
+          STAFF_CONFIRM_URL: ${{ secrets.STAFF_CONFIRM_URL }}
+          STAFF_LOGIN_URL: ${{ secrets.STAFF_LOGIN_URL }}
         run: |
           set -euo pipefail
           # QA H4: mật khẩu DB và JWT secret không còn giá trị mặc định trong code - thiếu thì dừng trước khi gỡ container đang chạy
@@ -59,7 +61,7 @@ jobs:
           # Chỉ truyền biến có giá trị: secret bỏ trống thì ứng dụng dùng giá trị mặc định trong application.properties
           ENV_FILE="$(mktemp)"
           trap 'rm -f "$ENV_FILE"' EXIT
-          for name in DB_PASSWORD JWT_SECRET DB_URL DB_USERNAME MAIL_USERNAME MAIL_PASSWORD VNPAY_TMN_CODE VNPAY_HASH_SECRET VNPAY_RETURN_URL VNPAY_FRONTEND_RESULT_URL CORS_ALLOWED_ORIGINS; do
+          for name in DB_PASSWORD JWT_SECRET DB_URL DB_USERNAME MAIL_USERNAME MAIL_PASSWORD VNPAY_TMN_CODE VNPAY_HASH_SECRET VNPAY_RETURN_URL VNPAY_FRONTEND_RESULT_URL CORS_ALLOWED_ORIGINS STAFF_CONFIRM_URL STAFF_LOGIN_URL; do
             if [[ -n "${!name:-}" ]]; then
               printf '%s=%s\n' "$name" "${!name}" >> "$ENV_FILE"
             fi

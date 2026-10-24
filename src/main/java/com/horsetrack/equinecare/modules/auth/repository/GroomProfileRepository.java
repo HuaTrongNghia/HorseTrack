@@ -8,9 +8,9 @@ import java.util.List;
 
 public interface GroomProfileRepository extends JpaRepository<GroomProfile, Integer> {
 
-    // Groom đang hoạt động phụ trách một khu chuồng (so khớp không phân biệt hoa thường, bỏ khoảng trắng đầu/cuối)
+    // Groom đang hoạt động, đã xác nhận tài khoản, phụ trách một khu chuồng (so khớp không phân biệt hoa thường, bỏ khoảng trắng đầu/cuối)
     @Query("SELECT gp FROM GroomProfile gp JOIN FETCH gp.user u " +
-            "WHERE u.roleName = 'Groom' AND u.isActive = true " +
+            "WHERE u.roleName = 'Groom' AND u.isActive = true AND u.emailVerifiedAt IS NOT NULL " +
             "AND LOWER(TRIM(gp.assignedBarnZone)) = LOWER(TRIM(:barnZone)) " +
             "ORDER BY u.fullName")
     List<GroomProfile> findActiveGroomsInZone(@Param("barnZone") String barnZone);

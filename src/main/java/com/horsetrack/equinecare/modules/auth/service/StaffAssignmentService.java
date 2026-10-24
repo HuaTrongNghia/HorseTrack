@@ -57,6 +57,7 @@ public class StaffAssignmentService {
         User groom = findGroom(userId);
         String newZone = StringUtils.hasText(barnZone) ? barnZone.trim() : null;
         if (newZone != null) {
+            StaffAccountService.requireConfirmed(groom, "phân công khu chuồng");
             String finalZone = newZone;
             newZone = stallRepository.findDistinctBarnZones().stream()
                     .filter(z -> z != null && z.trim().equalsIgnoreCase(finalZone))

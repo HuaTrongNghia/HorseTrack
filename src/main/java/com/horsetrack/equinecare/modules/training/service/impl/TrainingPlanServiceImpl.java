@@ -230,6 +230,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         if (Boolean.FALSE.equals(assignee.getIsActive())) {
             throw new IllegalArgumentException("Tài khoản Groom " + assignee.getFullName() + " đã bị vô hiệu hóa.");
         }
+        com.horsetrack.equinecare.modules.auth.service.StaffAccountService.requireConfirmed(assignee, "phân công buổi tập");
         String groomZone = groomProfileRepository.findById(assignee.getUserId())
                 .map(gp -> gp.getAssignedBarnZone())
                 .orElse(null);

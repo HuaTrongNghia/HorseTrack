@@ -11,7 +11,8 @@ public interface AuthService {
     String requestOwnerRegistrationOtp(OwnerRegisterRequestDTO request);
     /** Bước 2: xác thực OTP rồi tạo tài khoản. */
     void registerOwner(OwnerRegisterRequestDTO request);
-    void createStaff(StaffCreateRequestDTO request);
+    /** Tạo tài khoản nhân viên (chưa xác nhận); trả về mật khẩu / mã xác nhận gốc để gửi email */
+    StaffAccountService.CreatedStaff createStaff(StaffCreateRequestDTO request);
     LoginResponseDTO login(LoginDTO request);
     LoginResponseDTO refreshToken(RefreshTokenRequestDTO request);
     void logout(RefreshTokenRequestDTO request, String accessToken);

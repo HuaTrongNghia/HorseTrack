@@ -62,7 +62,7 @@ public class SecurityConfig {
                         // 2. Cấp quyền cho API Xác thực
                         .requestMatchers("/api/v1/auth/register-owner", "/api/v1/auth/login",
                                 "/api/v1/auth/refresh", "/api/v1/auth/logout",
-                                "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password").permitAll()
+                                "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password", "/api/v1/auth/confirm-account").permitAll()
                         .requestMatchers("/api/v1/auth/staff/**").hasAuthority("Club Manager")
                         // VNPay Sandbox gọi về (IPN server-to-server và Return của trình duyệt): không có JWT, xác thực bằng chữ ký HMAC
                         .requestMatchers("/api/v1/payments/vnpay/ipn", "/api/v1/payments/vnpay/return").permitAll()

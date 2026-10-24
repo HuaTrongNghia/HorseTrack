@@ -236,6 +236,7 @@ public class HorseServiceImpl implements HorseService {
         if (Boolean.FALSE.equals(trainer.getIsActive())) {
             throw new IllegalArgumentException("Tài khoản Trainer " + trainer.getFullName() + " đã bị vô hiệu hóa.");
         }
+        com.horsetrack.equinecare.modules.auth.service.StaffAccountService.requireConfirmed(trainer, "phân công phụ trách ngựa");
 
         User previous = horse.getAssignedTrainer();
         if (previous != null && previous.getUserId().equals(trainer.getUserId())) {

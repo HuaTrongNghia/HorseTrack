@@ -42,6 +42,17 @@ public class User {
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
+    // Xác nhận tài khoản qua email (nhân viên do Club Manager tạo); NULL = chưa xác nhận
+    @Column(name = "email_verified_at")
+    private LocalDateTime emailVerifiedAt;
+
+    // SHA-256 của mã xác nhận trong email (không lưu mã gốc)
+    @Column(name = "email_verify_token_hash", length = 64)
+    private String emailVerifyTokenHash;
+
+    @Column(name = "email_verify_expires_at")
+    private LocalDateTime emailVerifyExpiresAt;
+
     // =========================================================================
     // THIẾT LẬP QUAN HỆ 1-1 VỚI CÁC BẢNG HỒ SƠ CHUYÊN MÔN (PROFILES)
     // =========================================================================

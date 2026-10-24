@@ -85,17 +85,23 @@ public class EmailService {
         return sendAsync(to, "[HorseTrack] Mã OTP " + purposeLabel, wrap(body));
     }
 
-    /** Gửi thông tin đăng nhập ban đầu cho nhân viên do Club Manager tạo. */
-    public CompletableFuture<Void> sendStaffAccount(String to, String fullName, String roleName, String username, String rawPassword) {
+    /** Gửi tài khoản nhân viên do Club Manager tạo: tên đăng nhập, email, mật khẩu và nút xác nhận tài khoản. */
+    public CompletableFuture<Void> sendStaffAccount(String to, String fullName, String roleName, String username, String loginEmail, String rawPassword,
+                                                    String confirmLink, long confirmTtlHours) {
         String body = """
                 <p>Xin chào <b>%s</b>,</p>
                 <p>Quản lý CLB đã tạo tài khoản HorseTrack cho bạn với vai trò <b>%s</b>.</p>
+                <p>Hãy nhấn nút dưới đây để <b>xác nhận tài khoản</b>. Chưa xác nhận thì bạn chưa đăng nhập được và chưa được phân công công việc.</p>
+                <p style="margin:20px 0"><a href="%s" style="background:#1b4332;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Xác nhận tài khoản</a></p>
+                <p style="font-size:12px;color:#666">Liên kết có hiệu lực %d giờ. Nếu nút không mở được, sao chép đường dẫn: %s</p>
+                <p>Sau khi xác nhận, đăng nhập bằng <b>tên đăng nhập</b> (hoặc email) và mật khẩu:</p>
                 <table style="border-collapse:collapse;margin:12px 0">
                   <tr><td style="padding:4px 12px 4px 0">Tên đăng nhập:</td><td><b>%s</b></td></tr>
+                  <tr><td style="padding:4px 12px 4px 0">Email:</td><td><b>%s</b></td></tr>
                   <tr><td style="padding:4px 12px 4px 0">Mật khẩu:</td><td><b>%s</b></td></tr>
                 </table>
-                <p>Vì lý do bảo mật, hãy <b>đăng nhập và đổi mật khẩu ngay</b> sau lần đăng nhập đầu tiên, và xóa email này.</p>
-                """.formatted(esc(fullName), esc(roleName), esc(username), esc(rawPassword));
+                <p>Vì lý do bảo mật, hãy <b>đổi mật khẩu ngay</b> sau lần đăng nhập đầu tiên, và xóa email này.</p>
+                """.formatted(esc(fullName), esc(roleName), esc(confirmLink), confirmTtlHours, esc(confirmLink), esc(username), esc(loginEmail), esc(rawPassword));
         return sendAsync(to, "[HorseTrack] Tài khoản nhân viên của bạn", wrap(body));
     }
 
