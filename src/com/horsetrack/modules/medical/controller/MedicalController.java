@@ -24,9 +24,10 @@ public class MedicalController {
 
     private final MedicalService medicalService;
 
-    // API 1: Nút kích hoạt VetLock khẩn cấp (nhân viên trực tiếp chăm sóc/huấn luyện được bấm khi phát hiện chấn thương)
+    // API 1: Khóa huấn luyện (VetLock) - chỉ Bác sĩ thú y quyết định (QA H2).
+    // Trainer / Groom phát hiện chấn thương thì báo sự cố qua POST /cases để bác sĩ khám và quyết định khóa.
     @PostMapping("/vet-lock")
-    @PreAuthorize("hasAnyAuthority('Veterinarian', 'Trainer', 'Groom')")
+    @PreAuthorize("hasAuthority('Veterinarian')")
     public ResponseEntity<ApiResponse<String>> applyVetLock(@RequestBody VetLockRequestDTO dto) {
         try {
             medicalService.applyVetLock(dto);
