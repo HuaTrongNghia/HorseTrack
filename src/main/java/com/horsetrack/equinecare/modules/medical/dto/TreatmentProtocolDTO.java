@@ -44,6 +44,7 @@ public class TreatmentProtocolDTO {
     private LocalDateTime closedAt;
     private BigDecimal totalCost;
     private Boolean emergency;            // Ca cấp cứu (CRITICAL): không bị tạm dừng vì chưa thanh toán (BR_17)
+    private Boolean pendingSupplement;    // Đang điều trị và có thuốc bổ sung chờ kho cấp
     private List<Phase> phases;           // Chỉ có ở API chi tiết
     private List<StockAnswer> stockAnswer; // Kết quả kiểm kho của kho (chỉ có ở API chi tiết)
     private List<Note> progressNotes;     // Chỉ có ở API chi tiết

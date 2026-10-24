@@ -56,6 +56,8 @@ public class TreatmentProtocolMapper {
                 .closedAt(p.getClosedAt())
                 .totalCost(totalCost(p))
                 .emergency(phaseBilling.isEmergency(p))
+                .pendingSupplement("IN_TREATMENT".equals(p.getState())
+                        && !holdRepository.findByProtocolIdAndStatusIn(p.getProtocolId(), List.of("HELD", "SHORT")).isEmpty())
                 .build();
 
         if (detail) {

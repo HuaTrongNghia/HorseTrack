@@ -47,7 +47,15 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
     @Transactional(readOnly = true)
     public List<TreatmentProtocolDTO> getQueue(String state) {
         List<String> states = StringUtils.hasText(state) ? List.of(state.trim().toUpperCase()) : QUEUE_STATES;
-        return mapper.toSummaryList(protocolRepository.findByStateInOrderByRequiredByAscCreatedAtAsc(states));
+        List<TreatmentProtocol> list = new ArrayList<>(protocolRepository.findByStateInOrderByRequiredByAscCreatedAtAsc(states));
+        if (!StringUtils.hasText(state)) {
+            // Phác đồ đang điều trị có thuốc bổ sung chờ kho cấp
+            Set<Integer> pending = new HashSet<>(holdRepository.findProtocolIdsByStatusIn(List.of("HELD", "SHORT")));
+            protocolRepository.findByStateInOrderByRequiredByAscCreatedAtAsc(List.of("IN_TREATMENT")).stream()
+                    .filter(p -> pending.contains(p.getProtocolId()))
+                    .forEach(list::add);
+        }
+        return mapper.toSummaryList(list);
     }
 
     @Override
@@ -168,6 +176,9 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
             throw new IllegalArgumentException("Giai đoạn " + ph.getPhaseNo() + " của phác đồ " + protocol.getProtocolCode()
                     + " đã tới ngày bắt đầu nhưng chưa được thanh toán (BR_16), chưa thể cấp thuốc.");
         });
+        if ("IN_TREATMENT".equals(protocol.getState())) {
+            return dispenseSupplement(protocol);
+        }
         // BR_07: chỉ cấp thuốc sau khi bác sĩ xác nhận phương án kho
         if (!"VET_CONFIRMED".equals(protocol.getState())) {
             throw new IllegalArgumentException("Chỉ cấp thuốc khi bác sĩ đã xác nhận phác đồ (VET_CONFIRMED). Hiện tại: " + protocol.getState() + ".");
@@ -198,6 +209,71 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
             h.setStatus("RELEASED");
             holdRepository.save(h);
         }
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public StockHold holdSupplement(TreatmentProtocol protocol, InventoryItem item, double quantity, String note) {
+        double need = round2(quantity);
+        double available = round2(Math.max(0, stockLedger.availableLocked(item.getItemId())));
+        double held = Math.min(need, available);
+        if (held > 0) {
+            stockLedger.hold(item.getItemId(), held, "PROTOCOL", protocol.getProtocolId(), note);
+        }
+        return holdRepository.save(StockHold.builder()
+                .protocolId(protocol.getProtocolId())
+                .item(item)
+                .qtyNeeded(need)
+                .qtyAvailable(available)
+                .qtyHeld(held)
+                .status(held >= need ? "HELD" : "SHORT")
+                .checkedBy(stockLedger.currentUser())
+                .checkedAt(LocalDateTime.now())
+                .build());
+    }
+
+    /**
+     * Cấp thuốc bổ sung cho phác đồ đang điều trị: bù phần còn thiếu từ tồn kho hiện tại rồi cấp mọi phần đang giữ.
+     * Hóa đơn thuốc bổ sung phải thanh toán trước (trừ ca cấp cứu - BR_17).
+     */
+    private TreatmentProtocolDTO dispenseSupplement(TreatmentProtocol protocol) {
+        Integer protocolId = protocol.getProtocolId();
+        List<StockHold> pending = holdRepository.findByProtocolIdAndStatusIn(protocolId, List.of("HELD", "SHORT"));
+        if (pending.isEmpty()) {
+            throw new IllegalArgumentException("Phác đồ " + protocol.getProtocolCode() + " đang điều trị và không có thuốc bổ sung chờ cấp.");
+        }
+        if (!phaseBilling.isEmergency(protocol)) {
+            phaseBilling.openSupplementInvoices(protocolId).stream().findFirst().ifPresent(inv -> {
+                throw new IllegalArgumentException("Chủ ngựa chưa thanh toán hóa đơn thuốc bổ sung " + inv.getInvoiceCode() + ", chưa thể cấp thuốc bổ sung.");
+            });
+        }
+        String ref = "Giữ hàng thuốc bổ sung cho phác đồ " + protocol.getProtocolCode();
+        for (StockHold h : pending) {
+            if ("SHORT".equals(h.getStatus())) {
+                double missing = round2(h.getQtyNeeded() - h.getQtyHeld());
+                double available = round2(Math.max(0, stockLedger.availableLocked(h.getItem().getItemId())));
+                double extra = Math.min(missing, available);
+                if (extra > 0) {
+                    stockLedger.hold(h.getItem().getItemId(), extra, "PROTOCOL", protocolId, ref);
+                    h.setQtyHeld(round2(h.getQtyHeld() + extra));
+                    h.setQtyAvailable(Math.max(h.getQtyAvailable(), h.getQtyHeld()));
+                }
+                if (h.getQtyHeld() < h.getQtyNeeded()) {
+                    throw new IllegalArgumentException("Kho chưa đủ " + h.getItem().getItemName() + " cho thuốc bổ sung (thiếu "
+                            + StockLedgerService.fmt(h.getQtyNeeded() - h.getQtyHeld()) + " " + h.getItem().getUnit() + ").");
+                }
+                h.setStatus("HELD");
+            }
+        }
+        String note = "Cấp thuốc bổ sung cho phác đồ " + protocol.getProtocolCode();
+        for (StockHold h : pending) {
+            stockLedger.issueHeld(h.getItem().getItemId(), h.getQtyHeld(), "PROTOCOL", protocolId, note);
+            h.setStatus("ISSUED");
+            h.setCheckedBy(stockLedger.currentUser());
+            h.setCheckedAt(LocalDateTime.now());
+            holdRepository.save(h);
+        }
+        return mapper.toDTO(protocol, true);
     }
 
     // ==========================================

@@ -2,7 +2,7 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **158 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **159 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 > **Bắt buộc trước khi chạy bản backend này:** chạy `DATABASE_fe_requests_schema.sql` trên DB (thêm cột ngưỡng / tạm dừng cho buổi tập, `Session_Readings.session_id`, chấn thương gắn với ngựa, `Users.avatar_url`, `Competition_Entries.proposal_note`). Chưa chạy script thì các API buổi tập, chấn thương, hồ sơ cá nhân, đề xuất thi đấu trả `500` "Invalid column name".
 >
@@ -136,10 +136,11 @@ Server đọc tài khoản email từ **biến môi trường**, không ghi tron
 ### 1.2 `POST /api/v1/auth/login` — Đăng nhập
 
 ```json
-{ "username": "owner01", "password": "owner123" }
+{ "identifier": "owner01@gmail.com", "password": "owner123" }
 ```
 
-- Trường `username` nhận **tên đăng nhập, email hoặc số điện thoại** (`"owner01@gmail.com"`, `"0901234567"`, `"+84901234567"` đều được).
+- `identifier` nhận **email, số điện thoại hoặc tên đăng nhập** (`"owner01@gmail.com"`, `"0901234567"`, `"+84901234567"`, `"owner01"` đều được).
+- Vẫn nhận khóa cũ `username` (`{ "username": "0901234567", "password": "..." }`) để FE chưa đổi không bị lỗi.
 - **Mong đợi:** `200`. `data` gồm `accessToken`, `refreshToken`, `expiresIn` (900), `role`, `userId`.
 - **Ghi lại `userId`** của owner. Mục 3.1 và 3.2 sẽ cần nó.
 - **Test lỗi:** sai mật khẩu → `401` "Tên đăng nhập hoặc mật khẩu không chính xác".
@@ -1170,6 +1171,20 @@ Club Manager được **xem** danh mục thuốc và phác đồ (12.1, 12.3) nh
 
 - Chỉ khi chưa cấp thuốc. Hàng đã giữ được trả lại kho, phác đồ chuyển `CANCELLED`.
 
+### 12.10 `POST /api/v1/medical-management/protocols/{protocolId}/items` — Thêm thuốc khi phác đồ đang điều trị (`Veterinarian`)
+
+```json
+{ "phaseNo": 1, "itemId": 4, "quantity": 2, "dosage": "1 viên/ngày", "reason": "Ngựa còn đau khớp sau 3 ngày" }
+```
+
+- Chỉ khi phác đồ `IN_TREATMENT` (phác đồ chưa cấp thuốc thì dùng 12.6 tạo phiên bản mới). Giai đoạn phải chưa kết thúc. Chỉ kê Thuốc / Vaccine / Vật tư y tế.
+- **Không tạo phiên bản mới, phác đồ vẫn `IN_TREATMENT`.** Thuốc đã có trong giai đoạn thì **cộng thêm số lượng** vào dòng cũ, chưa có thì thêm dòng mới.
+- Kho **giữ ngay** phần bổ sung (`stockAnswer` thêm dòng `HELD`, hoặc `SHORT` nếu kho đang thiếu); DTO có `pendingSupplement = true`.
+- Chủ ngựa nhận **hóa đơn thuốc bổ sung** riêng, mã `GD-<protocol_id>-<phaseNo>-BS<n>` (chỉ tính phần thêm), kèm email. Hóa đơn giai đoạn gốc không đổi.
+- Tự ghi tiến trình "Bổ sung thuốc GĐ ...: ... Lý do: ..." và nhật ký `ADD_PROTOCOL_ITEM`.
+- **Test lỗi:** phác đồ không `IN_TREATMENT` → `400`; `phaseNo` không có → `400`; giai đoạn đã kết thúc → `400`; thức ăn / vật tư chuồng → `400`; thiếu `reason` hoặc dưới 5 ký tự → `400`; role khác bác sĩ → `403`.
+- **Kết thúc phác đồ (12.8)** khi thuốc bổ sung chưa cấp: hàng đang giữ được trả lại kho và hóa đơn bổ sung chưa thanh toán bị hủy.
+
 ---
 
 ## 12A. Inventory — `/api/v1/inventory` (`Warehouse Manager`)
@@ -1480,7 +1495,7 @@ Phần việc của kho trong luồng ở mục 12. Kho **không có quyền quy
 
 ### 12E.1 Xem phác đồ chờ kho
 
-- `GET /api/v1/inventory/protocols`: mặc định các phác đồ `WAITING_STOCK_CHECK`, `WAITING_RESTOCK`, `REQUIRES_VET_REVIEW`, `VET_CONFIRMED`, sắp theo ngày cần thuốc. Thêm `?state=...` để lọc một trạng thái.
+- `GET /api/v1/inventory/protocols`: mặc định các phác đồ `WAITING_STOCK_CHECK`, `WAITING_RESTOCK`, `REQUIRES_VET_REVIEW`, `VET_CONFIRMED`, cùng các phác đồ `IN_TREATMENT` có **thuốc bổ sung chờ cấp** (`pendingSupplement = true`, 12.10), sắp theo ngày cần thuốc. Thêm `?state=...` để lọc một trạng thái.
 - `GET /api/v1/inventory/protocols/{protocolId}`: thuốc theo giai đoạn và kết quả kiểm kho gần nhất.
 
 ### 12E.2 `PUT /api/v1/inventory/protocols/{protocolId}/stock-check` — Kiểm kho
@@ -1510,6 +1525,7 @@ Hệ thống tự cộng số lượng từng thuốc qua các giai đoạn và 
 - Chỉ khi bác sĩ đã xác nhận (`VET_CONFIRMED`). Xuất toàn bộ phần đã giữ: `heldStock` và `currentStock` cùng giảm, nhật ký kho có dòng `ISSUE` với `refType = "PROTOCOL"`.
 - **Mong đợi:** `200`, phác đồ chuyển `IN_TREATMENT`, các dòng `stockAnswer` chuyển `ISSUED`.
 - Cấp khi chưa xác nhận → `400`.
+- **Phác đồ `IN_TREATMENT` có thuốc bổ sung (12.10):** gọi cùng API này để cấp **phần bổ sung**. Dòng `SHORT` được bù từ tồn kho hiện tại; vẫn thiếu → `400` "Kho chưa đủ ...". Hóa đơn thuốc bổ sung (`...-BS<n>`) phải được chủ ngựa thanh toán trước → nếu chưa: `400` "Chủ ngựa chưa thanh toán hóa đơn thuốc bổ sung ..." (ca cấp cứu `CRITICAL` được cấp trước - BR_17). Cấp xong: phác đồ vẫn `IN_TREATMENT`, `pendingSupplement = false`. Không còn thuốc bổ sung chờ cấp → `400`.
 
 ### 12E.4 Đặt mua thuốc cho phác đồ (BR_07)
 
@@ -1587,6 +1603,7 @@ Dùng các bảng có sẵn `Invoices`, `Invoice_Line_Items`, `Payment_Transacti
    - **Bấm thanh toán lần nữa** khi giao dịch trước còn hạn (`app.vnpay.expire-minutes`, chừa 1 phút) và cùng số tiền: trả lại **đúng giao dịch cũ** (cùng `txnRef`, `transactionId`, `paymentUrl`), `data.reused = true`, không tạo giao dịch mới. Hết hạn hoặc số tiền đã đổi (phát sinh phí trễ hạn) thì tạo giao dịch mới, `reused = false`.
 2. Mở `paymentUrl` trên trình duyệt → trang VNPay Sandbox → chọn ngân hàng NCB, nhập thẻ test ở 12F.0.
 3. VNPay chuyển về `GET /api/v1/payments/vnpay/return?...`. Server kiểm tra chữ ký rồi **hỏi lại VNPay bằng `querydr`**. Chỉ khi VNPay xác nhận thành công và đúng số tiền thì giao dịch mới thành `VERIFIED` và hóa đơn thành `PAID`. Kết quả trả JSON `status = SUCCESS | FAILED | PENDING | INVALID`; nếu đặt `VNPAY_FRONTEND_RESULT_URL` thì chuyển hướng về trang đó kèm `?status=&invoiceId=&txnRef=`.
+   - **Tần suất hỏi VNPay (querydr):** VNPay trả mã **94** nếu hỏi lại cùng giao dịch quá sớm. Return URL luôn hỏi ngay; còn tải lại trang hóa đơn và tác vụ định kỳ chỉ hỏi khi giao dịch đã tạo quá `app.vnpay.querydr-interval-seconds` (mặc định 300 giây) **và** lần hỏi trước đã cách đủ khoảng đó. Gặp mã 94 thì giao dịch vẫn `PENDING_VERIFICATION`, ghi chú "VNPay từ chối truy vấn trùng lặp (mã 94), hỏi lại sau 5 phút" và được hỏi lại ở lần sau. Mã lỗi VNPay (91, 94, 99...) không còn bị ghi nhầm là "chữ ký không hợp lệ"; chỉ phản hồi mã 00 mới được kiểm tra chữ ký.
 4. Kiểm tra lại bằng 12F.5: hóa đơn biến khỏi danh sách mở, xuất hiện trong lịch sử thanh toán. Chủ ngựa nhận email biên nhận.
 
 - **IPN** `GET /api/v1/payments/vnpay/ipn`: VNPay gọi server-to-server. Muốn dùng thì khai báo URL công khai (ví dụ ngrok `https://xxxx.ngrok-free.app/api/v1/payments/vnpay/ipn`) trong trang quản trị merchant Sandbox. Trả `RspCode`: `00` thành công, `97` sai chữ ký, `01` không có giao dịch, `04` sai số tiền, `02` đã xử lý (idempotent).

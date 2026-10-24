@@ -58,6 +58,7 @@ public class MedicalManagementService {
     private final TreatmentProtocolMapper mapper;
     private final EntityManager entityManager;
     private final com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling phaseBilling;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
 
     // ==========================================
     // DANH MỤC THUỐC (chỉ đọc)
@@ -188,6 +189,81 @@ public class MedicalManagementService {
         return mapper.toDTO(protocol, true);
     }
 
+    /**
+     * Thêm thuốc khi phác đồ đang điều trị (không tạo phiên bản mới): cộng vào dòng thuốc của giai đoạn (cùng thuốc thì tăng số lượng),
+     * kho giữ ngay phần bổ sung, chủ ngựa nhận hóa đơn thuốc bổ sung; kho cấp phần bổ sung sau khi chủ ngựa thanh toán (trừ ca cấp cứu).
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public TreatmentProtocolDTO addItemDuringTreatment(Integer protocolId, ProtocolItemAddRequestDTO request) {
+        TreatmentProtocol protocol = findProtocol(protocolId);
+        if (!"IN_TREATMENT".equals(protocol.getState())) {
+            throw new IllegalArgumentException("Chỉ thêm thuốc khi phác đồ đang điều trị (IN_TREATMENT). Hiện tại: " + protocol.getState()
+                    + ". Phác đồ chưa cấp thuốc thì tạo phiên bản mới.");
+        }
+        ProtocolPhase phase = protocol.getPhases().stream()
+                .filter(ph -> ph.getPhaseNo().equals(request.getPhaseNo()))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Phác đồ " + protocol.getProtocolCode() + " không có giai đoạn " + request.getPhaseNo() + "."));
+        LocalDate phaseEnd = phase.getStartDate().plusDays(Math.max(1, phase.getDurationDays()) - 1L);
+        if (phaseEnd.isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Giai đoạn " + phase.getPhaseNo() + " đã kết thúc ngày " + phaseEnd + ", không thêm thuốc được.");
+        }
+        InventoryItem item = itemRepository.findById(request.getItemId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy thuốc/vật tư với ID: " + request.getItemId()));
+        if (!com.horsetrack.equinecare.modules.inventory.service.ItemCategories.isMedical(item.getCategory())) {
+            throw new IllegalArgumentException("'" + item.getItemName() + "' (nhóm " + item.getCategory()
+                    + ") không thuộc danh mục thuốc. Chỉ kê được Thuốc, Vaccine hoặc Vật tư y tế.");
+        }
+        double qty = BigDecimal.valueOf(request.getQuantity()).setScale(2, RoundingMode.HALF_UP).doubleValue();
+        String reason = request.getReason().trim();
+        String dosage = StringUtils.hasText(request.getDosage()) ? request.getDosage().trim() : null;
+
+        // Mỗi giai đoạn chỉ có một dòng cho mỗi thuốc (UQ_PI_phase_item): đã có thì tăng số lượng
+        ProtocolItem line = phase.getItems().stream()
+                .filter(it -> it.getItem().getItemId().equals(item.getItemId()))
+                .findFirst()
+                .orElse(null);
+        if (line == null) {
+            line = ProtocolItem.builder()
+                    .item(item)
+                    .quantity(qty)
+                    .unitPrice(item.getUnitPrice() != null ? item.getUnitPrice() : BigDecimal.ZERO)
+                    .dosage(dosage)
+                    .build();
+            phase.addItem(line);
+        } else {
+            line.setQuantity(BigDecimal.valueOf(line.getQuantity() + qty).setScale(2, RoundingMode.HALF_UP).doubleValue());
+            if (dosage != null) {
+                line.setDosage(dosage);
+            }
+        }
+        protocolRepository.saveAndFlush(protocol);
+        // Dòng mới được lưu qua cascade merge: lấy lại bản đã quản lý (có protocol_item_id) để gắn vào hóa đơn bổ sung
+        line = phase.getItems().stream()
+                .filter(it -> it.getItem().getItemId().equals(item.getItemId()))
+                .findFirst()
+                .orElseThrow();
+
+        String qtyText = BigDecimal.valueOf(qty).stripTrailingZeros().toPlainString() + " " + item.getUnit();
+        var hold = protocolStockService.holdSupplement(protocol, item, qty,
+                "Giữ hàng thuốc bổ sung cho phác đồ " + protocol.getProtocolCode() + ": " + item.getItemName() + " x " + qtyText);
+        var invoice = phaseBilling.issueSupplementInvoice(protocol, phase, line, BigDecimal.valueOf(qty), reason);
+
+        noteRepository.save(ProtocolProgressNote.builder()
+                .protocol(protocol)
+                .writtenBy(currentUser())
+                .writtenAt(LocalDateTime.now())
+                .content("Bổ sung thuốc GĐ " + phase.getPhaseNo() + ": " + item.getItemName() + " x " + qtyText
+                        + (dosage != null ? " (" + dosage + ")" : "") + ". Lý do: " + reason
+                        + ("SHORT".equals(hold.getStatus()) ? ". Kho đang thiếu hàng." : "")
+                        + invoice.map(i -> ". Hóa đơn " + i.getInvoiceCode()).orElse(""))
+                .build());
+        auditTrail.record("ADD_PROTOCOL_ITEM", "Protocol_Items", null,
+                "phác đồ " + protocol.getProtocolCode() + " | GĐ " + phase.getPhaseNo() + " | " + item.getItemName() + " x " + qtyText
+                        + " | kho " + hold.getStatus() + invoice.map(i -> " | hóa đơn " + i.getInvoiceCode()).orElse("") + " | " + reason);
+        return mapper.toDTO(protocol, true);
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public TreatmentProtocolDTO complete(Integer protocolId, ProtocolTextRequestDTO request) {
         TreatmentProtocol protocol = findProtocol(protocolId);
@@ -197,6 +273,14 @@ public class MedicalManagementService {
         }
         // Giai đoạn chưa bắt đầu thì không thu tiền nữa
         phaseBilling.cancelOpenPhaseInvoices(protocol, true, "Phác đồ " + protocol.getProtocolCode() + " kết thúc sớm");
+        // Thuốc bổ sung chưa cấp: trả hàng đang giữ và hủy hóa đơn bổ sung chưa thanh toán của thuốc đó
+        java.util.Map<Integer, Integer> lineItem = new java.util.HashMap<>();
+        protocol.getPhases().forEach(ph -> ph.getItems().forEach(it -> lineItem.put(it.getProtocolItemId(), it.getItem().getItemId())));
+        for (StockHold h : holdRepository.findByProtocolIdAndStatusIn(protocolId, List.of("HELD", "SHORT"))) {
+            phaseBilling.cancelSupplementInvoice(protocolId, h.getItem().getItemId(), lineItem::get,
+                    "Phác đồ " + protocol.getProtocolCode() + " kết thúc, thuốc bổ sung chưa cấp");
+        }
+        protocolStockService.releaseHolds(protocolId, "Trả hàng thuốc bổ sung chưa cấp do phác đồ " + protocol.getProtocolCode() + " kết thúc");
         protocol.setState("COMPLETED");
         protocol.setOutcome(request.getContent().trim());
         protocol.setClosedAt(LocalDateTime.now());

@@ -245,7 +245,7 @@ public class AuthServiceImpl implements AuthService {
     @Transactional(rollbackFor = Exception.class)
     public LoginResponseDTO login(LoginDTO request) {
         // Bước 1: tìm tài khoản theo tên đăng nhập, email hoặc số điện thoại
-        User user = findByLoginId(request.getUsername().trim())
+        User user = findByLoginId(request.getIdentifier().trim())
                 .orElseThrow(() -> new BadCredentialsException("Tên đăng nhập hoặc mật khẩu không chính xác"));
 
         // Kiểm tra xem tài khoản có đang hoạt động hay không

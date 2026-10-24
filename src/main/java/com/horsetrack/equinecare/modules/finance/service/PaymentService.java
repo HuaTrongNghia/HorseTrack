@@ -47,6 +47,13 @@ public class PaymentService {
     private final EntityManager entityManager;
     private final ProtocolPhaseBilling protocolPhaseBilling;
 
+    /** VNPay từ chối (mã 94) nếu hỏi lại cùng giao dịch trong khoảng giới hạn: giữ khoảng cách giữa 2 lần querydr */
+    @Value("${app.vnpay.querydr-interval-seconds:300}")
+    private long querydrIntervalSeconds;
+
+    // Thời điểm querydr gần nhất của từng giao dịch (vnp_TxnRef)
+    private final Map<String, java.time.Instant> lastQueried = new java.util.concurrent.ConcurrentHashMap<>();
+
     @Value("${app.vnpay.verify-on-return:true}")
     private boolean verifyOnReturn;
 
@@ -179,7 +186,7 @@ public class PaymentService {
         PaymentTransaction tx = lock(found.get());
 
         if (PaymentTransaction.PENDING_VERIFICATION.equals(tx.getPaymentStatus()) && verifyOnReturn) {
-            verifyWithVnPay(tx, clientIp, "Return");
+            verifyWithVnPay(tx, clientIp, "Return");   // trình duyệt vừa quay về: luôn hỏi
         }
         return result(tx, responseCode);
     }
@@ -189,6 +196,7 @@ public class PaymentService {
      * hoặc khi trình duyệt không quay về Return URL. Kết quả mỗi lần hỏi được ghi vào ghi chú giao dịch.
      */
     private void verifyWithVnPay(PaymentTransaction tx, String clientIp, String source) {
+        lastQueried.put(tx.getTransactionRef(), java.time.Instant.now());
         VnPayGateway.QueryResult q = vnPay.queryTransaction(tx.getTransactionRef(), orderInfo(tx.getInvoice()), txnTime(tx), clientIp);
         if (q.paid() && q.amount() != null && q.amount().compareTo(tx.getAmountPaid()) == 0) {
             finish(tx, true, q.transactionNo(), q.responseCode(), "querydr/" + source);
@@ -207,6 +215,7 @@ public class PaymentService {
             return;
         }
         String detail = q.paid() ? "số tiền VNPay " + q.amount() + " khác số tiền giao dịch " + tx.getAmountPaid()
+                : q.duplicateRequest() ? "VNPay từ chối truy vấn trùng lặp (mã 94), hỏi lại sau " + (querydrIntervalSeconds / 60) + " phút"
                 : "chưa xác nhận - mã " + q.responseCode() + ", trạng thái " + q.transactionStatus() + (q.message() != null ? ", " + q.message() : "");
         tx.setNotes(truncate(stamp() + " " + source + " querydr: " + detail));
         transactionRepository.save(tx);
@@ -229,6 +238,8 @@ public class PaymentService {
         if (!vnPay.isConfigured()) {
             return;
         }
+        java.time.Instant dayAgo = java.time.Instant.now().minusSeconds(86_400);
+        lastQueried.values().removeIf(t -> t.isBefore(dayAgo));
         int n = recheck(transactionRepository.findByPaymentStatusAndPaidAtAfterOrderByPaidAtAsc(PaymentTransaction.PENDING_VERIFICATION,
                 LocalDateTime.now().minusDays(3)), "127.0.0.1", "Định kỳ");
         if (n > 0) {
@@ -240,6 +251,9 @@ public class PaymentService {
     private int recheck(java.util.List<PaymentTransaction> pending, String clientIp, String source) {
         int done = 0;
         for (PaymentTransaction t : pending) {
+            if (!queryDue(t)) {
+                continue;
+            }
             try {
                 PaymentTransaction tx = lock(t);
                 if (!PaymentTransaction.PENDING_VERIFICATION.equals(tx.getPaymentStatus())) {
@@ -254,6 +268,20 @@ public class PaymentService {
             }
         }
         return done;
+    }
+
+    /**
+     * Tải lại trang / định kỳ chỉ hỏi VNPay khi giao dịch đã tạo quá khoảng giới hạn (chủ ngựa có thời gian thanh toán,
+     * Return URL được hỏi trước) và lần hỏi trước đã cách đủ khoảng giới hạn - tránh mã 94.
+     */
+    boolean queryDue(PaymentTransaction tx) {
+        java.time.Instant now = java.time.Instant.now();
+        java.time.Instant last = lastQueried.get(tx.getTransactionRef());
+        if (last != null && last.plusSeconds(querydrIntervalSeconds).isAfter(now)) {
+            return false;
+        }
+        LocalDateTime created = tx.getPaidAt();
+        return created == null || !created.plusSeconds(querydrIntervalSeconds).isAfter(LocalDateTime.now());
     }
 
     private static String stamp() {

@@ -34,6 +34,8 @@ import java.util.regex.Pattern;
  *   kho không được cấp thuốc, bác sĩ không ghi tiến trình (BR_16).
  * - Ngoại lệ BR_17: phác đồ của ca cấp cứu (Vet_Cases.severity = CRITICAL) không bị tạm dừng vì chưa thanh toán.
  * - Thanh toán xong (giao dịch VNPay đã xác minh) thì phác đồ tự tiếp tục: IN_TREATMENT nếu đã cấp thuốc, ngược lại VET_CONFIRMED.
+ * - Thuốc bổ sung khi đang điều trị: hóa đơn riêng mã GD-&lt;protocol_id&gt;-&lt;phase_no&gt;-BS&lt;n&gt;; chưa thanh toán thì kho chưa cấp
+ *   phần bổ sung (trừ ca cấp cứu) nhưng phác đồ không bị tạm dừng.
  */
 @Slf4j
 @Service
@@ -44,6 +46,8 @@ public class ProtocolPhaseBilling {
     /** Trạng thái phác đồ còn hiệu lực có thể bị tạm dừng vì chưa thanh toán */
     public static final List<String> PAYABLE_STATES = List.of("VET_CONFIRMED", "READY_FOR_DISPENSING", "IN_TREATMENT");
     private static final Pattern CODE = Pattern.compile("^GD-(\\d{6})-(\\d{2})");
+    /** Đoạn mã của hóa đơn thuốc bổ sung */
+    public static final String SUPPLEMENT_MARK = "-BS";
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
     private final InvoiceRepository invoiceRepository;
@@ -131,17 +135,94 @@ public class ProtocolPhaseBilling {
             if (onlyNotStarted && !phase.getStartDate().isAfter(today)) {
                 continue;
             }
-            Optional<Invoice> inv = findPhaseInvoice(protocol.getProtocolId(), phase.getPhaseNo());
-            if (inv.isPresent() && inv.get().isOpen() && inv.get().getTransactions().stream()
-                    .noneMatch(t -> "VERIFIED".equals(t.getPaymentStatus()) || "PENDING_VERIFICATION".equals(t.getPaymentStatus()))) {
-                inv.get().setPaymentStatus(Invoice.CANCELLED);
-                invoiceRepository.save(inv.get());
-                auditTrail.record("CANCEL_INVOICE", "Invoices", "payment_status=OPEN",
-                        "payment_status=CANCELLED | " + inv.get().getInvoiceCode() + " | " + reason);
-                n++;
+            for (Invoice inv : phaseInvoices(protocol.getProtocolId(), phase.getPhaseNo(), true)) {
+                if (cancelIfUnpaid(inv, reason)) {
+                    n++;
+                }
             }
         }
         return n;
+    }
+
+    /**
+     * Thuốc bổ sung khi phác đồ đang điều trị: lập hóa đơn riêng cho phần thêm (số lượng thêm x đơn giá).
+     * Trả về hóa đơn, hoặc rỗng nếu thuốc không có giá.
+     */
+    @Transactional
+    public Optional<Invoice> issueSupplementInvoice(TreatmentProtocol protocol, ProtocolPhase phase, ProtocolItem line, BigDecimal addedQty, String reason) {
+        if (line.getUnitPrice() == null || line.getUnitPrice().signum() <= 0 || addedQty.signum() <= 0) {
+            return Optional.empty();
+        }
+        LocalDate today = LocalDate.now();
+        String name = line.getItem() != null ? line.getItem().getItemName() : "Thuốc";
+        String desc = "Thuốc bổ sung - phác đồ " + protocol.getProtocolCode() + " - GĐ " + phase.getPhaseNo() + ": " + name;
+        InvoiceLineItem l = InvoiceLineItem.builder()
+                .expenseCategory("MEDICATION")
+                .referenceId(line.getProtocolItemId())
+                .itemDescription(desc.length() > 255 ? desc.substring(0, 255) : desc)
+                .unitPrice(line.getUnitPrice())
+                .quantity(addedQty)
+                .serviceDate(LocalDateTime.now())
+                .build();
+        BigDecimal total = BillingPolicy.vnd(l.getAmount());
+        String base = baseCode(protocol.getProtocolId(), phase.getPhaseNo()) + SUPPLEMENT_MARK;
+        int no = 1;
+        while (invoiceRepository.existsByInvoiceCode(base + no)) {
+            no++;
+        }
+        Invoice invoice = Invoice.builder()
+                .invoiceCode(base + no)
+                .horse(protocol.getHorse())
+                .owner(protocol.getHorse().getOwner())
+                .billingMonth(YearMonth.from(today).toString())
+                .subtotalAmount(total)
+                .prizeDeductionAmount(BigDecimal.ZERO)
+                .finalPayableAmount(total)
+                .paymentStatus(Invoice.UNPAID)
+                .issuedAt(LocalDateTime.now())
+                .dueDate(phase.getStartDate().isAfter(today) ? phase.getStartDate() : today)
+                .build();
+        l.setInvoice(invoice);
+        invoice.getLines().add(l);
+        invoiceRepository.saveAndFlush(invoice);
+        auditTrail.record("ISSUE_SUPPLEMENT_INVOICE", "Invoices", null, invoice.getInvoiceCode() + " | phác đồ " + protocol.getProtocolCode()
+                + " | GĐ " + phase.getPhaseNo() + " | " + name + " x " + addedQty.stripTrailingZeros().toPlainString() + " | " + InvoiceGenerator.money(total));
+        invoiceService.notify(protocol.getHorse().getOwner(), "[HorseTrack] Hóa đơn thuốc bổ sung cho ngựa " + protocol.getHorse().getHorseName(),
+                "<p>Bác sĩ bổ sung <b>" + HtmlUtils.htmlEscape(name) + "</b> (số lượng " + addedQty.stripTrailingZeros().toPlainString()
+                        + ") vào phác đồ <b>" + protocol.getProtocolCode() + "</b> của ngựa <b>" + HtmlUtils.htmlEscape(protocol.getHorse().getHorseName())
+                        + "</b>.</p><p>Lý do: " + HtmlUtils.htmlEscape(reason) + "</p><p>Hóa đơn <b>" + invoice.getInvoiceCode() + "</b>: "
+                        + InvoiceGenerator.money(total) + ". Vui lòng thanh toán qua VNPay để kho cấp thuốc bổ sung.</p>");
+        return Optional.of(invoice);
+    }
+
+    /** Hóa đơn thuốc bổ sung còn mở của phác đồ */
+    @Transactional(readOnly = true)
+    public List<Invoice> openSupplementInvoices(Integer protocolId) {
+        return invoiceRepository.findByInvoiceCodeStartingWithAndPaymentStatusNotOrderByInvoiceIdDesc(String.format("GD-%06d-", protocolId), Invoice.CANCELLED)
+                .stream().filter(i -> i.getInvoiceCode().contains(SUPPLEMENT_MARK) && i.isOpen()).toList();
+    }
+
+    /** Hủy hóa đơn thuốc bổ sung chưa thanh toán của một vật tư (thuốc bổ sung chưa cấp mà phác đồ kết thúc). */
+    @Transactional
+    public boolean cancelSupplementInvoice(Integer protocolId, Integer itemId, java.util.function.Function<Integer, Integer> itemOfProtocolLine, String reason) {
+        for (Invoice inv : openSupplementInvoices(protocolId)) {
+            boolean forItem = inv.getLines().stream().anyMatch(l -> l.getReferenceId() != null && itemId.equals(itemOfProtocolLine.apply(l.getReferenceId())));
+            if (forItem && cancelIfUnpaid(inv, reason)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean cancelIfUnpaid(Invoice inv, String reason) {
+        if (!inv.isOpen() || inv.getTransactions().stream()
+                .anyMatch(t -> "VERIFIED".equals(t.getPaymentStatus()) || "PENDING_VERIFICATION".equals(t.getPaymentStatus()))) {
+            return false;
+        }
+        inv.setPaymentStatus(Invoice.CANCELLED);
+        invoiceRepository.save(inv);
+        auditTrail.record("CANCEL_INVOICE", "Invoices", "payment_status=OPEN", "payment_status=CANCELLED | " + inv.getInvoiceCode() + " | " + reason);
+        return true;
     }
 
     // ==========================================
@@ -166,7 +247,7 @@ public class ProtocolPhaseBilling {
         }
         return protocol.getPhases().stream()
                 .filter(ph -> !ph.getStartDate().isAfter(today))
-                .filter(ph -> findPhaseInvoice(protocol.getProtocolId(), ph.getPhaseNo()).map(Invoice::isOpen).orElse(false))
+                .filter(ph -> phaseInvoices(protocol.getProtocolId(), ph.getPhaseNo(), false).stream().anyMatch(Invoice::isOpen))
                 .min(Comparator.comparing(ProtocolPhase::getPhaseNo));
     }
 
@@ -220,7 +301,7 @@ public class ProtocolPhaseBilling {
 
     private void hold(TreatmentProtocol protocol, ProtocolPhase phase) {
         String old = protocol.getState();
-        Invoice inv = findPhaseInvoice(protocol.getProtocolId(), phase.getPhaseNo()).orElseThrow();
+        Invoice inv = phaseInvoices(protocol.getProtocolId(), phase.getPhaseNo(), false).stream().filter(Invoice::isOpen).findFirst().orElseThrow();
         protocol.setState(ON_HOLD);
         protocol.setNote(appendNote(protocol.getNote(), "Tạm dừng " + LocalDate.now().format(DATE) + ": chưa thanh toán giai đoạn "
                 + phase.getPhaseNo() + " (" + inv.getInvoiceCode() + ") - BR_16"));
@@ -250,11 +331,16 @@ public class ProtocolPhaseBilling {
     // TRA CỨU
     // ==========================================
 
-    /** Hóa đơn (chưa hủy) mới nhất của một giai đoạn */
+    /** Hóa đơn (chưa hủy) mới nhất của một giai đoạn (không tính hóa đơn thuốc bổ sung) */
     @Transactional(readOnly = true)
     public Optional<Invoice> findPhaseInvoice(Integer protocolId, Integer phaseNo) {
+        return phaseInvoices(protocolId, phaseNo, false).stream().findFirst();
+    }
+
+    // Hóa đơn chưa hủy của giai đoạn, mới nhất trước; withSupplements = kèm hóa đơn thuốc bổ sung
+    private List<Invoice> phaseInvoices(Integer protocolId, Integer phaseNo, boolean withSupplements) {
         return invoiceRepository.findByInvoiceCodeStartingWithAndPaymentStatusNotOrderByInvoiceIdDesc(baseCode(protocolId, phaseNo), Invoice.CANCELLED)
-                .stream().findFirst();
+                .stream().filter(i -> withSupplements || !i.getInvoiceCode().contains(SUPPLEMENT_MARK)).toList();
     }
 
     private String nextCode(Integer protocolId, Integer phaseNo) {

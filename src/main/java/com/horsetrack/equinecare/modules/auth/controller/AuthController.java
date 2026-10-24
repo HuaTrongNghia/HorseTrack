@@ -105,7 +105,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    @Operation(summary = "Đăng nhập hệ thống", description = "Nhận JWT Token để gọi các API khác")
+    @Operation(summary = "Đăng nhập hệ thống", description = "Đăng nhập bằng email hoặc số điện thoại (hoặc tên đăng nhập) và mật khẩu; nhận JWT Token để gọi các API khác. Trường identifier cũng nhận khóa cũ username.")
     public ResponseEntity<ApiResponse<LoginResponseDTO>> login(@Valid @RequestBody LoginDTO loginRequest) {
 
         // Gọi hàm login vừa tạo trong AuthService

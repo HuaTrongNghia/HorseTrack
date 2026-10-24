@@ -115,12 +115,29 @@ public class VnPayGateway {
         return hmacSha512(hashSecret, encodeSorted(fields)).equalsIgnoreCase(received);
     }
 
-    /** Kết quả truy vấn giao dịch phía server (querydr) */
+    /**
+     * Kết quả truy vấn giao dịch phía server (querydr). ok = nhận được phản hồi hợp lệ từ VNPay: mã 00 phải đúng chữ ký;
+     * mã lỗi (91, 94, 99...) VNPay không ký đủ trường nên chỉ dùng để biết lý do, không bao giờ làm hóa đơn thành đã thanh toán.
+     */
     public record QueryResult(boolean ok, String responseCode, String transactionStatus, BigDecimal amount, String transactionNo, String message) {
         public boolean paid() {
             return ok && "00".equals(responseCode) && "00".equals(transactionStatus);
         }
+
+        /** VNPay từ chối vì hỏi lại cùng giao dịch quá sớm */
+        public boolean duplicateRequest() {
+            return "94".equals(responseCode);
+        }
     }
+
+    // Mã phản hồi lỗi của querydr theo tài liệu VNPay
+    private static final Map<String, String> QUERY_ERRORS = Map.of(
+            "02", "Merchant không hợp lệ (kiểm tra VNPAY_TMN_CODE)",
+            "03", "Dữ liệu gửi sang không đúng định dạng",
+            "91", "VNPay không tìm thấy giao dịch",
+            "94", "Yêu cầu trùng lặp: đã hỏi giao dịch này trong thời gian giới hạn của VNPay, sẽ hỏi lại sau",
+            "97", "VNPay báo chữ ký yêu cầu không hợp lệ (kiểm tra VNPAY_HASH_SECRET)",
+            "99", "Lỗi khác từ VNPay");
 
     /**
      * Hỏi VNPay trạng thái thật của giao dịch (server-to-server). Dùng khi trình duyệt quay về Return URL, để xác minh
@@ -154,26 +171,40 @@ public class VnPayGateway {
             HttpResponse<String> res = http.send(req, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             @SuppressWarnings("unchecked")
             Map<String, Object> r = objectMapper.readValue(res.body(), Map.class);
-
-            String responseCode = str(r.get("vnp_ResponseCode"));
-            // Chữ ký phản hồi querydr theo tài liệu VNPay
-            String respData = String.join("|", str(r.get("vnp_ResponseId")), str(r.get("vnp_Command")), responseCode,
-                    str(r.get("vnp_Message")), str(r.get("vnp_TmnCode")), str(r.get("vnp_TxnRef")), str(r.get("vnp_Amount")),
-                    str(r.get("vnp_BankCode")), str(r.get("vnp_PayDate")), str(r.get("vnp_TransactionNo")),
-                    str(r.get("vnp_TransactionType")), str(r.get("vnp_TransactionStatus")), str(r.get("vnp_OrderInfo")),
-                    str(r.get("vnp_PromotionCode")), str(r.get("vnp_PromotionAmount")));
-            boolean signed = hmacSha512(hashSecret, respData).equalsIgnoreCase(str(r.get("vnp_SecureHash")));
-            if (!signed) {
-                log.warn("querydr {}: chữ ký phản hồi không hợp lệ (mã {}, {})", txnRef, responseCode, r.get("vnp_Message"));
-                return new QueryResult(false, responseCode, null, null, null, "Chữ ký phản hồi querydr không hợp lệ");
-            }
-            BigDecimal amount = StringUtils.hasText(str(r.get("vnp_Amount"))) ? new BigDecimal(str(r.get("vnp_Amount"))).movePointLeft(2) : null;
-            return new QueryResult(true, responseCode, str(r.get("vnp_TransactionStatus")), amount,
-                    str(r.get("vnp_TransactionNo")), str(r.get("vnp_Message")));
+            return parseQueryResponse(txnRef, r);
         } catch (Exception ex) {
             log.warn("querydr {} thất bại: {}", txnRef, ex.getMessage());
             return new QueryResult(false, null, null, null, null, ex.getMessage());
         }
+    }
+
+    /** Đọc phản hồi querydr: mã 00 kiểm tra chữ ký; mã lỗi trả về lý do mà không coi là sai chữ ký */
+    QueryResult parseQueryResponse(String txnRef, Map<String, Object> r) {
+        String responseCode = str(r.get("vnp_ResponseCode"));
+        if (!StringUtils.hasText(responseCode)) {
+            return new QueryResult(false, null, null, null, null, "Phản hồi querydr không có mã kết quả");
+        }
+        if (!"00".equals(responseCode)) {
+            String reason = QUERY_ERRORS.getOrDefault(responseCode, "VNPay trả mã " + responseCode);
+            String vnpMessage = str(r.get("vnp_Message"));
+            log.info("querydr {}: VNPay trả mã lỗi {} ({})", txnRef, responseCode, vnpMessage);
+            return new QueryResult(true, responseCode, null, null, null,
+                    reason + (StringUtils.hasText(vnpMessage) ? " - " + vnpMessage : ""));
+        }
+        // Chữ ký phản hồi querydr theo tài liệu VNPay
+        String respData = String.join("|", str(r.get("vnp_ResponseId")), str(r.get("vnp_Command")), responseCode,
+                str(r.get("vnp_Message")), str(r.get("vnp_TmnCode")), str(r.get("vnp_TxnRef")), str(r.get("vnp_Amount")),
+                str(r.get("vnp_BankCode")), str(r.get("vnp_PayDate")), str(r.get("vnp_TransactionNo")),
+                str(r.get("vnp_TransactionType")), str(r.get("vnp_TransactionStatus")), str(r.get("vnp_OrderInfo")),
+                str(r.get("vnp_PromotionCode")), str(r.get("vnp_PromotionAmount")));
+        boolean signed = hmacSha512(hashSecret, respData).equalsIgnoreCase(str(r.get("vnp_SecureHash")));
+        if (!signed) {
+            log.warn("querydr {}: chữ ký phản hồi không hợp lệ (mã {}, {})", txnRef, responseCode, r.get("vnp_Message"));
+            return new QueryResult(false, responseCode, null, null, null, "Chữ ký phản hồi querydr không hợp lệ");
+        }
+        BigDecimal amount = StringUtils.hasText(str(r.get("vnp_Amount"))) ? new BigDecimal(str(r.get("vnp_Amount"))).movePointLeft(2) : null;
+        return new QueryResult(true, responseCode, str(r.get("vnp_TransactionStatus")), amount,
+                str(r.get("vnp_TransactionNo")), str(r.get("vnp_Message")));
     }
 
     /** VNPay nhận số tiền x100, không có phần thập phân */
