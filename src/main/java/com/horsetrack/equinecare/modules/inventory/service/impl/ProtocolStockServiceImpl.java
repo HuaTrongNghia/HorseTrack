@@ -201,6 +201,26 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
         return mapper.toDTO(protocol, true);
     }
 
+    private static final Set<String> RECEIPT_RECHECK_STATES = Set.of("WAITING_STOCK_CHECK", "STOCK_SHORTAGE", "WAITING_RESTOCK", "REQUIRES_VET_REVIEW");
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void recheckAfterReceipt(Integer protocolId) {
+        TreatmentProtocol protocol = protocolRepository.findById(protocolId).orElse(null);
+        if (protocol == null || !RECEIPT_RECHECK_STATES.contains(protocol.getState())) {
+            return;
+        }
+        StockCheckRequestDTO request = new StockCheckRequestDTO();
+        request.setNote("Kiểm lại sau khi nhập hàng");
+        TreatmentProtocolDTO checked = checkStock(protocolId, request);
+        if ("STOCK_SHORTAGE".equals(checked.getState())) {
+            TreatmentProtocol again = findProtocol(protocolId);
+            again.setState("REQUIRES_VET_REVIEW");
+            again.setIsDelayed(again.getWaitEta() != null && again.getRequiredBy() != null && again.getWaitEta().isAfter(again.getRequiredBy()));
+            protocolRepository.save(again);
+        }
+    }
+
     @Override
     @Transactional(readOnly = true)
     public List<DispensingHistory.Record> dispensingHistory(Integer protocolId) {

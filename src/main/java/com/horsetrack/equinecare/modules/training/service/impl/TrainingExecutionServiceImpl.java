@@ -34,6 +34,7 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.training.service.SessionReadingView sessionReadingView;
     private final com.horsetrack.equinecare.modules.training.service.TrainingPlanLifecycle planLifecycle;
+    private final com.horsetrack.equinecare.modules.training.service.SessionVetLink sessionVetLink;
 
     private User getLoggedInUser() {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -52,6 +53,7 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
                 user.getUserId(), startOfDay, endOfDay);
 
         var readings = sessionReadingView.load(sessions);
+        var caseCodes = sessionVetLink.caseCodes(sessions.stream().map(TrainingSession::getSessionId).toList());
         return sessions.stream().map(session -> {
             String horseName = null;
             String stallZone = null;
@@ -83,6 +85,7 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
                     .pausedReason(session.getPausedReason())
                     .readings(sessionReadingView.phase(readings.get(session.getSessionId()), com.horsetrack.equinecare.modules.training.entity.SessionReading.PHASE_SESSION))
                     .recovery(sessionReadingView.phase(readings.get(session.getSessionId()), com.horsetrack.equinecare.modules.training.entity.SessionReading.PHASE_RECOVERY))
+                    .vetCaseCode(caseCodes.get(session.getSessionId()))
                     .build();
         }).collect(Collectors.toList());
     }
@@ -160,22 +163,17 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
 
     @Override
     @Transactional
-    public String stopSession(Integer sessionId, com.horsetrack.equinecare.modules.training.dto.SessionStopRequestDTO request) {
+    public com.horsetrack.equinecare.modules.training.dto.SessionStopResultDTO stopSession(Integer sessionId, com.horsetrack.equinecare.modules.training.dto.SessionStopRequestDTO request) {
         User user = getLoggedInUser();
         TrainingSession session = trainingSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new com.horsetrack.equinecare.common.exception.ResourceNotFoundException("Không tìm thấy buổi tập với ID: " + sessionId));
         TrainingPlan plan = session.getTrainingPlan();
         com.horsetrack.equinecare.modules.horse.entity.Horse horse = plan != null ? plan.getHorse() : null;
 
-        // HLV phụ trách ngựa, Quản lý CLB hoặc Groom được giao buổi tập
-        boolean isTrainer = "Trainer".equalsIgnoreCase(user.getRoleName());
-        boolean isManager = "Club Manager".equalsIgnoreCase(user.getRoleName());
-        boolean isAssignedGroom = session.getAssignedTo() != null && session.getAssignedTo().getUserId().equals(user.getUserId());
-        if (isTrainer) {
-            horseAccessGuard.checkAssigned(horse);
-        } else if (!isManager && !isAssignedGroom) {
-            throw new AccessDeniedException("Bạn không được phân công buổi tập này");
+        if (!"Trainer".equalsIgnoreCase(user.getRoleName())) {
+            throw new AccessDeniedException("Chỉ HLV phụ trách ngựa mới được dừng buổi tập");
         }
+        horseAccessGuard.checkAssigned(horse);
         if (!TrainingPlanActivator.SESSION_PAUSED_PENDING_TRAINER.equalsIgnoreCase(session.getStatus())) {
             throw new IllegalArgumentException("Chỉ dừng được buổi tập đang tạm dừng chờ HLV quyết định (hiện tại: " + session.getStatus() + ").");
         }
@@ -189,7 +187,6 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
 
         String caseCode = null;
         if (requestVet && horse != null) {
-            // Gửi ca cho bác sĩ; buổi tập chờ bác sĩ quyết định khóa hay không khóa huấn luyện
             session.setStatus(TrainingPlanActivator.SESSION_WAITING_VET);
             var vetCase = vetCaseRepository.saveAndFlush(com.horsetrack.equinecare.modules.medical.entity.VetCase.builder()
                     .horse(horse)
@@ -199,15 +196,16 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
                             + (readings.isEmpty() ? "" : " - " + readings) + ". " + reason)
                     .severity(request.getSeverity() == null ? "HIGH" : request.getSeverity())
                     .source("SESSION_STOP")
+                    .trainingDayId(session.getSessionId())
                     .status("NEW")
                     .reportedAt(LocalDateTime.now())
                     .build());
             caseCode = vetCase.getCaseCode() != null ? vetCase.getCaseCode() : "#" + vetCase.getCaseId();
+            session.setNotes(session.getNotes() + " | Ca khám " + caseCode);
         } else {
             session.setStatus(TrainingPlanActivator.SESSION_STOPPED);
         }
         trainingSessionRepository.save(session);
-        // QA C1: chỉ khi chờ bác sĩ mới tạm dừng giáo án (bác sĩ xử lý ca thì giáo án đóng); dừng không gửi bác sĩ chỉ kết thúc buổi này
         if (caseCode != null && plan != null && (TrainingPlanActivator.PLAN_ACTIVE.equalsIgnoreCase(plan.getStatus()) || TrainingPlanActivator.PLAN_PENDING.equalsIgnoreCase(plan.getStatus()))) {
             plan.setStatus("PAUSED");
             plan.setPausedReason("Buổi tập #" + session.getSessionId() + " chờ bác sĩ xử lý ca " + caseCode);
@@ -218,7 +216,10 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         auditTrail.record("STOP_SESSION", "training_sessions", "status=OPEN",
                 "status=" + session.getStatus() + " | buổi tập #" + session.getSessionId() + (horse != null ? " | ngựa " + horse.getHorseName() : "")
                         + (caseCode != null ? " | ca " + caseCode : "") + " | " + reason);
-        return session.getStatus();
+        return com.horsetrack.equinecare.modules.training.dto.SessionStopResultDTO.builder()
+                .status(session.getStatus())
+                .caseCode(caseCode)
+                .build();
     }
 
     @Override

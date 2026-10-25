@@ -22,6 +22,18 @@ public final class TrainingPlanPhases {
     private TrainingPlanPhases() {
     }
 
+    /** Nhẹ / Vừa / Cao (hoặc LOW / MEDIUM / HIGH) → LOW / MEDIUM / HIGH. Chuỗi trống trả về null. */
+    public static String intensityOf(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String intensity = INTENSITY.get(raw.trim().toUpperCase());
+        if (intensity == null) {
+            throw new IllegalArgumentException("Cường độ '" + raw + "' không hợp lệ (Nhẹ / Vừa / Cao).");
+        }
+        return intensity;
+    }
+
     /** Tạo các giai đoạn từ request; tổng số tuần không vượt thời gian giáo án */
     public static List<TrainingPlanPhase> build(TrainingPlan plan, List<TrainingPlanPhaseDTO> phases) {
         if (phases == null || phases.isEmpty()) {

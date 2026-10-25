@@ -14,8 +14,8 @@ public interface TrainingExecutionService {
     // Groom xác nhận nhận buổi tập được HLV phân công; trả về trạng thái giáo án sau khi xác nhận
     String confirmSession(Integer sessionId);
 
-    // HLV phụ trách / Groom được giao dừng buổi tập vì chỉ số sức khỏe vượt ngưỡng; trả về trạng thái mới của buổi tập
-    String stopSession(Integer sessionId, com.horsetrack.equinecare.modules.training.dto.SessionStopRequestDTO request);
+    // HLV phụ trách dừng buổi tập vì chỉ số sức khỏe vượt ngưỡng; trả về trạng thái mới và mã ca khám
+    com.horsetrack.equinecare.modules.training.dto.SessionStopResultDTO stopSession(Integer sessionId, com.horsetrack.equinecare.modules.training.dto.SessionStopRequestDTO request);
 
     // HLV đánh giá phong độ sau khi buổi tập hoàn thành
     void evaluateSession(Integer sessionId, SessionEvaluateRequestDTO request);

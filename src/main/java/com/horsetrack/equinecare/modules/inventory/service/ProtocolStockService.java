@@ -14,6 +14,12 @@ public interface ProtocolStockService {
     TreatmentProtocolDTO checkStock(Integer protocolId, StockCheckRequestDTO request);
     TreatmentProtocolDTO dispense(Integer protocolId);
 
+    /**
+     * Sau khi đơn nhập gắn với phác đồ được nhận: kiểm tồn lại.
+     * Đủ hàng thì STOCK_AVAILABLE (đã giữ). Còn thiếu thì REQUIRES_VET_REVIEW để bác sĩ chờ tiếp hoặc đổi thuốc.
+     */
+    void recheckAfterReceipt(Integer protocolId);
+
     /** Trả lại toàn bộ hàng đang giữ của phác đồ (dùng khi hủy hoặc tạo phiên bản mới). */
     void releaseHolds(Integer protocolId, String note);
 

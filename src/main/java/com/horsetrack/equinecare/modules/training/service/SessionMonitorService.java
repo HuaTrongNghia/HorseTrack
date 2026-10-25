@@ -48,6 +48,7 @@ public class SessionMonitorService {
     private final SessionReadingView readingView;
     private final EmailService emailService;
     private final AuditTrail auditTrail;
+    private final SessionVetLink sessionVetLink;
 
     @Transactional
     public TrainingSessionDTO start(Integer sessionId) {
@@ -161,6 +162,13 @@ public class SessionMonitorService {
             throw new IllegalArgumentException("Nhịp tim hồi phục gần nhất " + recovery.getHeartRateBpm() + " bpm chưa dưới ngưỡng " + maxHr
                     + " bpm. Chờ ngựa hồi phục hoặc dừng buổi tập & gửi bác sĩ.");
         }
+        if (request.getMaxHeartRate() != null && request.getMaxHeartRate() > maxHr) {
+            throw new IllegalArgumentException("Ngưỡng nhịp tim mới không được cao hơn ngưỡng lúc tạm dừng (" + maxHr + " bpm).");
+        }
+        if (!StringUtils.hasText(request.getNote()) || request.getNote().trim().length() < 10) {
+            throw new IllegalArgumentException("Ghi rõ nội dung điều chỉnh ít nhất 10 ký tự.");
+        }
+        applyPhaseAdjustment(session, request);
 
         List<String> parts = new ArrayList<>();
         if (StringUtils.hasText(request.getIntensity())) parts.add("cường độ " + request.getIntensity().trim());
@@ -201,7 +209,27 @@ public class SessionMonitorService {
                 .pausedReason(s.getPausedReason())
                 .readings(readingView.phase(list, SessionReading.PHASE_SESSION))
                 .recovery(readingView.phase(list, SessionReading.PHASE_RECOVERY))
+                .vetCaseCode(sessionVetLink.caseCodes(List.of(s.getSessionId())).get(s.getSessionId()))
                 .build();
+    }
+
+    private static void applyPhaseAdjustment(TrainingSession session, SessionResumeRequestDTO request) {
+        TrainingPlan plan = session.getTrainingPlan();
+        if (plan == null || session.getSessionDate() == null) {
+            return;
+        }
+        TrainingPlanPhases.phaseOn(plan, session.getSessionDate().toLocalDate()).ifPresent(ph -> {
+            String intensity = TrainingPlanPhases.intensityOf(request.getIntensity());
+            if (intensity != null) {
+                ph.setIntensity(intensity);
+            }
+            if (request.getDistanceM() != null) {
+                ph.setDistanceM(BigDecimal.valueOf(request.getDistanceM()));
+            }
+            if (request.getMaxHeartRate() != null) {
+                ph.setHrLimitBpm(request.getMaxHeartRate());
+            }
+        });
     }
 
     // "HH:mm" / "HH:mm:ss" theo ngày của buổi tập, hoặc ISO date-time; bỏ trống = bây giờ

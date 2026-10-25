@@ -36,7 +36,27 @@ Content-Type: application/json
   "password": "Password123!"
 }
 
-### 1.4 Đăng nhập Chủ ngựa (Horse Owner)
+### 1.4 Đăng nhập Bác sĩ thú y (Veterinarian)
+# @name loginVet
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "vet_duc",
+  "password": "Password123!"
+}
+
+### 1.5 Đăng nhập Thủ kho (Warehouse Manager)
+# @name loginWarehouse
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "username": "warehouse_admin",
+  "password": "Password123!"
+}
+
+### 1.6 Đăng nhập Chủ ngựa (Horse Owner)
 # @name loginOwner
 POST {{baseUrl}}/api/v1/auth/login
 Content-Type: application/json
@@ -84,7 +104,7 @@ Content-Type: application/json
   "refreshToken": "{{refreshToken}}"
 }
 
-### 1.8 Đăng xuất (Thu hồi refresh token & đưa access token vào blacklist)
+### 1.10 Đăng xuất (Thu hồi refresh token & đưa access token vào blacklist)
 POST {{baseUrl}}/api/v1/auth/logout
 Content-Type: application/json
 Authorization: Bearer {{token}}
@@ -93,34 +113,389 @@ Authorization: Bearer {{token}}
   "refreshToken": "{{refreshToken}}"
 }
 
+### 1.11 Quên mật khẩu: Yêu cầu gửi mã OTP về email (Hiệu lực 5 phút)
+POST {{baseUrl}}/api/v1/auth/forgot-password
+Content-Type: application/json
+
+{
+  "email": "groom01@horsetrack.com"
+}
+
+### 1.12 Quên mật khẩu: Đặt lại mật khẩu mới bằng OTP
+POST {{baseUrl}}/api/v1/auth/reset-password
+Content-Type: application/json
+
+{
+  "email": "groom01@horsetrack.com",
+  "otp": "123456",
+  "newPassword": "NewPassword123!",
+  "confirmNewPassword": "NewPassword123!"
+}
+
+### 1.13 Xem thông tin tài khoản cá nhân đang đăng nhập
+GET {{baseUrl}}/api/v1/account/my-profile
+Authorization: Bearer {{token}}
+
+### 1.14 Đổi mật khẩu Bước 1: Yêu cầu gửi OTP về email tài khoản đang đăng nhập
+POST {{baseUrl}}/api/v1/account/change-password/otp
+Authorization: Bearer {{token}}
+
+### 1.15 Đổi mật khẩu Bước 2: Xác nhận đổi mật khẩu với OTP
+PUT {{baseUrl}}/api/v1/account/change-password
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "oldPassword": "Password123!",
+  "newPassword": "NewPassword123!",
+  "confirmNewPassword": "NewPassword123!",
+  "otp": "123456"
+}
+
 
 ###############################################################################
-# 2. KHÓA Y TẾ KHẨN CẤP (VETLOCK) & QUẢN LÝ BỆNH ÁN
+# 2. QUẢN LÝ NGƯỜI DÙNG, PHÂN CÔNG & NHẬT KÝ HỆ THỐNG (CLUB MANAGER)
 ###############################################################################
 
-### 2.1 Kích hoạt Khóa y tế khẩn cấp (VetLock) cho ngựa
+### 2.1 Xem danh sách người dùng (Phân trang & Tìm kiếm & Lọc Role/Status)
+GET {{baseUrl}}/api/v1/users?page=0&size=20&search=&role=Groom&status=ACTIVE
+Authorization: Bearer {{token}}
+
+### 2.2 Xem danh sách toàn bộ người dùng phẳng (để nạp nhanh vào Dropdown)
+GET {{baseUrl}}/api/v1/users/all
+Authorization: Bearer {{token}}
+
+### 2.3 Xem chi tiết 1 người dùng theo ID
+GET {{baseUrl}}/api/v1/users/2
+Authorization: Bearer {{token}}
+
+### 2.4 Khóa hoặc Mở khóa tài khoản người dùng
+PUT {{baseUrl}}/api/v1/users/2/status?status=LOCKED
+Authorization: Bearer {{token}}
+
+### 2.5 Phân công khu vực chuồng (Groom Zone) cho nhân viên Groom
+PUT {{baseUrl}}/api/v1/users/3/groom-zone
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "zone": "Khu A"
+}
+
+### 2.6 Xem nhật ký hệ thống (Audit Trail)
+GET {{baseUrl}}/api/v1/audit-logs?page=0&size=20
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 3. QUẢN LÝ HỒ SƠ NGỰA (HORSES)
+###############################################################################
+
+### 3.1 Chủ ngựa / Quản lý đăng ký ngựa mới vào CLB
+POST {{baseUrl}}/api/v1/horses/register
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "horseName": "Thần Mã Siêu Tốc",
+  "dateOfBirth": "2022-04-15",
+  "gender": "STALLION",
+  "breed": "Thoroughbred",
+  "color": "Hạt dẻ (Chestnut)",
+  "microchipNumber": "985141001234567",
+  "ownerId": 5,
+  "stallId": 1
+}
+
+### 3.2 Lấy danh sách tất cả ngựa (Phân trang & lọc trạng thái)
+GET {{baseUrl}}/api/v1/horses?page=0&size=10
+Authorization: Bearer {{token}}
+
+### 3.3 Xem chi tiết hồ sơ 1 con ngựa
+GET {{baseUrl}}/api/v1/horses/1
+Authorization: Bearer {{token}}
+
+### 3.4 Chủ ngựa xem danh sách ngựa thuộc sở hữu của mình
+GET {{baseUrl}}/api/v1/horses/my-horses/5
+Authorization: Bearer {{token}}
+
+### 3.5 Huấn luyện viên lấy danh sách ngựa đủ điều kiện tập luyện
+GET {{baseUrl}}/api/v1/horses/available-for-training
+Authorization: Bearer {{token}}
+
+### 3.6 Club Manager phê duyệt hồ sơ đăng ký ngựa
+PUT {{baseUrl}}/api/v1/horses/1/approve
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "isApproved": true,
+  "rejectionReason": ""
+}
+
+### 3.7 Cập nhật thông tin ngựa
+PUT {{baseUrl}}/api/v1/horses/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "horseName": "Thần Mã Chiến Binh",
+  "color": "Hắc mã (Black)",
+  "stallId": 2
+}
+
+
+###############################################################################
+# 4. SƠ ĐỒ CHUỒNG TRẠI (STALL MAP)
+###############################################################################
+
+### 4.1 Xem sơ đồ vị trí chuồng trại (Stall Map & trạng thái từng ô)
+GET {{baseUrl}}/api/v1/stalls/map
+Authorization: Bearer {{token}}
+
+### 4.2 Cập nhật đơn giá thuê chuồng mỗi ngày (Daily Rate)
+PUT {{baseUrl}}/api/v1/billing/stalls/1/daily-rate?dailyRate=180000
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 5. KHẨU PHẦN ĂN & DINH DƯỠNG (NUTRITION PLANS & DIET CHANGES)
+###############################################################################
+
+### 5.1 Lấy danh mục thức ăn & chất bổ sung trong kho để lên thực đơn
+GET {{baseUrl}}/api/v1/nutrition-plans/feed-items
+Authorization: Bearer {{token}}
+
+### 5.2 Khởi tạo thực đơn dinh dưỡng mới cho ngựa (Trainer / Vet)
+POST {{baseUrl}}/api/v1/nutrition-plans
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "horseId": 1,
+  "targetDailyCalories": 35000,
+  "specialNotes": "Bổ sung điện giải sau tập nặng",
+  "details": [
+    {
+      "mealType": "MORNING",
+      "itemId": 1,
+      "portionSize": 2.5,
+      "feedingInstructions": "Ngâm mềm 10 phút trước khi cho ăn"
+    },
+    {
+      "mealType": "NOON",
+      "itemId": 2,
+      "portionSize": 1.5,
+      "feedingInstructions": "Trộn đều cùng cỏ khô"
+    },
+    {
+      "mealType": "EVENING",
+      "itemId": 1,
+      "portionSize": 3.0,
+      "feedingInstructions": "Cho ăn trước 18h"
+    }
+  ]
+}
+
+### 5.3 Xem danh sách thực đơn dinh dưỡng
+GET {{baseUrl}}/api/v1/nutrition-plans?horseId=1
+Authorization: Bearer {{token}}
+
+### 5.4 Lấy khẩu phần ăn hôm nay của ngựa theo bữa (MORNING, NOON, EVENING)
+GET {{baseUrl}}/api/v1/nutrition-plans/today?horseId=1&mealType=MORNING
+Authorization: Bearer {{token}}
+
+### 5.5 Kích hoạt thực đơn dinh dưỡng
+PUT {{baseUrl}}/api/v1/nutrition-plans/1/activate
+Authorization: Bearer {{token}}
+
+### 5.6 Vô hiệu hóa thực đơn dinh dưỡng
+PUT {{baseUrl}}/api/v1/nutrition-plans/1/deactivate
+Authorization: Bearer {{token}}
+
+### 5.7 Groom hoặc Trainer gửi đề xuất thay đổi thức ăn đặc biệt
+POST {{baseUrl}}/api/v1/diet-requests
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "horseId": 1,
+  "requestType": "SPECIAL_DIET",
+  "reason": "Ngựa có dấu hiệu đầy hơi, đề xuất giảm 50% cám tinh và tăng cỏ Alfalfa",
+  "proposedDetails": "Cỏ Alfalfa 4kg/ngày, men tiêu hóa 1 gói/bữa"
+}
+
+### 5.8 Xem danh sách các đề xuất đổi khẩu phần ăn
+GET {{baseUrl}}/api/v1/diet-requests?status=PENDING
+Authorization: Bearer {{token}}
+
+### 5.9 Bác sĩ thú y xét duyệt đề xuất thay đổi thức ăn (APPROVED / REJECTED)
+PUT {{baseUrl}}/api/v1/diet-requests/1/decide
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "decision": "APPROVED",
+  "vetNotes": "Đồng ý chuyển sang cỏ Alfalfa và men tiêu hóa trong 5 ngày tới"
+}
+
+
+###############################################################################
+# 6. GIÁO ÁN HUẤN LUYỆN & LẬP LỊCH TẬP (TRAINING PLANS & SESSIONS)
+###############################################################################
+
+### 6.1 Thống kê tổng quan màn hình Huấn luyện (Dashboard Stats)
+GET {{baseUrl}}/api/v1/training-plans/dashboard-stats
+Authorization: Bearer {{token}}
+
+### 6.2 Lấy danh sách giáo án huấn luyện (Có phân trang & lọc status)
+GET {{baseUrl}}/api/v1/training-plans?status=ACTIVE&page=0&size=10
+Authorization: Bearer {{token}}
+
+### 6.3 Tạo mới giáo án huấn luyện (Head Trainer)
+POST {{baseUrl}}/api/v1/training-plans
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "horseId": 1,
+  "planName": "Giáo án rèn luyện tốc độ mùa thu 2026",
+  "startDate": "2026-11-01",
+  "endDate": "2026-12-01",
+  "targetGoal": "Đạt vận tốc nước kiệu 45km/h và bứt tốc 60km/h",
+  "assignedTrainerId": 2
+}
+
+### 6.4 Xem chi tiết Giáo án & các buổi tập theo ID
+GET {{baseUrl}}/api/v1/training-plans/1
+Authorization: Bearer {{token}}
+
+### 6.5 Lấy danh sách nhân viên có thể phân công buổi tập (Groom & Trainer)
+GET {{baseUrl}}/api/v1/training-plans/assignable-staff
+Authorization: Bearer {{token}}
+
+### 6.6 Head Trainer tạo buổi tập mới vào giáo án
+POST {{baseUrl}}/api/v1/training-plans/1/sessions
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "sessionDate": "2026-11-05T08:00:00",
+  "activityType": "Chạy bứt tốc cự ly 1000m",
+  "notes": "Quan sát độ co giãn cơ bắp sau khi về đích",
+  "assignedToId": 3
+}
+
+
+###############################################################################
+# 7. THỰC THI BUỔI TẬP, ĐÁNH GIÁ & XỬ LÝ SỰ CỐ KHẨN CẤP
+###############################################################################
+
+### 7.1 Huấn luyện viên / Groom xem lịch tập cá nhân của mình
+GET {{baseUrl}}/api/v1/training-sessions/my-schedule?startDate=2026-10-20&endDate=2026-11-30
+Authorization: Bearer {{token}}
+
+### 7.2 Groom xác nhận nhận buổi tập (CONFIRMED)
+PUT {{baseUrl}}/api/v1/training-sessions/1/confirm
+Authorization: Bearer {{token}}
+
+### 7.3 Hoàn thành buổi tập và ghi lại thông số (Nhịp tim, Tốc độ, Quãng đường)
+PUT {{baseUrl}}/api/v1/training-sessions/1/execute
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "durationMinutes": 45,
+  "distanceMeters": 3500.0,
+  "avgSpeedKmh": 42.5,
+  "maxHeartRateBpm": 165,
+  "recoveryHeartRateBpm": 78,
+  "performanceNotes": "Ngựa đạt phong độ rất tốt, hồi phục tim sau 10 phút."
+}
+
+### 7.4 DỪNG BUỔI TẬP KHẨN CẤP do chỉ số vượt ngưỡng -> Tự động tạo ca VetCase gửi Bác sĩ
+PUT {{baseUrl}}/api/v1/training-sessions/1/stop
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "reason": "Nhịp tim vọt lên 210 bpm, ngựa thở dốc bất thường",
+  "heartRate": 210,
+  "speedKmh": 55.0,
+  "severity": "HIGH",
+  "requestVet": true
+}
+
+### 7.5 Huấn luyện viên chấm điểm và đánh giá buổi tập đã hoàn thành
+POST {{baseUrl}}/api/v1/training-sessions/1/evaluate
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "score": 9,
+  "comment": "Rất hài lòng với sức bền hôm nay, chú ý bước chân trái."
+}
+
+
+###############################################################################
+# 8. THEO DÕI HUẤN LUYỆN DÀNH CHO CHỦ NGỰA (OWNER TRAINING)
+###############################################################################
+
+### 8.1 Chủ ngựa xem danh sách ngựa của mình kèm thông tin giáo án đang chạy
+GET {{baseUrl}}/api/v1/owner/training/my-horses
+Authorization: Bearer {{token}}
+
+### 8.2 Chủ ngựa xem tiến độ chi tiết, biểu đồ buổi tập của ngựa
+GET {{baseUrl}}/api/v1/owner/training/horses/1/progress
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 9. CÔNG VIỆC CHĂM SÓC HÀNG NGÀY & CHO ĂN (CARE TASKS)
+###############################################################################
+
+### 9.1 Groom xem danh sách công việc cần làm hôm nay của mình
+GET {{baseUrl}}/api/v1/care-tasks/my-tasks
+Authorization: Bearer {{token}}
+
+### 9.2 Groom hoàn thành công việc (Tự động trừ tồn kho nếu là FEEDING)
+PUT {{baseUrl}}/api/v1/care-tasks/1/complete
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 10. KHÓA Y TẾ KHẨN CẤP (VETLOCK)
+###############################################################################
+
+### 10.1 Kích hoạt Khóa y tế khẩn cấp (VetLock) tạm dừng mọi hoạt động của ngựa
 POST {{baseUrl}}/api/v1/medical/vet-lock
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
   "horseId": 1,
   "reason": "Phát hiện sưng phù gân chân trước bên phải sau buổi tập"
 }
 
-### 2.2 Mở khóa VetLock khi ngựa đã hồi phục hoàn toàn
+### 10.2 Mở khóa VetLock khi ngựa đã hồi phục hoàn toàn
 POST {{baseUrl}}/api/v1/medical/release-lock/1
-Content-Type: application/json
+Authorization: Bearer {{token}}
 
-### 2.3 Bác sĩ tạo hồ sơ bệnh án mới (kê đơn & đánh dấu chấn thương)
-POST {{baseUrl}}/api/v1/medical-records
+
+###############################################################################
+# 11. BỆNH ÁN & DUYỆT PHÁC ĐỒ ĐIỀU TRỊ (MEDICAL RECORDS)
+###############################################################################
+
+### 11.1 Bác sĩ tạo hồ sơ bệnh án mới (kê đơn & đánh dấu chấn thương trên sơ đồ)
+POST {{baseUrl}}/api/v1/veterinary/medical-records
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
   "horseId": 1,
   "visitDate": "2026-10-25",
-  "symptoms": "Đi khập khiễng nhẹ chân trước",
-  "diagnosis": "Viêm màng bao gân nhẹ",
+  "symptoms": "Đi khập khiễng nhẹ chân trước bên phải",
+  "diagnosis": "Viêm màng bao gân nhẹ do tập quá tải",
   "isLockoutOrdered": true,
   "injuryMarks": [
     {
@@ -132,35 +507,355 @@ Authorization: Bearer {{token}}
   ],
   "prescriptionItems": [
     {
-      "itemId": 1,
+      "itemId": 3,
       "quantityPrescribed": 2,
       "dosage": "Uống 1 liều/ngày sau bữa ăn sáng"
     }
   ]
 }
 
-### 2.4 Club Manager phê duyệt phác đồ điều trị
+### 11.2 Club Manager phê duyệt hồ sơ bệnh án
 PUT {{baseUrl}}/api/v1/manager/medical-records/1/approve
 Authorization: Bearer {{token}}
 
-### 2.5 Chủ ngựa thanh toán viện phí qua VNPay
+### 11.3 Chủ ngựa thanh toán viện phí y tế
 POST {{baseUrl}}/api/v1/owner/payments/medical-records/1/vnpay
 Authorization: Bearer {{token}}
 
 
 ###############################################################################
-# 3. TIÊM CHỦNG & LỊCH TIÊM VẮC-XIN (VACCINATIONS)
+# 12. PHÁC ĐỒ ĐIỀU TRỊ & CA BỆNH CỦA BÁC SĨ (MEDICAL MANAGEMENT)
 ###############################################################################
 
-### 3.1 Xem danh sách lịch tiêm chủng (Filter: upcoming / due / completed)
+### 12.1 Lấy danh mục thuốc trong kho y tế
+GET {{baseUrl}}/api/v1/medical-management/medications
+Authorization: Bearer {{token}}
+
+### 12.2 Khởi tạo phác đồ điều trị nhiều giai đoạn & trừ tồn kho thuốc
+POST {{baseUrl}}/api/v1/medical-management/protocols
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "horseId": 1,
+  "caseId": "C-0015",
+  "diagnosis": "Viêm bao gân cấp tính",
+  "targetDate": "2026-11-15",
+  "stages": [
+    {
+      "stageName": "Giai đoạn 1: Giảm đau & kháng viêm",
+      "startDate": "2026-10-25",
+      "durationDays": 5,
+      "goal": "Hạ sưng và giảm đau tại khớp",
+      "items": [
+        {
+          "medicationId": 3,
+          "quantity": 2
+        }
+      ]
+    }
+  ]
+}
+
+### 12.3 Hộp thư ca bệnh cần xử lý của Bác sĩ thú y
+GET {{baseUrl}}/api/v1/medical/cases?status=ALL
+Authorization: Bearer {{token}}
+
+### 12.4 Bác sĩ ghi nhận hướng xử lý ca bệnh
+POST {{baseUrl}}/api/v1/medical/cases/action?vetId=4
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "caseId": "C-0015",
+  "vetNotes": "Khớp chân trước sưng nhẹ, đề xuất nghỉ tập 7 ngày và dùng kháng viêm",
+  "treatmentDirection": "Khóa huấn luyện, theo dõi chỉ số tim mạch hằng ngày"
+}
+
+
+###############################################################################
+# 13. QUẢN LÝ KHO & VẬT TƯ (INVENTORY & SUPPLIES)
+###############################################################################
+
+### 13.1 Xem danh mục vật tư tồn kho (Phân trang, tìm kiếm & lọc category)
+GET {{baseUrl}}/api/v1/inventory/items?page=0&size=20&search=&category=FEED
+Authorization: Bearer {{token}}
+
+### 13.2 Xem chi tiết 1 mặt hàng tồn kho
+GET {{baseUrl}}/api/v1/inventory/items/1
+Authorization: Bearer {{token}}
+
+### 13.3 Thêm mặt hàng mới vào danh mục kho
+POST {{baseUrl}}/api/v1/inventory/items
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemCode": "FEED-ALFALFA-01",
+  "itemName": "Cỏ Alfalfa Nhập Khẩu Mỹ",
+  "category": "FEED",
+  "unit": "kg",
+  "minStockLevel": 50,
+  "unitPrice": 45000
+}
+
+### 13.4 Lấy danh sách các nhóm hàng (FEED, MEDICINE, SUPPLEMENT, EQUIPMENT...)
+GET {{baseUrl}}/api/v1/inventory/categories
+Authorization: Bearer {{token}}
+
+### 13.5 Cảnh báo các mặt hàng sắp hết (dưới ngưỡng an toàn minStockLevel)
+GET {{baseUrl}}/api/v1/inventory/low-stock
+Authorization: Bearer {{token}}
+
+### 13.6 Xem danh sách các lô hàng của 1 mặt hàng (Lot number & Hạn sử dụng)
+GET {{baseUrl}}/api/v1/inventory/lots?itemId=1
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 14. NHÀ CUNG CẤP & ĐƠN MUA HÀNG (SUPPLIERS & PURCHASE ORDERS)
+###############################################################################
+
+### 14.1 Xem danh sách nhà cung cấp
+GET {{baseUrl}}/api/v1/inventory/suppliers
+Authorization: Bearer {{token}}
+
+### 14.2 Thêm nhà cung cấp mới
+POST {{baseUrl}}/api/v1/inventory/suppliers
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "supplierName": "Công ty TNHH Dinh Dưỡng Ngựa Á Châu",
+  "contactPerson": "Nguyễn Văn Hưng",
+  "phone": "0918889999",
+  "email": "asia_feed@supplies.com",
+  "address": "Khu công nghiệp VSIP, Bình Dương"
+}
+
+### 14.3 Tạo đơn mua hàng mới (Purchase Order)
+POST {{baseUrl}}/api/v1/inventory/purchase-orders
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "supplierId": 1,
+  "expectedDate": "2026-11-10",
+  "notes": "Nhập đợt cám và cỏ khô quý 4",
+  "lines": [
+    {
+      "itemId": 1,
+      "quantity": 100,
+      "unitPrice": 35000
+    },
+    {
+      "itemId": 2,
+      "quantity": 50,
+      "unitPrice": 45000
+    }
+  ]
+}
+
+### 14.4 Xem danh sách đơn mua hàng (Lọc PENDING, APPROVED, RECEIVED...)
+GET {{baseUrl}}/api/v1/inventory/purchase-orders?status=PENDING&page=0&size=10
+Authorization: Bearer {{token}}
+
+### 14.5 Quản lý phê duyệt đơn mua hàng
+PUT {{baseUrl}}/api/v1/inventory/purchase-orders/1/approve
+Authorization: Bearer {{token}}
+
+### 14.6 Thủ kho nhận hàng & Nhập kho (Hệ thống tự động sinh số lô Lot nếu bỏ trống)
+POST {{baseUrl}}/api/v1/inventory/purchase-orders/1/receive
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "receiveDate": "2026-10-25",
+  "notes": "Kiểm tra hàng đủ số lượng, bao bì nguyên vẹn",
+  "lotUpdates": [
+    {
+      "poLineId": 1,
+      "lotNumber": "LOT-20261025-01",
+      "expiryDate": "2027-10-25"
+    }
+  ]
+}
+
+
+###############################################################################
+# 15. YÊU CẦU CẤP VẬT TƯ CỦA GROOM (SUPPLY REQUESTS)
+###############################################################################
+
+### 15.1 Groom tạo yêu cầu xin cấp vật tư / thức ăn / thuốc
+POST {{baseUrl}}/api/v1/supply-requests
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "itemId": 1,
+  "quantity": 10,
+  "reason": "Bổ sung cỏ khô cho chuồng khu A đợt cuối tuần"
+}
+
+### 15.2 Groom xem lịch sử các yêu cầu cấp vật tư của mình
+GET {{baseUrl}}/api/v1/supply-requests/my-requests
+Authorization: Bearer {{token}}
+
+### 15.3 Thủ kho xem toàn bộ danh sách yêu cầu cấp vật tư từ các Groom
+GET {{baseUrl}}/api/v1/inventory/supply-requests?status=PENDING
+Authorization: Bearer {{token}}
+
+### 15.4 Thủ kho phê duyệt xuất kho cho yêu cầu vật tư
+PUT {{baseUrl}}/api/v1/inventory/supply-requests/1/approve
+Authorization: Bearer {{token}}
+
+### 15.5 Thủ kho từ chối yêu cầu cấp vật tư
+PUT {{baseUrl}}/api/v1/inventory/supply-requests/1/reject
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "reason": "Mặt hàng này hiện đang ưu tiên cho khu vực cách ly"
+}
+
+
+###############################################################################
+# 16. KIỂM KÊ KHO ĐỊNH KỲ (STOCK COUNTS)
+###############################################################################
+
+### 16.1 Thủ kho khởi tạo đợt kiểm kê mới
+POST {{baseUrl}}/api/v1/inventory/stock-counts
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "notes": "Kiểm kê định kỳ kho thức ăn cuối tháng 10/2026",
+  "category": "FEED"
+}
+
+### 16.2 Xem danh sách các đợt kiểm kê
+GET {{baseUrl}}/api/v1/inventory/stock-counts
+Authorization: Bearer {{token}}
+
+### 16.3 Xem chi tiết phiếu kiểm kê & các dòng mặt hàng cần đếm
+GET {{baseUrl}}/api/v1/inventory/stock-counts/1
+Authorization: Bearer {{token}}
+
+### 16.4 Nhập số lượng thực tế đếm được cho 1 dòng kiểm kê
+PUT {{baseUrl}}/api/v1/inventory/stock-counts/1/lines/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "countedQuantity": 98,
+  "reason": "Hao hụt 2kg do bao rách nhẹ khi vận chuyển"
+}
+
+### 16.5 Hoàn thành và chốt đợt kiểm kê (Tự động cân đối tồn kho theo thực tế)
+PUT {{baseUrl}}/api/v1/inventory/stock-counts/1/complete
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 17. KIỂM KHO & CẤP PHÁT THUỐC CHO PHÁC ĐỒ (PROTOCOL STOCK)
+###############################################################################
+
+### 17.1 Xem danh sách phác đồ đang chờ cấp phát thuốc
+GET {{baseUrl}}/api/v1/inventory/protocols/pending
+Authorization: Bearer {{token}}
+
+### 17.2 Kiểm tra tồn kho các loại thuốc trong phác đồ có đủ để cấp hay không
+GET {{baseUrl}}/api/v1/inventory/protocols/1/check
+Authorization: Bearer {{token}}
+
+### 17.3 Thủ kho xuất cấp thuốc cho phác đồ (Tự động trừ kho)
+POST {{baseUrl}}/api/v1/inventory/protocols/1/dispense
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 18. HÓA ĐƠN & THANH TOÁN VNPAY SANDBOX (BILLING & PAYMENTS)
+###############################################################################
+
+### 18.1 Club Manager phát hành hóa đơn tháng hàng loạt cho tất cả chủ ngựa
+POST {{baseUrl}}/api/v1/billing/invoices/generate?billingMonth=2026-10
+Authorization: Bearer {{token}}
+
+### 18.2 Club Manager xem toàn bộ hóa đơn (Lọc status: UNPAID, OVERDUE, PAID)
+GET {{baseUrl}}/api/v1/billing/invoices?status=UNPAID&billingMonth=2026-10&page=0&size=20
+Authorization: Bearer {{token}}
+
+### 18.3 Xem chi tiết 1 hóa đơn
+GET {{baseUrl}}/api/v1/billing/invoices/1
+Authorization: Bearer {{token}}
+
+### 18.4 Hủy hóa đơn sai lệch
+PUT {{baseUrl}}/api/v1/billing/invoices/1/cancel
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "reason": "Điều chỉnh nhầm phí lưu chuồng kỳ trước"
+}
+
+### 18.5 Đình chỉ dịch vụ ngựa do quá hạn thanh toán
+PUT {{baseUrl}}/api/v1/billing/invoices/1/suspend
+Authorization: Bearer {{token}}
+
+### 18.6 Kích hoạt lại dịch vụ khi chủ ngựa đã nộp tiền
+PUT {{baseUrl}}/api/v1/billing/invoices/1/reactivate
+Authorization: Bearer {{token}}
+
+### 18.7 Chủ ngựa xem danh sách hóa đơn cần thanh toán của mình
+GET {{baseUrl}}/api/v1/owner/invoices/my-invoices?status=UNPAID&page=0&size=20
+Authorization: Bearer {{token}}
+
+### 18.8 Chủ ngựa xem chi tiết hóa đơn của mình
+GET {{baseUrl}}/api/v1/owner/invoices/1
+Authorization: Bearer {{token}}
+
+### 18.9 Tạo URL thanh toán VNPay Sandbox cho hóa đơn
+POST {{baseUrl}}/api/v1/payments/vnpay/create-payment?invoiceId=1&bankCode=NCB
+Authorization: Bearer {{token}}
+
+### 18.10 VNPay Callback (Return URL sau khi người dùng hoàn tất thanh toán)
+GET {{baseUrl}}/api/v1/payments/vnpay/vnpay-return?vnp_Amount=150000000&vnp_BankCode=NCB&vnp_ResponseCode=00&vnp_TxnRef=HT123456
+Authorization: Bearer {{token}}
+
+### 18.11 Chủ ngựa tự kiểm tra lại các giao dịch VNPay đang chờ xác minh
+POST {{baseUrl}}/api/v1/payments/vnpay/recheck-my-pending
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 19. BÁO CÁO TÀI CHÍNH (FINANCE REPORTS)
+###############################################################################
+
+### 19.1 Xem báo cáo doanh thu theo tháng (Phí chuồng, dinh dưỡng, y tế, phạt)
+GET {{baseUrl}}/api/v1/reports/monthly-revenue?billingMonth=2026-10
+Authorization: Bearer {{token}}
+
+### 19.2 Xem báo cáo công nợ & danh sách chủ ngựa nợ quá hạn
+GET {{baseUrl}}/api/v1/reports/debt-report
+Authorization: Bearer {{token}}
+
+
+###############################################################################
+# 20. TIÊM CHỦNG, KHÁM SÀNG LỌC & LÔ HÀNG (MOCK APIS)
+###############################################################################
+
+### 20.1 Xem danh sách lịch tiêm chủng (Filter: upcoming / due / completed)
 GET {{baseUrl}}/api/v1/vaccinations?tab=upcoming
+Authorization: Bearer {{token}}
 
-### 3.2 Ghi nhận đã tiêm mũi vắc-xin (Tự động cập nhật DB & tạo lịch nhắc lại)
+### 20.2 Ghi nhận đã tiêm mũi vắc-xin
 POST {{baseUrl}}/api/v1/vaccinations/VC-036/execute
+Authorization: Bearer {{token}}
 
-### 3.3 Tạo lịch tiêm chủng mới hàng loạt cho nhiều ngựa
+### 20.3 Tạo lịch tiêm chủng mới hàng loạt cho nhiều ngựa
 POST {{baseUrl}}/api/v1/vaccinations/schedule
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
   "horseIds": [1, 2, 3],
@@ -169,138 +864,24 @@ Content-Type: application/json
   "notes": "Tiêm phòng định kỳ mùa đông"
 }
 
-
-###############################################################################
-# 4. PHÁC ĐỒ ĐIỀU TRỊ & QUẢN LÝ LÔ HÀNG (PROTOCOLS & SHIPMENTS)
-###############################################################################
-
-### 4.1 Xem danh sách phác đồ theo Tab
+### 20.4 Xem danh sách phác đồ theo Tab
 GET {{baseUrl}}/api/v1/protocols?tab=Cần bác sĩ xử lý
+Authorization: Bearer {{token}}
 
-### 4.2 Xem danh sách lô hàng thuốc/vật tư liên quan đến phác đồ
+### 20.5 Xem danh sách lô hàng thuốc/vật tư liên quan đến phác đồ
 GET {{baseUrl}}/api/v1/protocols/shipments
+Authorization: Bearer {{token}}
 
-
-###############################################################################
-# 5. KHÁM SÀNG LỌC TRƯỚC THI ĐẤU (PRE-RACE EXAMS)
-###############################################################################
-
-### 5.1 Danh sách đề xuất khám trước giải đua (Tab: CHO_KHAM)
+### 20.6 Danh sách đề xuất khám trước giải đua (Tab: CHO_KHAM)
 GET {{baseUrl}}/api/v1/prerace-exams?tab=CHO_KHAM
+Authorization: Bearer {{token}}
 
-### 5.2 Danh sách ngựa đã có kết quả khám (Tab: DA_CO_KET_QUA)
-GET {{baseUrl}}/api/v1/prerace-exams?tab=DA_CO_KET_QUA
-
-### 5.3 Bác sĩ ghi nhận kết quả khám sàng lọc
+### 20.7 Bác sĩ ghi nhận kết quả khám sàng lọc trước giải đua
 POST {{baseUrl}}/api/v1/prerace-exams/DX-0009/examine
 Content-Type: application/json
+Authorization: Bearer {{token}}
 
 {
   "isPassed": true,
   "vetNotes": "Nhịp tim ổn định, khớp khỏe mạnh, không có dấu hiệu chấn thương. Đủ điều kiện thi đấu."
-}
-
-
-###############################################################################
-# 6. GIÁO ÁN HUẤN LUYỆN & LẬP LỊCH TẬP (TRAINING PLANS & CALENDAR)
-###############################################################################
-
-### 6.1 Thống kê tổng quan màn hình Huấn luyện (Dashboard Stats)
-GET {{baseUrl}}/api/v1/training-plans/dashboard-stats
-Authorization: Bearer {{token}}
-
-### 6.2 Lấy danh sách giáo án huấn luyện (Có phân trang & lọc status)
-GET {{baseUrl}}/api/v1/training-plans?status=ACTIVE&page=0&size=10
-Authorization: Bearer {{token}}
-
-### 6.3 Lấy chi tiết Giáo án & các buổi tập để hiển thị lên Calendar
-GET {{baseUrl}}/api/v1/training-plans/1
-Authorization: Bearer {{token}}
-
-### 6.4 Lấy danh sách nhân viên (Groom / Trainer) để gán việc trên lịch
-GET {{baseUrl}}/api/v1/training-plans/assignable-staff
-Authorization: Bearer {{token}}
-
-### 6.5 Head Trainer tạo buổi tập mới vào lịch của giáo án
-POST {{baseUrl}}/api/v1/training-plans/1/sessions
-Content-Type: application/json
-Authorization: Bearer {{token}}
-
-{
-  "sessionDate": "2026-10-25T08:30:00",
-  "activityType": "Chạy bứt tốc 800m",
-  "notes": "Quan sát nhịp thở sau khi về đích",
-  "assignedToId": 2
-}
-
-
-###############################################################################
-# 7. CHĂM SÓC HÀNG NGÀY & CHO ĂN (CARE TASKS)
-###############################################################################
-
-### 7.1 Groom xem danh sách công việc cần làm hôm nay
-GET {{baseUrl}}/api/v1/care-tasks/my-tasks
-Authorization: Bearer {{token}}
-
-### 7.2 Groom hoàn thành công việc (Tự động trừ tồn kho nếu là FEEDING)
-PUT {{baseUrl}}/api/v1/care-tasks/1/complete
-Authorization: Bearer {{token}}
-
-
-###############################################################################
-# 8. QUẢN LÝ NGỰA & BẢN ĐỒ CHUỒNG (HORSES & STALLS)
-###############################################################################
-
-### 8.1 Lấy danh sách tất cả ngựa
-GET {{baseUrl}}/api/v1/horses
-Authorization: Bearer {{token}}
-
-### 8.2 Xem sơ đồ vị trí chuồng trại (Stall Map)
-GET {{baseUrl}}/api/v1/stalls/map
-Authorization: Bearer {{token}}
-
-
-###############################################################################
-# 9. QUẢN LÝ PHÁC ĐỒ & DANH MỤC THUỐC (MEDICAL MANAGEMENT)
-###############################################################################
-
-### 9.1 Lấy danh mục thuốc trong kho y tế
-GET {{baseUrl}}/api/medical-management/medications
-
-### 9.2 Khởi tạo phác đồ điều trị nhiều giai đoạn & trừ tồn kho thuốc
-POST {{baseUrl}}/api/medical-management/protocols
-Content-Type: application/json
-
-{
-  "horseId": 1,
-  "caseId": "C-0015",
-  "diagnosis": "Viêm bao gân cấp tính",
-  "targetDate": "2026-11-01",
-  "stages": [
-    {
-      "stageName": "Giai đoạn 1: Chống viêm cấp & Giảm đau",
-      "startDate": "2026-10-20",
-      "durationDays": 5,
-      "goal": "Hạ sốt, giảm sưng và tiêu viêm",
-      "items": [
-        {
-          "medicationId": 1,
-          "quantity": 2
-        }
-      ]
-    }
-  ]
-}
-
-### 9.3 Lấy danh sách ca khám (Hộp thư ca khám của Bác sĩ)
-GET {{baseUrl}}/api/medical/cases?status=ALL
-
-### 9.4 Bác sĩ ghi nhận kết quả khám và hướng xử lý
-POST {{baseUrl}}/api/medical/cases/action?vetId=1
-Content-Type: application/json
-
-{
-  "caseId": "C-0015",
-  "vetNotes": "Chân trước sưng nhẹ, đề xuất nghỉ tập và dùng kháng viêm",
-  "treatmentDirection": "Tạm dừng tập luyện 1 tuần, theo dõi thêm"
 }

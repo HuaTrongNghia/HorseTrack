@@ -28,4 +28,5 @@ public class TrainerScheduleDTO {
     private String pausedReason;
     private java.util.List<SessionReadingDTO> readings;
     private java.util.List<SessionReadingDTO> recovery;
+    private String vetCaseCode;
 }

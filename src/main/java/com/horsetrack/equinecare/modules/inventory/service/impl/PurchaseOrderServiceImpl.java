@@ -4,6 +4,7 @@ import com.horsetrack.equinecare.common.exception.ResourceNotFoundException;
 import com.horsetrack.equinecare.modules.inventory.dto.*;
 import com.horsetrack.equinecare.modules.inventory.entity.*;
 import com.horsetrack.equinecare.modules.inventory.repository.*;
+import com.horsetrack.equinecare.modules.inventory.service.ProtocolStockService;
 import com.horsetrack.equinecare.modules.inventory.service.PurchaseOrderService;
 import com.horsetrack.equinecare.modules.inventory.service.StockLedgerService;
 import com.horsetrack.equinecare.modules.medical.entity.TreatmentProtocol;
@@ -44,6 +45,7 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
     private final TreatmentProtocolRepository protocolRepository;
     private final StockHoldRepository holdRepository;
     private final EntityManager entityManager;
+    private final ProtocolStockService protocolStockService;
 
     // Phác đồ còn đang chờ thuốc, có thể đặt mua cho phác đồ đó
     private static final Set<String> PROTOCOL_WAITING_STATES = Set.of("WAITING_STOCK_CHECK", "STOCK_SHORTAGE", "WAITING_RESTOCK", "REQUIRES_VET_REVIEW");
@@ -301,6 +303,9 @@ public class PurchaseOrderServiceImpl implements PurchaseOrderService {
             order.setStatus("PARTIALLY_RECEIVED");
         }
         orderRepository.save(order);
+        if (order.getProtocolId() != null) {
+            protocolStockService.recheckAfterReceipt(order.getProtocolId());
+        }
 
         // Hàng của yêu cầu vật tư đã về đủ: chuyển yêu cầu sang CHECKING_STOCK để kho cấp cho Groom
         if (fullyReceived && order.getRequisitionId() != null) {

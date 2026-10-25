@@ -81,15 +81,17 @@ public class TrainingExecutionController {
         return ResponseEntity.ok(ApiResponse.ok("Buổi tập tiếp tục", sessionMonitorService.resume(sessionId, request)));
     }
 
-    // Dừng buổi tập đang tạm dừng vì chỉ số vượt ngưỡng: mặc định gửi ca cho bác sĩ, buổi tập chờ bác sĩ quyết định (WAITING_VET)
+    // HLV phụ trách dừng buổi tập đang tạm dừng vì chỉ số vượt ngưỡng. Mặc định gửi ca cho bác sĩ (WAITING_VET) và trả mã ca.
     @PutMapping("/{sessionId}/stop")
-    public ResponseEntity<ApiResponse<String>> stopSession(@PathVariable Integer sessionId,
-                                                           @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.SessionStopRequestDTO request) {
-        String status = trainingExecutionService.stopSession(sessionId, request);
-        String message = "WAITING_VET".equals(status)
-                ? "Đã dừng buổi tập và gửi ca cho bác sĩ. Buổi tập sẽ kết thúc khi bác sĩ khóa huấn luyện hoặc đóng ca."
+    @PreAuthorize("hasAuthority('Trainer')")
+    public ResponseEntity<ApiResponse<com.horsetrack.equinecare.modules.training.dto.SessionStopResultDTO>> stopSession(
+            @PathVariable Integer sessionId,
+            @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.SessionStopRequestDTO request) {
+        var result = trainingExecutionService.stopSession(sessionId, request);
+        String message = "WAITING_VET".equals(result.getStatus())
+                ? "Đã dừng buổi tập và gửi ca " + result.getCaseCode() + " cho bác sĩ."
                 : "Đã dừng và kết thúc buổi tập.";
-        return ResponseEntity.ok(ApiResponse.ok(message, status));
+        return ResponseEntity.ok(ApiResponse.ok(message, result));
     }
 
     @PutMapping("/{sessionId}/execute")

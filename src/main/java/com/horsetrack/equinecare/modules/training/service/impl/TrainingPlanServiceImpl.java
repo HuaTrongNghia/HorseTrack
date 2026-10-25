@@ -35,6 +35,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     private final GroomProfileRepository groomProfileRepository;
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.training.service.SessionReadingView sessionReadingView;
+    private final com.horsetrack.equinecare.modules.training.service.SessionVetLink sessionVetLink;
 
     // Thời lượng mặc định một buổi tập (bảng chỉ lưu giờ bắt đầu), dùng để kiểm tra trùng giờ
     @org.springframework.beans.factory.annotation.Value("${app.training.session-duration-minutes:60}")
@@ -159,6 +160,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         horseAccessGuard.checkAssigned(plan.getHorse());
 
         var readings = sessionReadingView.load(plan.getSessions());
+        var caseCodes = sessionVetLink.caseCodes(plan.getSessions().stream().map(TrainingSession::getSessionId).toList());
         List<TrainingSessionDTO> sessionDTOs = plan.getSessions().stream()
                 .map(s -> {
                     com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper.EvaluationData eval =
@@ -184,6 +186,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                             .recovery(sessionReadingView.phase(readings.get(s.getSessionId()), com.horsetrack.equinecare.modules.training.entity.SessionReading.PHASE_RECOVERY))
                             .phaseNo(s.getSessionDate() == null ? null : com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases
                                     .phaseOn(plan, s.getSessionDate().toLocalDate()).map(ph -> ph.getPhaseNo()).orElse(null))
+                            .vetCaseCode(caseCodes.get(s.getSessionId()))
                             .build();
                 })
                 .collect(Collectors.toList());

@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -20,4 +21,7 @@ public interface VetCaseRepository extends JpaRepository<VetCase, Integer> {
     List<VetCase> search(@Param("status") String status, @Param("reportedById") Integer reportedById);
 
     Optional<VetCase> findByCaseCode(String caseCode);
+
+    @Query("SELECT c FROM VetCase c WHERE c.source = 'SESSION_STOP' AND c.trainingDayId IN :ids ORDER BY c.caseId DESC")
+    List<VetCase> findSessionStops(@Param("ids") Collection<Integer> ids);
 }

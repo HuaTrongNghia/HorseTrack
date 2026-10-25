@@ -174,7 +174,7 @@ public class MedicalService {
         vetCase.setAssignedVet(vetCase.getAssignedVet() != null ? vetCase.getAssignedVet() : currentUser());
         vetCase.setClosedAt(LocalDateTime.now());
         VetCase saved = vetCaseRepository.save(vetCase);
-        // Bác sĩ đóng ca mà không khóa huấn luyện: buổi tập đang chờ bác sĩ kết thúc, giáo án đóng để lập giáo án mới
+        // Bác sĩ đóng ca mà không khóa huấn luyện: chỉ kết thúc buổi tập đang chờ, giáo án chạy tiếp
         Horse horse = saved.getHorse();
         if (horse != null && !Boolean.TRUE.equals(horse.getIsLocked())) {
             incidentHandler.resolveWaitingVet(horse, false, outcome);
