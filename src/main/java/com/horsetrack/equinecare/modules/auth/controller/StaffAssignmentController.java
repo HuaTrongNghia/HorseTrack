@@ -32,9 +32,6 @@ public class StaffAssignmentController {
     public ResponseEntity<ApiResponse<GroomZoneResponseDTO>> updateGroomZone(@PathVariable Integer id,
                                                                             @Valid @RequestBody GroomZoneRequestDTO request) {
         GroomZoneResponseDTO dto = staffAssignmentService.updateGroomZone(id, request.getBarnZone());
-        String message = dto.getBarnZone() == null
-                ? "Đã bỏ phân công khu của " + dto.getFullName()
-                : "Đã phân công " + dto.getFullName() + " phụ trách " + dto.getBarnZone();
-        return ResponseEntity.ok(ApiResponse.ok(message, dto));
+        return ResponseEntity.ok(ApiResponse.ok("Đã gửi yêu cầu xác nhận khu cho " + dto.getFullName() + ". Khu chỉ đổi khi người chăm xác nhận.", dto));
     }
 }

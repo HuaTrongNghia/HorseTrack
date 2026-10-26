@@ -12,6 +12,8 @@ import com.horsetrack.equinecare.modules.medical.dto.MedicalCaseDTO;
 import com.horsetrack.equinecare.modules.medical.dto.VetActionRequestDTO;
 import com.horsetrack.equinecare.modules.medical.dto.VetLockRequestDTO;
 import com.horsetrack.equinecare.modules.medical.entity.VetCase;
+import com.horsetrack.equinecare.modules.medical.entity.TreatmentProtocol;
+import com.horsetrack.equinecare.modules.medical.repository.TreatmentProtocolRepository;
 import com.horsetrack.equinecare.modules.medical.repository.VetCaseRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -34,7 +37,10 @@ import java.util.stream.Collectors;
 public class MedicalService {
 
     private final HorseRepository horseRepository;
+    private static final Set<String> PROTOCOL_FINISHED = Set.of("COMPLETED", "CANCELLED", "SUPERSEDED");
+
     private final VetCaseRepository vetCaseRepository;
+    private final TreatmentProtocolRepository protocolRepository;
     private final UserRepository userRepository;
     private final GroomProfileRepository groomProfileRepository;
     private final EntityManager entityManager;
@@ -168,6 +174,14 @@ public class MedicalService {
         VetCase vetCase = findCase(caseRef);
         if ("CLOSED".equals(vetCase.getStatus()) || "CANCELLED".equals(vetCase.getStatus())) {
             throw new IllegalArgumentException("Ca " + vetCase.getCaseCode() + " đã đóng trước đó.");
+        }
+        TreatmentProtocol openProtocol = protocolRepository.findByCaseId(vetCase.getCaseId()).stream()
+                .filter(p -> !PROTOCOL_FINISHED.contains(p.getState()))
+                .findFirst()
+                .orElse(null);
+        if (openProtocol != null) {
+            throw new IllegalArgumentException("Phác đồ " + openProtocol.getProtocolCode() + " của ca " + vetCase.getCaseCode()
+                    + " chưa hoàn thành (đang " + openProtocol.getState() + "). Hãy kết thúc hoặc hủy phác đồ trước khi đóng ca.");
         }
         vetCase.setStatus("CLOSED");
         vetCase.setOutcome(outcome.trim().length() > 1000 ? outcome.trim().substring(0, 1000) : outcome.trim());

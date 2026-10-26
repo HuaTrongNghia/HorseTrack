@@ -19,6 +19,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.util.HtmlUtils;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -34,6 +35,7 @@ public class UserServiceImpl implements UserService {
     private final RefreshTokenRepository refreshTokenRepository;
     private final AuditLogService auditLogService;
     private final AuditLogRepository auditLogRepository;
+    private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
 
     private final TrainerProfileRepository trainerProfileRepository;
     private final VeterinarianProfileRepository veterinarianProfileRepository;
@@ -234,6 +236,18 @@ public class UserServiceImpl implements UserService {
                 "LOCKED (user_id=" + user.getUserId() + ") | Lý do: " + request.getReason(),
                 ipAddress
         );
+
+        if (user.getEmail() != null && !user.getEmail().isBlank()) {
+            try {
+                emailService.sendAsync("ACCOUNT_LOCKED", user.getEmail(), "[HorseTrack] Tài khoản của bạn đã bị khóa",
+                        "<p>Xin chào <b>" + HtmlUtils.htmlEscape(user.getFullName()) + "</b>,</p>"
+                                + "<p>Quản lý CLB đã khóa tài khoản <b>" + HtmlUtils.htmlEscape(user.getUsername()) + "</b>. "
+                                + "Bạn đã bị đăng xuất và không đăng nhập được cho đến khi tài khoản được mở.</p>"
+                                + "<p>Lý do: " + HtmlUtils.htmlEscape(request.getReason()) + "</p>");
+            } catch (Exception ignored) {
+                // Khóa tài khoản vẫn thành công nếu email lỗi
+            }
+        }
 
         return mapToResponseDTO(user);
     }

@@ -9,10 +9,12 @@ import com.horsetrack.equinecare.modules.auth.repository.GroomProfileRepository;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.care.repository.CareTaskRepository;
 import com.horsetrack.equinecare.modules.horse.repository.StallRepository;
+import com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.training.repository.TrainingSessionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -43,6 +45,7 @@ public class StaffAssignmentService {
     private final TrainingSessionRepository sessionRepository;
     private final AuditTrail auditTrail;
     private final EmailService emailService;
+    private final AssignmentRequestWriter assignmentRequests;
 
     @Transactional(readOnly = true)
     public GroomZoneResponseDTO getGroomZone(Integer userId) {
@@ -51,9 +54,43 @@ public class StaffAssignmentService {
         return toDTO(groom, profile != null ? profile.getAssignedBarnZone() : null);
     }
 
-    /** barnZone = null hoặc rỗng để bỏ phân công */
+    /** Gửi yêu cầu. Khu chỉ đổi khi người chăm xác nhận. */
     @Transactional
     public GroomZoneResponseDTO updateGroomZone(Integer userId, String barnZone) {
+        ZoneChange change = prepareZone(userId, barnZone);
+        assignmentRequests.openGroomZone(change.groom, change.oldZone, change.newZone, currentUser());
+        return toDTO(change.groom, change.oldZone);
+    }
+
+    /** Ghi khu sau khi người chăm xác nhận. */
+    @Transactional
+    public GroomZoneResponseDTO applyGroomZone(Integer userId, String barnZone) {
+        ZoneChange change = prepareZone(userId, barnZone);
+        User groom = change.groom;
+        String newZone = change.newZone;
+        String oldZone = change.oldZone;
+        GroomProfile profile = groomProfileRepository.findById(userId)
+                .orElseGet(() -> GroomProfile.builder().userId(userId).user(groom).build());
+        profile.setAssignedBarnZone(newZone);
+        groomProfileRepository.save(profile);
+        auditTrail.record(newZone == null ? "UNASSIGN_GROOM_ZONE" : "ASSIGN_GROOM_ZONE", "Groom_Profiles",
+                "assigned_barn_zone=" + oldZone, "assigned_barn_zone=" + newZone + " | Groom " + groom.getFullName() + " (user_id=" + userId + ")");
+        if (StringUtils.hasText(groom.getEmail())) {
+            try {
+                emailService.sendAsync("GROOM_ZONE", groom.getEmail(), "[HorseTrack] Khu chăm sóc đã có hiệu lực",
+                        "<p>Xin chào <b>" + HtmlUtils.htmlEscape(groom.getFullName()) + "</b>,</p>"
+                                + (newZone == null
+                                ? "<p>Bạn đã xác nhận bỏ khu chăm sóc" + (oldZone != null ? " (" + HtmlUtils.htmlEscape(oldZone) + ")" : "") + ".</p>"
+                                : "<p>Bạn đã xác nhận phụ trách <b>" + HtmlUtils.htmlEscape(newZone) + "</b>"
+                                        + (oldZone != null ? " (trước đây: " + HtmlUtils.htmlEscape(oldZone) + ")" : "") + ".</p>"));
+            } catch (Exception ex) {
+                log.warn("Không gửi được email đổi khu cho {}: {}", groom.getEmail(), ex.getMessage());
+            }
+        }
+        return toDTO(groom, newZone);
+    }
+
+    private ZoneChange prepareZone(Integer userId, String barnZone) {
         User groom = findGroom(userId);
         String newZone = StringUtils.hasText(barnZone) ? barnZone.trim() : null;
         if (newZone != null) {
@@ -65,17 +102,13 @@ public class StaffAssignmentService {
                     .orElseThrow(() -> new IllegalArgumentException("Khu '" + finalZone + "' không tồn tại. Các khu hiện có: "
                             + String.join(", ", stallRepository.findDistinctBarnZones()) + "."));
         }
-
-        GroomProfile profile = groomProfileRepository.findById(userId)
-                .orElseGet(() -> GroomProfile.builder().userId(userId).user(groom).build());
-        String oldZone = profile.getAssignedBarnZone();
+        GroomProfile profile = groomProfileRepository.findById(userId).orElse(null);
+        String oldZone = profile != null ? profile.getAssignedBarnZone() : null;
         if (Objects.equals(normalize(oldZone), normalize(newZone))) {
             throw new IllegalArgumentException(newZone == null
                     ? "Groom " + groom.getFullName() + " hiện chưa được phân công khu nào."
                     : "Groom " + groom.getFullName() + " đang phụ trách " + newZone + ".");
         }
-
-        // Còn việc dở ở khu cũ thì phải giao lại / hủy trước
         if (oldZone != null) {
             long tasks = careTaskRepository.countByGroom_UserIdAndStatusInAndTaskDateGreaterThanEqual(userId, OPEN_TASKS, LocalDate.now());
             long sessions = sessionRepository.countByAssignedTo_UserIdAndStatusInAndSessionDateAfter(userId, OPEN_SESSIONS, LocalDateTime.now());
@@ -85,25 +118,16 @@ public class StaffAssignmentService {
                         + (newZone == null ? "bỏ phân công." : "đổi sang " + newZone + "."));
             }
         }
+        return new ZoneChange(groom, oldZone, newZone);
+    }
 
-        profile.setAssignedBarnZone(newZone);
-        groomProfileRepository.save(profile);
-        auditTrail.record(newZone == null ? "UNASSIGN_GROOM_ZONE" : "ASSIGN_GROOM_ZONE", "Groom_Profiles",
-                "assigned_barn_zone=" + oldZone, "assigned_barn_zone=" + newZone + " | Groom " + groom.getFullName() + " (user_id=" + userId + ")");
+    private User currentUser() {
+        String username = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + username));
+    }
 
-        if (StringUtils.hasText(groom.getEmail())) {
-            try {
-                emailService.sendAsync("GROOM_ZONE", groom.getEmail(), "[HorseTrack] Cập nhật khu chăm sóc",
-                        "<p>Xin chào <b>" + HtmlUtils.htmlEscape(groom.getFullName()) + "</b>,</p>"
-                                + (newZone == null
-                                ? "<p>Club Manager đã bỏ phân công khu chăm sóc của bạn" + (oldZone != null ? " (" + HtmlUtils.htmlEscape(oldZone) + ")" : "") + ".</p>"
-                                : "<p>Club Manager đã phân công bạn phụ trách <b>" + HtmlUtils.htmlEscape(newZone) + "</b>"
-                                        + (oldZone != null ? " (trước đây: " + HtmlUtils.htmlEscape(oldZone) + ")" : "") + ".</p>"));
-            } catch (Exception ex) {
-                log.warn("Không gửi được email đổi khu cho {}: {}", groom.getEmail(), ex.getMessage());
-            }
-        }
-        return toDTO(groom, newZone);
+    private record ZoneChange(User groom, String oldZone, String newZone) {
     }
 
     private User findGroom(Integer userId) {

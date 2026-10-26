@@ -94,15 +94,18 @@ public class MedicalManagementService {
         return mapper.toDTO(saveAndReload(protocol), true);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<TreatmentProtocolDTO> getProtocols(String state, Integer horseId) {
+        phaseBilling.run(LocalDate.now());
         String st = StringUtils.hasText(state) ? state.trim().toUpperCase() : null;
         return mapper.toSummaryList(protocolRepository.search(st, horseId));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public TreatmentProtocolDTO getProtocolDetail(Integer protocolId) {
-        return mapper.toDTO(findProtocol(protocolId), true);
+        TreatmentProtocol protocol = findProtocol(protocolId);
+        phaseBilling.evaluate(protocol, LocalDate.now());
+        return mapper.toDTO(protocol, true);
     }
 
     // ==========================================
@@ -179,6 +182,29 @@ public class MedicalManagementService {
         TreatmentProtocol protocol = findProtocol(protocolId);
         if (!"IN_TREATMENT".equals(protocol.getState())) {
             throw new IllegalArgumentException("Chỉ ghi tiến trình khi phác đồ đang điều trị (IN_TREATMENT). Hiện tại: " + protocol.getState() + ".");
+        }
+        java.util.regex.Matcher phaseDone = java.util.regex.Pattern.compile("Hoàn thành giai đoạn (\\d+)").matcher(request.getContent());
+        if (phaseDone.find()) {
+            int phaseNo = Integer.parseInt(phaseDone.group(1));
+            java.util.Set<Integer> finished = new java.util.HashSet<>();
+            for (ProtocolProgressNote note : noteRepository.findByProtocol_ProtocolIdOrderByWrittenAtAsc(protocolId)) {
+                if (note.getContent() == null) {
+                    continue;
+                }
+                java.util.regex.Matcher earlier = java.util.regex.Pattern.compile("Hoàn thành giai đoạn (\\d+)").matcher(note.getContent());
+                if (earlier.find()) {
+                    finished.add(Integer.parseInt(earlier.group(1)));
+                }
+            }
+            for (ProtocolPhase phase : protocol.getPhases()) {
+                if (phase.getPhaseNo() == null || phase.getPhaseNo() >= phaseNo) {
+                    continue;
+                }
+                if (!finished.contains(phase.getPhaseNo())) {
+                    throw new IllegalArgumentException("Phải hoàn thành giai đoạn " + phase.getPhaseNo() + " (" + phase.getPhaseName() + ") trước giai đoạn " + phaseNo + ".");
+                }
+            }
+            phaseBilling.assertCanFinishPhase(protocol, phaseNo);
         }
         noteRepository.save(ProtocolProgressNote.builder()
                 .protocol(protocol)

@@ -90,7 +90,7 @@ public class HorseController {
             @PathVariable Integer id,
             @Valid @RequestBody com.horsetrack.equinecare.modules.horse.dto.HorseAssignTrainerRequestDTO request) {
         HorseResponseDTO response = horseService.assignTrainer(id, request);
-        return ResponseEntity.ok(ApiResponse.ok("Đã phân công HLV " + response.getAssignedTrainerName() + " phụ trách ngựa " + response.getHorseName(), response));
+        return ResponseEntity.ok(ApiResponse.ok("Đã gửi yêu cầu xác nhận tới HLV. Ngựa chưa đổi người phụ trách cho đến khi HLV xác nhận.", response));
     }
 
     // Club Manager bỏ phân công HLV (không cho phép khi ngựa còn giáo án chưa kết thúc)
@@ -98,7 +98,7 @@ public class HorseController {
     @PreAuthorize("hasAuthority('Club Manager')")
     public ResponseEntity<ApiResponse<HorseResponseDTO>> unassignTrainer(@PathVariable Integer id) {
         HorseResponseDTO response = horseService.unassignTrainer(id);
-        return ResponseEntity.ok(ApiResponse.ok("Đã bỏ phân công HLV của ngựa " + response.getHorseName(), response));
+        return ResponseEntity.ok(ApiResponse.ok("Đã gửi yêu cầu bỏ phân công. HLV hiện tại vẫn phụ trách cho đến khi xác nhận.", response));
     }
 
     @PutMapping("/{id}/reject")

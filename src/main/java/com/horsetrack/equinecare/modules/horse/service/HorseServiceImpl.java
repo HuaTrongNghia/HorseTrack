@@ -50,6 +50,7 @@ public class HorseServiceImpl implements HorseService {
     private final HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository;
     private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
+    private final com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests;
     private final com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService;
     private final RegistrationAttachmentService attachmentService;
 
@@ -60,6 +61,7 @@ public class HorseServiceImpl implements HorseService {
                             HorseAccessGuard horseAccessGuard,
                             com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository,
                             com.horsetrack.equinecare.modules.notification.service.EmailService emailService,
+                            com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests,
                             com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService,
                             RegistrationAttachmentService attachmentService) {
         this.horseRepository = horseRepository;
@@ -72,6 +74,7 @@ public class HorseServiceImpl implements HorseService {
         this.horseAccessGuard = horseAccessGuard;
         this.trainingPlanRepository = trainingPlanRepository;
         this.emailService = emailService;
+        this.assignmentRequests = assignmentRequests;
         this.injuryService = injuryService;
         this.attachmentService = attachmentService;
     }
@@ -197,55 +200,48 @@ public class HorseServiceImpl implements HorseService {
         if (previous == null) {
             throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được phân công HLV.");
         }
-        // Giáo án chưa kết thúc cần có HLV phụ trách: phải phân công HLV khác để bàn giao, hoặc kết thúc / hủy giáo án trước
-        for (String st : com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES) {
-            if (!trainingPlanRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), st).isEmpty()) {
-                throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đang có giáo án " + st
-                        + ". Hãy phân công HLV khác để bàn giao giáo án, hoặc kết thúc / hủy giáo án trước khi bỏ phân công.");
-            }
+        assertNoOpenPlan(horse);
+        assignmentRequests.openTrainerRelease(horse, previous, currentUser());
+        return mapToResponseDTO(horse);
+    }
+
+    @Override
+    @Transactional
+    public HorseResponseDTO applyTrainerRelease(Integer horseId) {
+        Horse horse = findHorse(horseId);
+        User previous = horse.getAssignedTrainer();
+        if (previous == null) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được phân công HLV.");
         }
+        assertNoOpenPlan(horse);
         horse.setAssignedTrainer(null);
         horseRepository.save(horse);
         auditTrail.record("UNASSIGN_TRAINER", "Horses", "assigned_trainer_id=" + previous.getUserId(),
                 "assigned_trainer_id=null | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ")");
-        if (StringUtils.hasText(previous.getEmail())) {
-            try {
-                emailService.sendAsync("TRAINER_ASSIGNMENT", previous.getEmail(), "[HorseTrack] Bạn không còn phụ trách ngựa " + horse.getHorseName(),
-                        "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(previous.getFullName()) + "</b>,</p>"
-                                + "<p>Club Manager đã bỏ phân công bạn phụ trách huấn luyện ngựa <b>"
-                                + org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName()) + "</b>.</p>");
-            } catch (Exception ignored) {
-                // Email chỉ là thông báo
-            }
-        }
+        mailTrainer(previous, "[HorseTrack] Bạn không còn phụ trách ngựa " + horse.getHorseName(),
+                "<p>Xin chào <b>" + esc(previous.getFullName()) + "</b>,</p>"
+                        + "<p>Bạn đã xác nhận bỏ phân công ngựa <b>" + esc(horse.getHorseName()) + "</b>.</p>");
         return mapToResponseDTO(horse);
     }
 
     @Override
     @Transactional
     public HorseResponseDTO assignTrainer(Integer horseId, HorseAssignTrainerRequestDTO request) {
-        Horse horse = findHorse(horseId);
-        if (horse.getStall() == null) {
-            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được duyệt và cấp chuồng, chưa thể phân công HLV.");
-        }
-        User trainer = userRepository.findById(request.getTrainerId())
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên với ID: " + request.getTrainerId()));
-        if (!HorseAccessGuard.ROLE_TRAINER.equals(trainer.getRoleName())) {
-            throw new IllegalArgumentException("Chỉ được phân công nhân viên có vai trò Trainer (người được chọn có vai trò " + trainer.getRoleName() + ").");
-        }
-        if (Boolean.FALSE.equals(trainer.getIsActive())) {
-            throw new IllegalArgumentException("Tài khoản Trainer " + trainer.getFullName() + " đã bị vô hiệu hóa.");
-        }
-        com.horsetrack.equinecare.modules.auth.service.StaffAccountService.requireConfirmed(trainer, "phân công phụ trách ngựa");
+        PreparedTrainer prepared = prepareTrainer(horseId, request.getTrainerId());
+        assignmentRequests.openTrainerHorse(prepared.horse, prepared.trainer, prepared.previous, currentUser());
+        return mapToResponseDTO(prepared.horse);
+    }
 
-        User previous = horse.getAssignedTrainer();
-        if (previous != null && previous.getUserId().equals(trainer.getUserId())) {
-            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đã được phân công cho " + trainer.getFullName() + ".");
-        }
+    @Override
+    @Transactional
+    public HorseResponseDTO applyTrainerAssignment(Integer horseId, Integer trainerId) {
+        PreparedTrainer prepared = prepareTrainer(horseId, trainerId);
+        Horse horse = prepared.horse;
+        User trainer = prepared.trainer;
+        User previous = prepared.previous;
         horse.setAssignedTrainer(trainer);
         horseRepository.save(horse);
 
-        // Giáo án chưa kết thúc (PENDING / ACTIVE / PAUSED) của ngựa được bàn giao cho HLV mới
         int handedOver = 0;
         for (String st : com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES) {
             for (var plan : trainingPlanRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), st)) {
@@ -260,19 +256,63 @@ public class HorseServiceImpl implements HorseService {
                 "assigned_trainer_id=" + trainer.getUserId() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId()
                         + ") | bàn giao " + handedOver + " giáo án");
 
-        if (StringUtils.hasText(trainer.getEmail())) {
-            try {
-                emailService.sendAsync("TRAINER_ASSIGNMENT", trainer.getEmail(), "[HorseTrack] Bạn được phân công phụ trách ngựa " + horse.getHorseName(),
-                        "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(trainer.getFullName()) + "</b>,</p>"
-                                + "<p>Club Manager đã phân công bạn phụ trách huấn luyện ngựa <b>"
-                                + org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName()) + "</b>"
-                                + (horse.getStall() != null ? " (chuồng " + horse.getStall().getStallCode() + ")" : "") + ".</p>"
-                                + (handedOver > 0 ? "<p>Bạn tiếp nhận " + handedOver + " giáo án đang chạy của ngựa này.</p>" : ""));
-            } catch (Exception ignored) {
-                // Email chỉ là thông báo, không làm hỏng việc phân công
-            }
+        String stall = horse.getStall() != null ? " (chuồng " + esc(horse.getStall().getStallCode()) + ")" : "";
+        mailTrainer(trainer, "[HorseTrack] Bạn đã nhận ngựa " + horse.getHorseName(),
+                "<p>Xin chào <b>" + esc(trainer.getFullName()) + "</b>,</p>"
+                        + "<p>Bạn đã xác nhận phụ trách ngựa <b>" + esc(horse.getHorseName()) + "</b>" + stall + ". Phân công có hiệu lực.</p>"
+                        + (handedOver > 0 ? "<p>Bạn tiếp nhận " + handedOver + " giáo án đang chạy của ngựa này.</p>" : ""));
+        if (previous != null) {
+            mailTrainer(previous, "[HorseTrack] Ngựa " + horse.getHorseName() + " đã chuyển sang HLV khác",
+                    "<p>Xin chào <b>" + esc(previous.getFullName()) + "</b>,</p>"
+                            + "<p>HLV <b>" + esc(trainer.getFullName()) + "</b> đã xác nhận nhận ngựa <b>" + esc(horse.getHorseName()) + "</b>. Bạn không còn phụ trách ngựa này.</p>");
         }
         return mapToResponseDTO(horse);
+    }
+
+    private void assertNoOpenPlan(Horse horse) {
+        for (String st : com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES) {
+            if (!trainingPlanRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), st).isEmpty()) {
+                throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đang có giáo án " + st
+                        + ". Hãy phân công HLV khác để bàn giao giáo án, hoặc kết thúc / hủy giáo án trước khi bỏ phân công.");
+            }
+        }
+    }
+
+    private PreparedTrainer prepareTrainer(Integer horseId, Integer trainerId) {
+        Horse horse = findHorse(horseId);
+        if (horse.getStall() == null) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được duyệt và cấp chuồng, chưa thể phân công HLV.");
+        }
+        User trainer = userRepository.findById(trainerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên với ID: " + trainerId));
+        if (!HorseAccessGuard.ROLE_TRAINER.equals(trainer.getRoleName())) {
+            throw new IllegalArgumentException("Chỉ được phân công nhân viên có vai trò Trainer (người được chọn có vai trò " + trainer.getRoleName() + ").");
+        }
+        if (Boolean.FALSE.equals(trainer.getIsActive())) {
+            throw new IllegalArgumentException("Tài khoản Trainer " + trainer.getFullName() + " đã bị vô hiệu hóa.");
+        }
+        com.horsetrack.equinecare.modules.auth.service.StaffAccountService.requireConfirmed(trainer, "phân công phụ trách ngựa");
+        User previous = horse.getAssignedTrainer();
+        if (previous != null && previous.getUserId().equals(trainer.getUserId())) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đã được phân công cho " + trainer.getFullName() + ".");
+        }
+        return new PreparedTrainer(horse, trainer, previous);
+    }
+
+    private void mailTrainer(User user, String subject, String html) {
+        if (user == null || !StringUtils.hasText(user.getEmail())) return;
+        try {
+            emailService.sendAsync("TRAINER_ASSIGNMENT", user.getEmail(), subject, html);
+        } catch (Exception ignored) {
+            // Email chỉ là thông báo
+        }
+    }
+
+    private static String esc(String value) {
+        return org.springframework.web.util.HtmlUtils.htmlEscape(value == null ? "" : value);
+    }
+
+    private record PreparedTrainer(Horse horse, User trainer, User previous) {
     }
 
     // ==========================================

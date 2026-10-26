@@ -17,7 +17,6 @@ public final class TrainingPlanPhases {
             "MEDIUM", "MEDIUM", "TRUNG BÌNH", "MEDIUM", "VỪA", "MEDIUM",
             "HIGH", "HIGH", "CAO", "HIGH", "NẶNG", "HIGH");
     private static final Set<String> TRACKS = Set.of("SYNTHETIC", "DIRT", "TURF");
-    private static final int MAX_PHASES = 12;
 
     private TrainingPlanPhases() {
     }
@@ -36,11 +35,8 @@ public final class TrainingPlanPhases {
 
     /** Tạo các giai đoạn từ request; tổng số tuần không vượt thời gian giáo án */
     public static List<TrainingPlanPhase> build(TrainingPlan plan, List<TrainingPlanPhaseDTO> phases) {
-        if (phases == null || phases.isEmpty()) {
-            return List.of();
-        }
-        if (phases.size() > MAX_PHASES) {
-            throw new IllegalArgumentException("Giáo án tối đa " + MAX_PHASES + " giai đoạn.");
+        if (phases == null || phases.size() != 1) {
+            throw new IllegalArgumentException("Mỗi giáo án chỉ gồm đúng 1 giai đoạn. Hết giai đoạn này hãy kết thúc giáo án, rồi lập giáo án mới cho giai đoạn tiếp theo.");
         }
         long planDays = ChronoUnit.DAYS.between(plan.getStartDate(), plan.getEndDate()) + 1;
         long planWeeks = (planDays + 6) / 7;

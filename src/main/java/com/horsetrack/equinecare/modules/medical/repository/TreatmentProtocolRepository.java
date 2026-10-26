@@ -22,6 +22,8 @@ public interface TreatmentProtocolRepository extends JpaRepository<TreatmentProt
 
     List<TreatmentProtocol> findByStateInOrderByRequiredByAscCreatedAtAsc(Collection<String> states);
 
+    List<TreatmentProtocol> findByCaseId(Integer caseId);
+
     // Phiên bản thay thế (bản mới) của một phác đồ
     Optional<TreatmentProtocol> findByReplacesProtocol_ProtocolId(Integer protocolId);
 }

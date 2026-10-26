@@ -11,11 +11,15 @@ public interface HorseService {
     org.springframework.data.domain.Page<com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO> getAllHorses(int page, int size, String status);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO getHorseDetail(Integer horseId);
 
-    // Club Manager phân công HLV phụ trách ngựa
+    // Club Manager gửi yêu cầu; HLV xác nhận thì phân công mới được ghi
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO assignTrainer(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseAssignTrainerRequestDTO request);
 
-    // Club Manager bỏ phân công HLV của ngựa
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO unassignTrainer(Integer horseId);
+
+    // Ghi phân công sau khi HLV xác nhận
+    com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO applyTrainerAssignment(Integer horseId, Integer trainerId);
+
+    com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO applyTrainerRelease(Integer horseId);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO approveHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseApprovalRequestDTO request);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO updateHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseUpdateRequestDTO request);
     com.horsetrack.equinecare.modules.horse.dto.HorseResponseDTO rejectHorse(Integer horseId, com.horsetrack.equinecare.modules.horse.dto.HorseRejectRequestDTO request);
