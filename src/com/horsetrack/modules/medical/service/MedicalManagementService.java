@@ -94,15 +94,18 @@ public class MedicalManagementService {
         return mapper.toDTO(saveAndReload(protocol), true);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public List<TreatmentProtocolDTO> getProtocols(String state, Integer horseId) {
+        phaseBilling.run(LocalDate.now());
         String st = StringUtils.hasText(state) ? state.trim().toUpperCase() : null;
         return mapper.toSummaryList(protocolRepository.search(st, horseId));
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public TreatmentProtocolDTO getProtocolDetail(Integer protocolId) {
-        return mapper.toDTO(findProtocol(protocolId), true);
+        TreatmentProtocol protocol = findProtocol(protocolId);
+        phaseBilling.evaluate(protocol, LocalDate.now());
+        return mapper.toDTO(protocol, true);
     }
 
     // ==========================================
@@ -180,6 +183,29 @@ public class MedicalManagementService {
         if (!"IN_TREATMENT".equals(protocol.getState())) {
             throw new IllegalArgumentException("Chỉ ghi tiến trình khi phác đồ đang điều trị (IN_TREATMENT). Hiện tại: " + protocol.getState() + ".");
         }
+        java.util.regex.Matcher phaseDone = java.util.regex.Pattern.compile("Hoàn thành giai đoạn (\\d+)").matcher(request.getContent());
+        if (phaseDone.find()) {
+            int phaseNo = Integer.parseInt(phaseDone.group(1));
+            java.util.Set<Integer> finished = new java.util.HashSet<>();
+            for (ProtocolProgressNote note : noteRepository.findByProtocol_ProtocolIdOrderByWrittenAtAsc(protocolId)) {
+                if (note.getContent() == null) {
+                    continue;
+                }
+                java.util.regex.Matcher earlier = java.util.regex.Pattern.compile("Hoàn thành giai đoạn (\\d+)").matcher(note.getContent());
+                if (earlier.find()) {
+                    finished.add(Integer.parseInt(earlier.group(1)));
+                }
+            }
+            for (ProtocolPhase phase : protocol.getPhases()) {
+                if (phase.getPhaseNo() == null || phase.getPhaseNo() >= phaseNo) {
+                    continue;
+                }
+                if (!finished.contains(phase.getPhaseNo())) {
+                    throw new IllegalArgumentException("Phải hoàn thành giai đoạn " + phase.getPhaseNo() + " (" + phase.getPhaseName() + ") trước giai đoạn " + phaseNo + ".");
+                }
+            }
+            phaseBilling.assertCanFinishPhase(protocol, phaseNo);
+        }
         noteRepository.save(ProtocolProgressNote.builder()
                 .protocol(protocol)
                 .writtenBy(currentUser())
@@ -238,29 +264,28 @@ public class MedicalManagementService {
             }
         }
         protocolRepository.saveAndFlush(protocol);
-        // Dòng mới được lưu qua cascade merge: lấy lại bản đã quản lý (có protocol_item_id) để gắn vào hóa đơn bổ sung
-        line = phase.getItems().stream()
-                .filter(it -> it.getItem().getItemId().equals(item.getItemId()))
-                .findFirst()
-                .orElseThrow();
 
         String qtyText = BigDecimal.valueOf(qty).stripTrailingZeros().toPlainString() + " " + item.getUnit();
-        var hold = protocolStockService.holdSupplement(protocol, item, qty,
-                "Giữ hàng thuốc bổ sung cho phác đồ " + protocol.getProtocolCode() + ": " + item.getItemName() + " x " + qtyText);
-        var invoice = phaseBilling.issueSupplementInvoice(protocol, phase, line, BigDecimal.valueOf(qty), reason);
+        holdRepository.save(com.horsetrack.equinecare.modules.inventory.entity.StockHold.builder()
+                .protocolId(protocol.getProtocolId())
+                .item(item)
+                .qtyNeeded(qty)
+                .qtyAvailable(0d)
+                .qtyHeld(0d)
+                .status("PENDING_REVIEW")
+                .checkedAt(LocalDateTime.now())
+                .build());
 
         noteRepository.save(ProtocolProgressNote.builder()
                 .protocol(protocol)
                 .writtenBy(currentUser())
                 .writtenAt(LocalDateTime.now())
-                .content("Bổ sung thuốc GĐ " + phase.getPhaseNo() + ": " + item.getItemName() + " x " + qtyText
-                        + (dosage != null ? " (" + dosage + ")" : "") + ". Lý do: " + reason
-                        + ("SHORT".equals(hold.getStatus()) ? ". Kho đang thiếu hàng." : "")
-                        + invoice.map(i -> ". Hóa đơn " + i.getInvoiceCode()).orElse(""))
+                .content("Chờ kho duyệt thuốc GĐ " + phase.getPhaseNo() + ": " + item.getItemName() + " x " + qtyText
+                        + (dosage != null ? " (" + dosage + ")" : "") + ". Lý do: " + reason)
                 .build());
         auditTrail.record("ADD_PROTOCOL_ITEM", "Protocol_Items", null,
                 "phác đồ " + protocol.getProtocolCode() + " | GĐ " + phase.getPhaseNo() + " | " + item.getItemName() + " x " + qtyText
-                        + " | kho " + hold.getStatus() + invoice.map(i -> " | hóa đơn " + i.getInvoiceCode()).orElse("") + " | " + reason);
+                        + " | chờ kho duyệt | " + reason);
         return mapper.toDTO(protocol, true);
     }
 
@@ -270,6 +295,21 @@ public class MedicalManagementService {
         // Phác đồ đang tạm dừng vì chưa thanh toán (đã cấp thuốc) vẫn được bác sĩ kết thúc
         if (!"IN_TREATMENT".equals(protocol.getState()) && !com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())) {
             throw new IllegalArgumentException("Chỉ kết thúc được phác đồ đang điều trị (IN_TREATMENT) hoặc đang tạm dừng do chưa thanh toán. Hiện tại: " + protocol.getState() + ".");
+        }
+        java.util.Set<Integer> finished = new java.util.HashSet<>();
+        for (ProtocolProgressNote note : noteRepository.findByProtocol_ProtocolIdOrderByWrittenAtAsc(protocolId)) {
+            if (note.getContent() == null) {
+                continue;
+            }
+            java.util.regex.Matcher done = java.util.regex.Pattern.compile("Hoàn thành giai đoạn (\\d+)").matcher(note.getContent());
+            if (done.find()) {
+                finished.add(Integer.parseInt(done.group(1)));
+            }
+        }
+        for (ProtocolPhase phase : protocol.getPhases()) {
+            if (!finished.contains(phase.getPhaseNo())) {
+                throw new IllegalArgumentException("Phải hoàn thành giai đoạn " + phase.getPhaseNo() + " (" + phase.getPhaseName() + ") trước khi kết thúc phác đồ.");
+            }
         }
         // Giai đoạn chưa bắt đầu thì không thu tiền nữa
         phaseBilling.cancelOpenPhaseInvoices(protocol, true, "Phác đồ " + protocol.getProtocolCode() + " kết thúc sớm");
@@ -294,6 +334,7 @@ public class MedicalManagementService {
             throw new IllegalArgumentException("Chỉ hủy được phác đồ chưa cấp thuốc. Hiện tại: " + protocol.getState() + ".");
         }
         protocolStockService.releaseHolds(protocolId, "Trả hàng do hủy phác đồ " + protocol.getProtocolCode());
+        phaseBilling.refundPaidPhaseInvoices(protocol, request.getContent().trim());
         phaseBilling.cancelOpenPhaseInvoices(protocol, false, "Hủy phác đồ " + protocol.getProtocolCode());
         protocol.setState("CANCELLED");
         protocol.setClosedAt(LocalDateTime.now());
