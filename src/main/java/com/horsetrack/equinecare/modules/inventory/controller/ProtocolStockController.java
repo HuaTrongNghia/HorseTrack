@@ -50,6 +50,12 @@ public class ProtocolStockController {
         return ResponseEntity.ok(ApiResponse.ok("Lấy lịch sử cấp phát thành công", protocolStockService.dispensingHistory(protocolId)));
     }
 
+    @PutMapping("/{protocolId}/supplements/review")
+    @Operation(summary = "Duyệt thuốc bổ sung", description = "Bác sĩ yêu cầu thêm thuốc khi đang điều trị. Kho giữ hàng nếu đủ và lập hóa đơn; nếu thiếu thì ghi thiếu để đặt hàng.")
+    public ResponseEntity<ApiResponse<TreatmentProtocolDTO>> reviewSupplements(@PathVariable Integer protocolId) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã duyệt thuốc bổ sung", protocolStockService.reviewSupplements(protocolId)));
+    }
+
     @PutMapping("/{protocolId}/dispense")
     @Operation(summary = "Cấp thuốc", description = "Chỉ sau khi bác sĩ xác nhận (VET_CONFIRMED). Xuất phần đã giữ, phác đồ chuyển sang IN_TREATMENT.")
     public ResponseEntity<ApiResponse<TreatmentProtocolDTO>> dispense(@PathVariable Integer protocolId) {

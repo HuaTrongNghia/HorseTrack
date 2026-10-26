@@ -331,6 +331,57 @@ public class ProtocolPhaseBilling {
     // TRA CỨU
     // ==========================================
 
+    /** Chủ ngựa trả giai đoạn theo số thứ tự tăng dần. Hóa đơn thuốc bổ sung không chặn giai đoạn. */
+    @Transactional(readOnly = true)
+    public void assertPhaseOrder(Invoice invoice) {
+        if (invoice.getInvoiceCode() == null || invoice.getInvoiceCode().contains(SUPPLEMENT_MARK)) {
+            return;
+        }
+        Matcher m = CODE.matcher(invoice.getInvoiceCode());
+        if (!m.find()) {
+            return;
+        }
+        int protocolId = Integer.parseInt(m.group(1));
+        int phaseNo = Integer.parseInt(m.group(2));
+        for (int earlier = 1; earlier < phaseNo; earlier++) {
+            Optional<Invoice> open = findPhaseInvoice(protocolId, earlier).filter(Invoice::isOpen);
+            if (open.isPresent()) {
+                throw new IllegalArgumentException("Thanh toán theo thứ tự giai đoạn. Hãy trả hóa đơn " + open.get().getInvoiceCode()
+                        + " (giai đoạn " + earlier + ") trước giai đoạn " + phaseNo + ".");
+            }
+        }
+    }
+
+    /** Phác đồ bị hủy sau khi chủ ngựa đã trả: ghi hoàn tiền và gửi email lý do. */
+    @Transactional
+    public int refundPaidPhaseInvoices(TreatmentProtocol protocol, String reason) {
+        String prefix = String.format("GD-%06d-", protocol.getProtocolId());
+        int n = 0;
+        StringBuilder rows = new StringBuilder();
+        java.math.BigDecimal total = java.math.BigDecimal.ZERO;
+        for (Invoice inv : invoiceRepository.findByInvoiceCodeStartingWithAndPaymentStatusNotOrderByInvoiceIdDesc(prefix, Invoice.CANCELLED)) {
+            if (!Invoice.PAID.equals(inv.getPaymentStatus())) {
+                continue;
+            }
+            inv.setPaymentStatus("REFUNDED");
+            invoiceRepository.save(inv);
+            total = total.add(inv.getFinalPayableAmount() == null ? java.math.BigDecimal.ZERO : inv.getFinalPayableAmount());
+            rows.append("<li>").append(inv.getInvoiceCode()).append(" — ").append(InvoiceGenerator.money(inv.getFinalPayableAmount())).append("</li>");
+            auditTrail.record("REFUND_INVOICE", "Invoices", "payment_status=PAID",
+                    "payment_status=REFUNDED | " + inv.getInvoiceCode() + " | " + reason);
+            n++;
+        }
+        if (n > 0 && protocol.getHorse() != null && protocol.getHorse().getOwner() != null) {
+            invoiceService.notify(protocol.getHorse().getOwner(),
+                    "[HorseTrack] Hoàn tiền phác đồ " + protocol.getProtocolCode(),
+                    "<p>Bác sĩ đã hủy phác đồ <b>" + protocol.getProtocolCode() + "</b> của ngựa <b>"
+                            + HtmlUtils.htmlEscape(protocol.getHorse().getHorseName()) + "</b> sau khi bạn đã thanh toán.</p>"
+                            + "<p>Lý do: " + HtmlUtils.htmlEscape(reason) + "</p>"
+                            + "<p>Số tiền được hoàn:</p><ul>" + rows + "</ul><p>Tổng <b>" + InvoiceGenerator.money(total) + "</b>.</p>");
+        }
+        return n;
+    }
+
     /** Hóa đơn (chưa hủy) mới nhất của một giai đoạn (không tính hóa đơn thuốc bổ sung) */
     @Transactional(readOnly = true)
     public Optional<Invoice> findPhaseInvoice(Integer protocolId, Integer phaseNo) {

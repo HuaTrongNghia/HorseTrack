@@ -184,6 +184,14 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
         if (!DISPENSABLE_STATES.contains(protocol.getState())) {
             throw new IllegalArgumentException("Chỉ cấp thuốc khi bác sĩ đã xác nhận phác đồ (VET_CONFIRMED). Hiện tại: " + protocol.getState() + ".");
         }
+        if (!phaseBilling.isEmergency(protocol)) {
+            protocol.getPhases().stream().min(java.util.Comparator.comparing(com.horsetrack.equinecare.modules.medical.entity.ProtocolPhase::getPhaseNo))
+                    .flatMap(ph -> phaseBilling.findPhaseInvoice(protocolId, ph.getPhaseNo()))
+                    .filter(com.horsetrack.equinecare.modules.finance.entity.Invoice::isOpen)
+                    .ifPresent(inv -> {
+                        throw new IllegalArgumentException("Chủ ngựa chưa thanh toán giai đoạn 1 (" + inv.getInvoiceCode() + "). Chưa thể bắt đầu điều trị.");
+                    });
+        }
         List<StockHold> holds = holdRepository.findByProtocolIdAndStatusIn(protocolId, List.of("HELD", "SHORT"));
         if (holds.isEmpty() || holds.stream().anyMatch(h -> "SHORT".equals(h.getStatus()))) {
             throw new IllegalArgumentException("Phác đồ " + protocol.getProtocolCode() + " chưa được giữ đủ hàng. Hãy kiểm kho lại.");
@@ -222,6 +230,45 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
+    public TreatmentProtocolDTO reviewSupplements(Integer protocolId) {
+        TreatmentProtocol protocol = findProtocol(protocolId);
+        if (!"IN_TREATMENT".equals(protocol.getState())) {
+            throw new IllegalArgumentException("Chỉ duyệt thuốc bổ sung khi phác đồ đang điều trị.");
+        }
+        List<StockHold> pending = holdRepository.findByProtocolIdAndStatusIn(protocolId, List.of("PENDING_REVIEW"));
+        if (pending.isEmpty()) {
+            throw new IllegalArgumentException("Không có thuốc bổ sung đang chờ kho duyệt.");
+        }
+        for (StockHold h : pending) {
+            double need = round2(h.getQtyNeeded() == null ? 0 : h.getQtyNeeded());
+            double available = round2(Math.max(0, stockLedger.availableLocked(h.getItem().getItemId())));
+            double held = Math.min(need, available);
+            if (held > 0) {
+                stockLedger.hold(h.getItem().getItemId(), held, "PROTOCOL", protocolId,
+                        "Kho duyệt thuốc bổ sung cho phác đồ " + protocol.getProtocolCode());
+            }
+            h.setQtyAvailable(available);
+            h.setQtyHeld(held);
+            h.setStatus(held >= need && need > 0 ? "HELD" : "SHORT");
+            h.setCheckedBy(stockLedger.currentUser());
+            h.setCheckedAt(LocalDateTime.now());
+            holdRepository.save(h);
+            if ("HELD".equals(h.getStatus())) {
+                protocol.getPhases().stream()
+                        .flatMap(ph -> ph.getItems().stream().map(it -> new Object[] { ph, it }))
+                        .filter(pair -> ((com.horsetrack.equinecare.modules.medical.entity.ProtocolItem) pair[1]).getItem().getItemId().equals(h.getItem().getItemId()))
+                        .findFirst()
+                        .ifPresent(pair -> phaseBilling.issueSupplementInvoice(protocol,
+                                (com.horsetrack.equinecare.modules.medical.entity.ProtocolPhase) pair[0],
+                                (com.horsetrack.equinecare.modules.medical.entity.ProtocolItem) pair[1],
+                                java.math.BigDecimal.valueOf(need), "Kho duyệt thuốc bổ sung"));
+            }
+        }
+        return mapper.toDTO(protocol, true);
+    }
+
+    @Override
     @Transactional(readOnly = true)
     public List<DispensingHistory.Record> dispensingHistory(Integer protocolId) {
         findProtocol(protocolId);
@@ -231,7 +278,7 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void releaseHolds(Integer protocolId, String note) {
-        for (StockHold h : holdRepository.findByProtocolIdAndStatusIn(protocolId, List.of("HELD", "SHORT"))) {
+        for (StockHold h : holdRepository.findByProtocolIdAndStatusIn(protocolId, List.of("HELD", "SHORT", "PENDING_REVIEW"))) {
             if (h.getQtyHeld() != null && h.getQtyHeld() > 0) {
                 stockLedger.release(h.getItem().getItemId(), h.getQtyHeld(), "PROTOCOL", protocolId, note);
             }

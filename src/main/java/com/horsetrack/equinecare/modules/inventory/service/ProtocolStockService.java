@@ -14,6 +14,9 @@ public interface ProtocolStockService {
     TreatmentProtocolDTO checkStock(Integer protocolId, StockCheckRequestDTO request);
     TreatmentProtocolDTO dispense(Integer protocolId);
 
+    /** Kho duyệt thuốc bác sĩ bổ sung khi đang điều trị: đủ thì giữ hàng và lập hóa đơn, thiếu thì ghi thiếu để kho đặt hàng. */
+    TreatmentProtocolDTO reviewSupplements(Integer protocolId);
+
     /**
      * Sau khi đơn nhập gắn với phác đồ được nhận: kiểm tồn lại.
      * Đủ hàng thì STOCK_AVAILABLE (đã giữ). Còn thiếu thì REQUIRES_VET_REVIEW để bác sĩ chờ tiếp hoặc đổi thuốc.

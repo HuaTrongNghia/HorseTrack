@@ -1,5 +1,6 @@
 package com.horsetrack.equinecare.modules.training.dto;
 
+import com.horsetrack.equinecare.modules.training.dto.TrainingPlanPhaseDTO;
 import lombok.*;
 import java.time.LocalDate;
 import java.util.List;
@@ -16,5 +17,7 @@ public class OwnerTrainingProgressDTO {
     private LocalDate endDate;
     private String status;
     private Double progress;
+    private String delayNote;
+    private List<TrainingPlanPhaseDTO> phases;
     private List<TrainingSessionLogDTO> sessions;
 }

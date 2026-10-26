@@ -70,6 +70,7 @@ public class PaymentService {
         if (!invoice.isOpen()) {
             throw new IllegalArgumentException("Hóa đơn " + invoice.getInvoiceCode() + " không ở trạng thái chờ thanh toán (hiện tại: " + invoice.getPaymentStatus() + ").");
         }
+        protocolPhaseBilling.assertPhaseOrder(invoice);
         BigDecimal amount = BillingPolicy.vnd(invoiceService.amountDue(invoice, LocalDate.now()));
         if (amount.signum() <= 0) {
             throw new IllegalArgumentException("Hóa đơn không còn số tiền phải thanh toán.");

@@ -19,4 +19,6 @@ public class TrainingSessionLogDTO {
     private String evaluationComment;
     private String evaluatedBy;
     private String evaluatedAt;
+    private String planName;
+    private Boolean late;
 }

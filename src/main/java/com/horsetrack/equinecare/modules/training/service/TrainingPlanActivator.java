@@ -45,6 +45,7 @@ public class TrainingPlanActivator {
 
     private final TrainingPlanRepository planRepository;
     private final TrainingSessionRepository sessionRepository;
+    private final SessionLateNotifier sessionLateNotifier;
 
     /** Chuyển giáo án PENDING sang ACTIVE nếu đủ điều kiện. Trả về true khi vừa được kích hoạt. */
     @Transactional
@@ -67,9 +68,14 @@ public class TrainingPlanActivator {
     @Scheduled(fixedDelayString = "${app.training.activate-check-ms:300000}", initialDelayString = "${app.training.activate-initial-delay-ms:30000}")
     @Transactional
     public void activateDuePlans() {
-        int n = activateDuePlans(LocalDate.now());
+        LocalDate today = LocalDate.now();
+        int n = activateDuePlans(today);
         if (n > 0) {
             log.info("Đã kích hoạt {} giáo án tới ngày bắt đầu", n);
+        }
+        int late = sessionLateNotifier.notify(today);
+        if (late > 0) {
+            log.info("Đã báo {} buổi tập quá ngày chưa được xác nhận", late);
         }
     }
 

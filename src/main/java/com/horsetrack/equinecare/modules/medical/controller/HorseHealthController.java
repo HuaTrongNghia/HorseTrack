@@ -15,7 +15,9 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
@@ -33,9 +35,16 @@ public class HorseHealthController {
     private final GroomProfileRepository groomProfileRepository;
 
     @GetMapping("/{id}/injuries")
-    @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Veterinarian', 'Groom')")
+    @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Veterinarian', 'Groom', 'Horse Owner')")
     public ResponseEntity<ApiResponse<List<InjuryDTO>>> listInjuries(@PathVariable Integer id) {
-        horseAccessGuard.checkAssigned(findHorse(id));
+        Horse horse = findHorse(id);
+        horseAccessGuard.checkAssigned(horse);
+        var auth = SecurityContextHolder.getContext().getAuthentication();
+        boolean owner = auth != null && auth.getAuthorities().stream().anyMatch(a -> "Horse Owner".equals(a.getAuthority()));
+        if (owner && (horse.getOwner() == null
+                || (!auth.getName().equals(horse.getOwner().getUsername()) && !auth.getName().equalsIgnoreCase(String.valueOf(horse.getOwner().getEmail()))))) {
+            throw new AccessDeniedException("Bạn chỉ xem được chấn thương của ngựa thuộc sở hữu của mình.");
+        }
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách chấn thương thành công", horseHealthService.listForHorse(id)));
     }
 
