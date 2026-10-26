@@ -12,7 +12,16 @@ public interface ProtocolStockService {
     List<TreatmentProtocolDTO> getQueue(String state);
     TreatmentProtocolDTO getDetail(Integer protocolId);
     TreatmentProtocolDTO checkStock(Integer protocolId, StockCheckRequestDTO request);
-    TreatmentProtocolDTO dispense(Integer protocolId);
+    TreatmentProtocolDTO dispense(Integer protocolId, java.util.List<Integer> phaseNos);
+
+    /** Kho duyệt thuốc bác sĩ bổ sung khi đang điều trị: đủ thì giữ hàng và lập hóa đơn, thiếu thì ghi thiếu để kho đặt hàng. */
+    TreatmentProtocolDTO reviewSupplements(Integer protocolId);
+
+    /**
+     * Sau khi đơn nhập gắn với phác đồ được nhận: kiểm tồn lại.
+     * Đủ hàng thì STOCK_AVAILABLE (đã giữ). Còn thiếu thì REQUIRES_VET_REVIEW để bác sĩ chờ tiếp hoặc đổi thuốc.
+     */
+    void recheckAfterReceipt(Integer protocolId);
 
     /** Trả lại toàn bộ hàng đang giữ của phác đồ (dùng khi hủy hoặc tạo phiên bản mới). */
     void releaseHolds(Integer protocolId, String note);
