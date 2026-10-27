@@ -230,11 +230,14 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
                 double take = round2(Math.min(left, h.getQtyHeld()));
                 var issued = stockLedger.issueHeldFefo(h.getItem().getItemId(), take, "PROTOCOL", protocolId, issueNote + " " + DispensingHistory.holdTag(h.getHoldId()));
                 issued.stream().map(t -> t.getLot()).filter(Objects::nonNull).findFirst().ifPresent(h::setLot);
-                h.setQtyHeld(round2(h.getQtyHeld() - take));
-                h.setQtyNeeded(round2(Math.max(0, (h.getQtyNeeded() == null ? 0 : h.getQtyNeeded()) - take)));
+                double neededBefore = h.getQtyNeeded() == null ? take : h.getQtyNeeded();
+                h.setQtyHeld(round2(Math.max(0, h.getQtyHeld() - take)));
                 if (h.getQtyHeld() <= 0.001) {
+                    h.setQtyHeld(0d);
                     h.setStatus("ISSUED");
                 }
+                double neededLeft = round2(neededBefore - take);
+                h.setQtyNeeded(neededLeft > 0 ? neededLeft : round2(Math.max(neededBefore, take)));
                 holdRepository.save(h);
                 left = round2(left - take);
             }
