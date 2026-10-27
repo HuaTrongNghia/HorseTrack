@@ -26,13 +26,26 @@ public class TrainingPlanActivator {
     public static final String PLAN_ACTIVE = "ACTIVE";
     public static final String SESSION_PENDING = "PENDING";
     public static final String SESSION_CONFIRMED = "CONFIRMED";
-    /** Buổi tập chưa kết thúc (chờ xác nhận hoặc đã xác nhận) */
-    public static final List<String> OPEN_SESSION_STATUSES = List.of(SESSION_PENDING, SESSION_CONFIRMED);
+    /** Buổi tập dừng giữa chừng (chỉ số vượt ngưỡng), đã gửi ca cho bác sĩ, chờ bác sĩ quyết định */
+    public static final String SESSION_WAITING_VET = "WAITING_VET";
+    /** Buổi tập kết thúc do dừng giữa chừng */
+    public static final String SESSION_STOPPED = "STOPPED";
+    /** Groom đã bắt đầu buổi tập, đang nhập chỉ số */
+    public static final String SESSION_IN_PROGRESS = "IN_PROGRESS";
+    /** Chỉ số vượt ngưỡng: buổi tập tự tạm dừng, chờ HLV cho tập tiếp hoặc dừng & gửi bác sĩ (F22-02) */
+    public static final String SESSION_PAUSED_PENDING_TRAINER = "PAUSED_PENDING_TRAINER";
+    /** Buổi tập chưa kết thúc (kể cả đang chờ HLV / bác sĩ): giáo án chưa được tự hoàn thành */
+    public static final List<String> UNFINISHED_SESSION_STATUSES = List.of("PENDING", "CONFIRMED", SESSION_IN_PROGRESS, SESSION_PAUSED_PENDING_TRAINER, "WAITING_VET");
+    /** Buổi tập chưa kết thúc và còn thực hiện tiếp được (chờ xác nhận, đã xác nhận, đang tập) */
+    public static final List<String> OPEN_SESSION_STATUSES = List.of(SESSION_PENDING, SESSION_CONFIRMED, SESSION_IN_PROGRESS);
+    /** Buổi tập đang chiếm lịch của Groom / ngựa (để chặn trùng giờ, hủy khi ngựa bị khóa) */
+    public static final List<String> ACTIVE_SESSION_STATUSES = List.of(SESSION_PENDING, SESSION_CONFIRMED, SESSION_IN_PROGRESS, SESSION_PAUSED_PENDING_TRAINER);
     /** Giáo án đang chiếm ngựa: mỗi ngựa chỉ có tối đa một giáo án ở các trạng thái này */
     public static final List<String> OPEN_PLAN_STATUSES = List.of(PLAN_PENDING, PLAN_ACTIVE, "PAUSED");
 
     private final TrainingPlanRepository planRepository;
     private final TrainingSessionRepository sessionRepository;
+    private final SessionLateNotifier sessionLateNotifier;
 
     /** Chuyển giáo án PENDING sang ACTIVE nếu đủ điều kiện. Trả về true khi vừa được kích hoạt. */
     @Transactional
@@ -55,9 +68,14 @@ public class TrainingPlanActivator {
     @Scheduled(fixedDelayString = "${app.training.activate-check-ms:300000}", initialDelayString = "${app.training.activate-initial-delay-ms:30000}")
     @Transactional
     public void activateDuePlans() {
-        int n = activateDuePlans(LocalDate.now());
+        LocalDate today = LocalDate.now();
+        int n = activateDuePlans(today);
         if (n > 0) {
             log.info("Đã kích hoạt {} giáo án tới ngày bắt đầu", n);
+        }
+        int late = sessionLateNotifier.notify(today);
+        if (late > 0) {
+            log.info("Đã báo {} buổi tập quá ngày chưa được xác nhận", late);
         }
     }
 
