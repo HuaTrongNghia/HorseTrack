@@ -50,8 +50,18 @@ public class TrainingPlanLifecycle {
     public String cancel(Integer planId, String reason) {
         TrainingPlan plan = findPlan(planId);
         horseAccessGuard.checkAssigned(plan.getHorse());
-        if (!TrainingPlanActivator.OPEN_PLAN_STATUSES.contains(String.valueOf(plan.getStatus()).toUpperCase())) {
-            throw new IllegalArgumentException("Chỉ hủy được giáo án đang chờ, đang chạy hoặc tạm dừng (hiện tại: " + plan.getStatus() + ").");
+        if (!TrainingPlanActivator.PLAN_PENDING.equalsIgnoreCase(plan.getStatus())) {
+            throw new IllegalArgumentException("Giáo án đã bắt đầu hoặc đang tạm dừng, HLV không được hủy. Chỉ hủy được giáo án chưa bắt đầu.");
+        }
+        if (plan.getHorse() != null && Boolean.TRUE.equals(plan.getHorse().getIsLocked())) {
+            throw new IllegalArgumentException("Ngựa đang bị khóa huấn luyện. HLV không được hủy giáo án khi bác sĩ chưa đóng ca.");
+        }
+        boolean started = plan.getSessions().stream().anyMatch(s -> {
+            String st = String.valueOf(s.getStatus()).toUpperCase();
+            return !"PENDING".equals(st) && !"CONFIRMED".equals(st) && !"CANCELLED".equals(st);
+        });
+        if (started) {
+            throw new IllegalArgumentException("Giáo án đã có buổi tập bắt đầu hoặc đã xong, HLV không được hủy.");
         }
         checkNoBusySession(plan, "hủy");
 
