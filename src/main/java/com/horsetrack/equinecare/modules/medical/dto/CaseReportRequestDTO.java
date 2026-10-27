@@ -30,8 +30,4 @@ public class CaseReportRequestDTO {
     @NotBlank(message = "Mô tả triệu chứng (description) là bắt buộc")
     @Size(max = 2000, message = "Mô tả không được vượt quá 2000 ký tự")
     private String description;
-
-    // Đường dẫn ảnh đã tải lên (không gửi ảnh base64)
-    @Size(max = 255, message = "Đường dẫn ảnh (imageUrl) không được vượt quá 255 ký tự")
-    private String imageUrl;
 }

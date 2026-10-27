@@ -18,7 +18,7 @@ public class HorseUpdateRequestDTO {
     @DecimalMin(value = "0.1", message = "Weight must be greater than or equal to 0.1")
     private BigDecimal weightKg;
 
-    @Pattern(regexp = "(?i)^(HEALTHY|WATCH|INJURED|QUARANTINE)$", message = "healthStatus phải là HEALTHY, WATCH, INJURED hoặc QUARANTINE")
+    @Pattern(regexp = "(?i)^(HEALTHY|WATCH|INJURED|QUARANTINE|EMERGENCY)$", message = "healthStatus phải là HEALTHY, WATCH, INJURED, QUARANTINE hoặc EMERGENCY")
     private String healthStatus;
 
     private Boolean isLocked;

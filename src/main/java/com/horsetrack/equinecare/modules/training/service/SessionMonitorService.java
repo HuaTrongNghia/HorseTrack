@@ -165,8 +165,8 @@ public class SessionMonitorService {
         if (request.getMaxHeartRate() != null && request.getMaxHeartRate() > maxHr) {
             throw new IllegalArgumentException("Ngưỡng nhịp tim mới không được cao hơn ngưỡng lúc tạm dừng (" + maxHr + " bpm).");
         }
-        if (!StringUtils.hasText(request.getNote()) || request.getNote().trim().length() < 10) {
-            throw new IllegalArgumentException("Ghi rõ nội dung điều chỉnh ít nhất 10 ký tự.");
+        if (!StringUtils.hasText(request.getNote())) {
+            throw new IllegalArgumentException("Phải ghi nội dung điều chỉnh.");
         }
         applyPhaseAdjustment(session, request);
 

@@ -82,7 +82,7 @@ public class HorseController {
         return ResponseEntity.ok(ApiResponse.ok("Đã duyệt hồ sơ và cấp chuồng cho ngựa", response));
     }
 
-    // Club Manager từ chối hồ sơ (lý do tối thiểu 10 ký tự, có thể cho phép nộp lại)
+    // Club Manager từ chối hồ sơ (có thể cho phép nộp lại)
     // Club Manager phân công HLV phụ trách ngựa; giáo án đang chạy được bàn giao cho HLV mới
     @PutMapping("/{id}/assign-trainer")
     @PreAuthorize("hasAuthority('Club Manager')")

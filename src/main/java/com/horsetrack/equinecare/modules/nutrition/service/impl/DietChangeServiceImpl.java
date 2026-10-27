@@ -125,8 +125,8 @@ public class DietChangeServiceImpl implements DietChangeService {
 
         boolean approve = Boolean.TRUE.equals(decision.getApprove());
         if (!approve) {
-            if (!StringUtils.hasText(decision.getNote()) || decision.getNote().trim().length() < 10) {
-                throw new IllegalArgumentException("Lý do từ chối phải có ít nhất 10 ký tự.");
+            if (!StringUtils.hasText(decision.getNote())) {
+                throw new IllegalArgumentException("Phải ghi lý do từ chối.");
             }
         }
 

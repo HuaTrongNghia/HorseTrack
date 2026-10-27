@@ -179,7 +179,8 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
         if ("IN_TREATMENT".equals(protocol.getState()) && (phaseNos == null || phaseNos.isEmpty())) {
             return dispenseSupplement(protocol);
         }
-        if (com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())) {
+        if (com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())
+                && !phaseBilling.isEmergency(protocol)) {
             throw new IllegalArgumentException("Phác đồ " + protocol.getProtocolCode() + " đang chờ chủ ngựa thanh toán, chưa cấp thêm thuốc.");
         }
         if (!DISPENSABLE_STATES.contains(protocol.getState()) && !"IN_TREATMENT".equals(protocol.getState())) {
@@ -271,6 +272,8 @@ public class ProtocolStockServiceImpl implements ProtocolStockService {
         } else if (!phaseBilling.phase1Unpaid(protocol)) {
             protocol.setState("IN_TREATMENT");
             protocolRepository.save(protocol);
+            // Giai đoạn bắt đầu sớm mà chưa trả thì tạm dừng lại, trừ ngựa cấp cứu
+            phaseBilling.evaluate(protocol, java.time.LocalDate.now());
         } else {
             protocolRepository.save(protocol);
         }

@@ -93,6 +93,24 @@ public class MedicalManagementController {
         return ResponseEntity.ok(ApiResponse.ok("Đã bổ sung thuốc vào phác đồ", service.addItemDuringTreatment(protocolId, request)));
     }
 
+    @PutMapping("/protocols/{protocolId}/phases/{phaseNo}/finish-early")
+    @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Kết thúc sớm giai đoạn", description = "Bác sĩ kết thúc giai đoạn trước ngày đã định. Giai đoạn trước phải đã xong. Kho phải đã cấp thuốc giai đoạn này. Ghi chú không bắt buộc.")
+    public ResponseEntity<ApiResponse<TreatmentProtocolDTO>> finishPhaseEarly(@PathVariable Integer protocolId,
+                                                                              @PathVariable Integer phaseNo,
+                                                                              @Valid @RequestBody(required = false) ProtocolPhaseDecisionDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã kết thúc sớm giai đoạn " + phaseNo, service.finishPhaseEarly(protocolId, phaseNo, request)));
+    }
+
+    @PutMapping("/protocols/{protocolId}/phases/{phaseNo}/start-early")
+    @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Bắt đầu sớm giai đoạn sau", description = "Bác sĩ chuyển ngày bắt đầu của giai đoạn về hôm nay. Giai đoạn trước phải đã kết thúc. Hóa đơn chưa trả của giai đoạn được kéo hạn về hôm nay.")
+    public ResponseEntity<ApiResponse<TreatmentProtocolDTO>> startPhaseEarly(@PathVariable Integer protocolId,
+                                                                             @PathVariable Integer phaseNo,
+                                                                             @Valid @RequestBody(required = false) ProtocolPhaseDecisionDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã bắt đầu sớm giai đoạn " + phaseNo, service.startPhaseEarly(protocolId, phaseNo, request)));
+    }
+
     @PutMapping("/protocols/{protocolId}/complete")
     @PreAuthorize("hasAuthority('Veterinarian')")
     @Operation(summary = "Kết thúc điều trị", description = "Ghi kết quả điều trị (content) và đóng phác đồ (COMPLETED).")

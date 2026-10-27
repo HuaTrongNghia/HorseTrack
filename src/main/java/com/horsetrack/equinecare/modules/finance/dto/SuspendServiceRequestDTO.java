@@ -8,6 +8,6 @@ import lombok.Data;
 public class SuspendServiceRequestDTO {
 
     @NotBlank(message = "Phải nhập lý do đình chỉ")
-    @Size(min = 10, max = 255, message = "Lý do đình chỉ từ 10 đến 255 ký tự")
+    @Size(max = 255, message = "Lý do đình chỉ không được vượt quá 255 ký tự")
     private String reason;
 }

@@ -8,7 +8,7 @@ import lombok.Data;
 public class SessionStopRequestDTO {
 
     @NotBlank(message = "Phải mô tả dấu hiệu / lý do dừng buổi tập")
-    @Size(min = 10, max = 500, message = "Lý do dừng từ 10 đến 500 ký tự")
+    @Size(max = 500, message = "Lý do dừng không được vượt quá 500 ký tự")
     private String reason;
 
     // true (mặc định): gửi ca khám cho bác sĩ, buổi tập chờ bác sĩ quyết định; false: chỉ kết thúc buổi tập

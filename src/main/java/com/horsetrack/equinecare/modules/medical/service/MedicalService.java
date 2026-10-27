@@ -48,6 +48,7 @@ public class MedicalService {
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.training.service.SessionIncidentHandler incidentHandler;
+    private final HorseConditionNotifier conditionNotifier;
 
     private boolean isCurrentUserVeterinarian() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -70,6 +71,7 @@ public class MedicalService {
         horse.setHealthStatus("INJURED");
 
         horseRepository.save(horse);
+        conditionNotifier.onStatus(horse, "INJURED", dto.getReason());
 
         int cancelled = trainingLockHandler.onHorseLocked(horse, dto.getReason());
         auditTrail.record("VET_LOCK", "Horses", "isLocked=false",
@@ -140,7 +142,6 @@ public class MedicalService {
                 .reportedBy(reporter)
                 .caseType(dto.getCaseType().trim())
                 .description(dto.getDescription().trim())
-                .imageUrl(StringUtils.hasText(dto.getImageUrl()) ? dto.getImageUrl().trim() : null)
                 .severity(StringUtils.hasText(dto.getSeverity()) ? dto.getSeverity().toUpperCase() : "MEDIUM")
                 .source(isGroom ? "GROOM_REPORT" : "TRAINER_REQUEST")
                 .status("NEW")
@@ -227,7 +228,6 @@ public class MedicalService {
                 .severity(c.getSeverity())
                 .status(c.getStatus())
                 .description(c.getDescription())
-                .imageUrl(c.getImageUrl())
                 .reportedById(c.getReportedBy().getUserId())
                 .reportedByName(c.getReportedBy().getFullName())
                 .assignedVetName(c.getAssignedVet() != null ? c.getAssignedVet().getFullName() : null)

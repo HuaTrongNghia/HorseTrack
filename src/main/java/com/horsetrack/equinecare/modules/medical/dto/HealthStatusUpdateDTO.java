@@ -7,7 +7,7 @@ import lombok.Data;
 @Data
 public class HealthStatusUpdateDTO {
 
-    // HEALTHY / WATCH / INJURED / QUARANTINE (hoặc nhãn tiếng Việt)
+    // HEALTHY / WATCH / INJURED / QUARANTINE / EMERGENCY (hoặc nhãn tiếng Việt)
     @NotBlank(message = "Phải chọn trạng thái sức khỏe")
     private String status;
 

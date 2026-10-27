@@ -34,7 +34,8 @@ import java.util.regex.Pattern;
  * - Sau khi bác sĩ xác nhận và kho đã cấp thuốc: nếu giai đoạn 1 chưa thanh toán, phác đồ ở ON_HOLD_PAYMENT
  *   (chờ thanh toán), chưa sang IN_TREATMENT. Chủ ngựa trả xong thì mới sang điều trị.
  * - Giai đoạn sau tới ngày mà chưa trả cũng chuyển ON_HOLD_PAYMENT (BR_16).
- * - Ngoại lệ BR_17: ca cấp cứu (Vet_Cases.severity = CRITICAL) sang điều trị mà không chờ thanh toán.
+ * - Ngoại lệ BR_17: ca cấp cứu (Vet_Cases.severity = CRITICAL) hoặc ngựa ở trạng thái EMERGENCY
+ *   sang điều trị và được cấp thuốc, vật tư y tế mà không chờ thanh toán.
  * - Thanh toán xong (VNPay đã xác minh) và đã cấp thuốc: IN_TREATMENT. Chưa cấp thuốc thì vẫn VET_CONFIRMED.
  * - Thuốc bổ sung khi đang điều trị: hóa đơn riêng mã GD-&lt;protocol_id&gt;-&lt;phase_no&gt;-BS&lt;n&gt;; chưa thanh toán thì kho chưa cấp
  *   phần bổ sung (trừ ca cấp cứu) nhưng phác đồ không bị tạm dừng.
@@ -232,14 +233,40 @@ public class ProtocolPhaseBilling {
     // TẠM DỪNG / TIẾP TỤC (BR_16, BR_17)
     // ==========================================
 
-    /** Ca cấp cứu (BR_17): phác đồ gắn với ca khám mức CRITICAL */
+    /** Ca cấp cứu (BR_17): ngựa đang EMERGENCY, hoặc phác đồ gắn với ca khám mức CRITICAL. */
     public boolean isEmergency(TreatmentProtocol protocol) {
+        if (protocol.getHorse() != null && isEmergencyStatus(protocol.getHorse().getHealthStatus())) {
+            return true;
+        }
         if (protocol.getCaseId() == null) {
             return false;
         }
         return vetCaseRepository.findById(protocol.getCaseId())
                 .map(c -> "CRITICAL".equalsIgnoreCase(c.getSeverity()))
                 .orElse(false);
+    }
+
+    public static boolean isEmergencyStatus(String status) {
+        return status != null && "EMERGENCY".equalsIgnoreCase(status.trim());
+    }
+
+    /** Ngựa vừa chuyển cấp cứu: phác đồ đang chờ tiền được tiếp tục để kho cấp phát ngay. */
+    @Transactional
+    public void releaseForEmergencyHorse(Integer horseId) {
+        for (TreatmentProtocol protocol : protocolRepository.search(ON_HOLD, horseId)) {
+            evaluate(protocol, LocalDate.now());
+        }
+    }
+
+    /** Bác sĩ bắt đầu giai đoạn sớm: hạn hóa đơn chưa trả kéo về ngày bắt đầu mới. */
+    @Transactional
+    public void bringPhaseDueForward(TreatmentProtocol protocol, int phaseNo, LocalDate date) {
+        findPhaseInvoice(protocol.getProtocolId(), phaseNo).filter(Invoice::isOpen).ifPresent(inv -> {
+            if (inv.getDueDate() != null && inv.getDueDate().isAfter(date)) {
+                inv.setDueDate(date);
+                invoiceRepository.save(inv);
+            }
+        });
     }
 
     /** Giai đoạn đầu tiên đã tới ngày bắt đầu nhưng hóa đơn chưa thanh toán (rỗng nếu không có hoặc là ca cấp cứu) */

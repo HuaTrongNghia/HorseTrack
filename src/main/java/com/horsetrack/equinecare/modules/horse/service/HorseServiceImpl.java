@@ -53,6 +53,7 @@ public class HorseServiceImpl implements HorseService {
     private final com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests;
     private final com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService;
     private final RegistrationAttachmentService attachmentService;
+    private final com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier;
 
     public HorseServiceImpl(HorseRepository horseRepository, UserRepository userRepository, StallRepository stallRepository,
                             HorseRegistrationRepository registrationRepository, EntityManager entityManager,
@@ -63,7 +64,8 @@ public class HorseServiceImpl implements HorseService {
                             com.horsetrack.equinecare.modules.notification.service.EmailService emailService,
                             com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests,
                             com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService,
-                            RegistrationAttachmentService attachmentService) {
+                            RegistrationAttachmentService attachmentService,
+                            com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier) {
         this.horseRepository = horseRepository;
         this.userRepository = userRepository;
         this.stallRepository = stallRepository;
@@ -77,6 +79,7 @@ public class HorseServiceImpl implements HorseService {
         this.assignmentRequests = assignmentRequests;
         this.injuryService = injuryService;
         this.attachmentService = attachmentService;
+        this.conditionNotifier = conditionNotifier;
     }
 
     private boolean currentUserHasRole(String role) {
@@ -590,7 +593,10 @@ public class HorseServiceImpl implements HorseService {
             if (!currentUserHasRole(ROLE_VET)) {
                 throw new AccessDeniedException("Chỉ Bác sĩ thú y mới được thay đổi trạng thái sức khỏe (healthStatus)");
             }
-            horse.setHealthStatus(request.getHealthStatus().toUpperCase());
+            String nextStatus = request.getHealthStatus().toUpperCase();
+            horse.setHealthStatus(nextStatus);
+            horseRepository.save(horse);
+            conditionNotifier.onStatus(horse, nextStatus, "Bác sĩ thú y cập nhật trạng thái sức khỏe.");
         }
         if (request.getIsLocked() != null && !request.getIsLocked().equals(horse.getIsLocked())) {
             // Khóa/mở khóa huấn luyện là quyết định y tế, chỉ Bác sĩ thú y được thay đổi

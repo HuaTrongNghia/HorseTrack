@@ -40,6 +40,7 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
     private final PurchaseOrderRepository purchaseOrderRepository;
     private final com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
+    private final com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -121,6 +122,15 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
             prescriptionItemRepository.saveAll(prescriptionItems);
         }
 
+        String extra = Boolean.TRUE.equals(request.getIsLockoutOrdered()) ? "Bác sĩ đã khóa huấn luyện." : null;
+        if (request.getInjuryMarks() != null && !request.getInjuryMarks().isEmpty()) {
+            String parts = request.getInjuryMarks().stream()
+                    .map(m -> m.getBodyPartCode() + (m.getSeverityLevel() == null ? "" : " (" + m.getSeverityLevel() + ")"))
+                    .collect(Collectors.joining(", "));
+            extra = (extra == null ? "" : extra + "\n") + "Vị trí chấn thương: " + parts;
+        }
+        conditionNotifier.onIllness(horse, request.getDiagnosis(), request.getSymptoms(), extra);
+
         return savedRecord.getRecordId();
     }
 
@@ -138,8 +148,12 @@ public class MedicalRecordServiceImpl implements MedicalRecordService {
             throw new RuntimeException("Hồ sơ không ở trạng thái chờ duyệt");
         }
 
-        // Club Manager duyệt phác đồ
-        record.setStatus("APPROVED_AWAITING_PAYMENT");
+        // Ngựa cấp cứu không chờ chủ ngựa thanh toán rồi mới điều trị
+        if (record.getHorse() != null && "EMERGENCY".equalsIgnoreCase(record.getHorse().getHealthStatus())) {
+            record.setStatus("IN_TREATMENT");
+        } else {
+            record.setStatus("APPROVED_AWAITING_PAYMENT");
+        }
         medicalRecordRepository.save(record);
     }
 

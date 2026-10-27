@@ -34,7 +34,7 @@ public class PreRaceExamService {
     public static final String TAB_DONE = "DA_CO_KET_QUA";
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final Map<String, String> HEALTH = Map.of(
-            "HEALTHY", "Khỏe mạnh", "WATCH", "Theo dõi", "INJURED", "Chấn thương", "QUARANTINE", "Cách ly");
+            "HEALTHY", "Khỏe mạnh", "WATCH", "Theo dõi", "INJURED", "Chấn thương", "QUARANTINE", "Cách ly", "EMERGENCY", "Cấp cứu");
 
     private final CompetitionEntryRepository entryRepository;
     private final UserRepository userRepository;

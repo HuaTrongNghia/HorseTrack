@@ -802,7 +802,7 @@ ALTER TABLE [dbo].[Horses]  WITH CHECK ADD  CONSTRAINT [CHK_Horse_Gender] CHECK 
 GO
 ALTER TABLE [dbo].[Horses] CHECK CONSTRAINT [CHK_Horse_Gender]
 GO
-ALTER TABLE [dbo].[Horses]  WITH CHECK ADD  CONSTRAINT [CHK_Horse_Health] CHECK  (([health_status]='Healthy' OR [health_status]='Need_Check' OR [health_status]='Injured' OR [health_status]='Isolated'))
+ALTER TABLE [dbo].[Horses]  WITH CHECK ADD  CONSTRAINT [CHK_Horse_Health] CHECK  (([health_status]='Healthy' OR [health_status]='Need_Check' OR [health_status]='Injured' OR [health_status]='Isolated' OR [health_status]='HEALTHY' OR [health_status]='WATCH' OR [health_status]='INJURED' OR [health_status]='QUARANTINE' OR [health_status]='EMERGENCY'))
 GO
 ALTER TABLE [dbo].[Horses] CHECK CONSTRAINT [CHK_Horse_Health]
 GO

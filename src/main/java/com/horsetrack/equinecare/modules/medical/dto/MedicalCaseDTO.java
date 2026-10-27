@@ -21,7 +21,6 @@ public class MedicalCaseDTO {
     private String severity;     // LOW, MEDIUM, HIGH, CRITICAL
     private String status;       // NEW, IN_EXAM, MONITORING, CLOSED, CANCELLED
     private String description;  // Mô tả chi tiết
-    private String imageUrl;
     private Integer reportedById;
     private String reportedByName;
     private String assignedVetName;

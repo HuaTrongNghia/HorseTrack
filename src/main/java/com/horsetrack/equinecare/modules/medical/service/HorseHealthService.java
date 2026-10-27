@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -33,17 +34,28 @@ public class HorseHealthService {
             "MODERATE", "MODERATE", "TRUNG BÌNH", "MODERATE", "TRUNG BINH", "MODERATE",
             "SEVERE", "SEVERE", "NẶNG", "SEVERE", "NANG", "SEVERE");
     private static final Map<String, String> SEVERITY_LABEL = Map.of("MINOR", "Nhẹ", "MODERATE", "Trung bình", "SEVERE", "Nặng");
-    private static final Map<String, String> HEALTH = Map.of(
-            "HEALTHY", "HEALTHY", "KHỎE MẠNH", "HEALTHY",
-            "WATCH", "WATCH", "THEO DÕI", "WATCH",
-            "INJURED", "INJURED", "CHẤN THƯƠNG", "INJURED",
-            "QUARANTINE", "QUARANTINE", "CÁCH LY", "QUARANTINE");
+    private static final Map<String, String> HEALTH = new HashMap<>();
+
+    static {
+        HEALTH.put("HEALTHY", "HEALTHY");
+        HEALTH.put("KHỎE MẠNH", "HEALTHY");
+        HEALTH.put("WATCH", "WATCH");
+        HEALTH.put("THEO DÕI", "WATCH");
+        HEALTH.put("INJURED", "INJURED");
+        HEALTH.put("CHẤN THƯƠNG", "INJURED");
+        HEALTH.put("QUARANTINE", "QUARANTINE");
+        HEALTH.put("CÁCH LY", "QUARANTINE");
+        HEALTH.put("EMERGENCY", "EMERGENCY");
+        HEALTH.put("CẤP CỨU", "EMERGENCY");
+        HEALTH.put("CAP CUU", "EMERGENCY");
+    }
 
     private final InjuryMarkRepository injuryRepository;
     private final HorseRepository horseRepository;
     private final VetCaseRepository vetCaseRepository;
     private final UserRepository userRepository;
     private final AuditTrail auditTrail;
+    private final HorseConditionNotifier conditionNotifier;
 
     @Transactional(readOnly = true)
     public List<InjuryDTO> listForHorse(Integer horseId) {
@@ -79,6 +91,7 @@ public class HorseHealthService {
                 .build());
         auditTrail.record("MARK_INJURY", "Injury_Marks", null,
                 "chấn thương #" + mark.getMarkId() + " | ngựa " + horse.getHorseName() + " | " + mark.getAffectedBodyPart() + " | " + severity);
+        conditionNotifier.onInjury(horse, mark.getAffectedBodyPart(), SEVERITY_LABEL.getOrDefault(severity, severity), mark.getNotes());
         return toDto(mark);
     }
 
@@ -103,7 +116,7 @@ public class HorseHealthService {
         Horse horse = findHorse(horseId);
         String status = HEALTH.get(request.getStatus().trim().toUpperCase());
         if (status == null) {
-            throw new IllegalArgumentException("Trạng thái '" + request.getStatus() + "' không hợp lệ (HEALTHY / WATCH / INJURED / QUARANTINE).");
+            throw new IllegalArgumentException("Trạng thái '" + request.getStatus() + "' không hợp lệ (HEALTHY / WATCH / INJURED / QUARANTINE / EMERGENCY).");
         }
         String before = horse.getHealthStatus();
         if (status.equalsIgnoreCase(before)) {
@@ -113,6 +126,7 @@ public class HorseHealthService {
         horseRepository.save(horse);
         auditTrail.record("UPDATE_HEALTH_STATUS", "Horses", "health_status=" + before,
                 "health_status=" + status + " | ngựa " + horse.getHorseName() + " | " + request.getReason().trim());
+        conditionNotifier.onStatus(horse, status, request.getReason().trim());
         return status;
     }
 

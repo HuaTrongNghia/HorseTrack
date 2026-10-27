@@ -80,7 +80,7 @@ public class UserController {
     @PutMapping("/{id}/lock")
     @PreAuthorize("hasAuthority('Club Manager')")
     @Operation(summary = "Khóa tài khoản người dùng (BR_10)",
-               description = "Khóa tài khoản kèm lý do (tối thiểu 10 ký tự), tự động thu hồi phiên đăng nhập và ghi Audit Log.")
+               description = "Khóa tài khoản kèm lý do, tự động thu hồi phiên đăng nhập và ghi Audit Log.")
     public ResponseEntity<ApiResponse<UserResponseDTO>> lockUser(
             @PathVariable Integer id,
             @Valid @RequestBody UserLockRequestDTO request,
@@ -92,7 +92,7 @@ public class UserController {
     @PutMapping("/{id}/unlock")
     @PreAuthorize("hasAuthority('Club Manager')")
     @Operation(summary = "Mở khóa tài khoản người dùng (BR_10)",
-               description = "Mở khóa tài khoản kèm lý do (tối thiểu 10 ký tự) và ghi Audit Log.")
+               description = "Mở khóa tài khoản kèm lý do và ghi Audit Log.")
     public ResponseEntity<ApiResponse<UserResponseDTO>> unlockUser(
             @PathVariable Integer id,
             @Valid @RequestBody UserLockRequestDTO request,
