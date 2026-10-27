@@ -390,7 +390,7 @@ public class ProtocolPhaseBilling {
             if (!Invoice.PAID.equals(inv.getPaymentStatus())) {
                 continue;
             }
-            inv.setPaymentStatus("REFUNDED");
+            inv.setPaymentStatus(Invoice.REFUNDED);
             invoiceRepository.save(inv);
             total = total.add(inv.getFinalPayableAmount() == null ? java.math.BigDecimal.ZERO : inv.getFinalPayableAmount());
             rows.append("<li>").append(inv.getInvoiceCode()).append(" — ").append(InvoiceGenerator.money(inv.getFinalPayableAmount())).append("</li>");

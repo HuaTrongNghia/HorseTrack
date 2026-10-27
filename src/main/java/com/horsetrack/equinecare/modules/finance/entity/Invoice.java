@@ -26,6 +26,7 @@ public class Invoice {
     public static final String PARTIALLY_PAID = "PARTIALLY_PAID";
     public static final String PAID = "PAID";
     public static final String CANCELLED = "CANCELLED";
+    public static final String REFUNDED = "REFUNDED";
     /** Hóa đơn còn phải thu */
     public static final List<String> OPEN_STATUSES = List.of(UNPAID, OVERDUE, PARTIALLY_PAID);
 
