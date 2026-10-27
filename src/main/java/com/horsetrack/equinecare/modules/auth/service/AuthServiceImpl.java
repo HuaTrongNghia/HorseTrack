@@ -36,6 +36,7 @@ public class AuthServiceImpl implements AuthService {
     private final TrainerProfileRepository trainerRepo;
     private final VeterinarianProfileRepository vetRepo;
     private final GroomProfileRepository groomRepo;
+    private final com.horsetrack.equinecare.modules.horse.repository.StallRepository stallRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final RefreshTokenService refreshTokenService;
     private final TokenBlacklistService tokenBlacklistService;
@@ -236,9 +237,11 @@ public class AuthServiceImpl implements AuthService {
                 vetRepo.save(vetProfile);
                 break;
             case "Groom":
-                // Khu chuồng phân công sau khi Groom xác nhận tài khoản (PUT /users/{id}/barn-zone)
+                // Khu chọn lúc tạo tài khoản được lưu luôn. Nhân viên chưa xác nhận email thì chưa nhận việc
+                // (danh sách Groom theo khu chỉ lấy tài khoản đã xác nhận).
                 GroomProfile groomProfile = GroomProfile.builder()
                 .user(savedUser)
+                .assignedBarnZone(canonicalBarnZone(request.getSpecialization()))
                 .build();
                 groomRepo.save(groomProfile);
                 break;
@@ -248,9 +251,24 @@ public class AuthServiceImpl implements AuthService {
             default:
                 throw new IllegalArgumentException("Vai trò không hợp lệ: " + request.getRoleName());
         }
+        String zoneNote = "Groom".equals(request.getRoleName()) && StringUtils.hasText(request.getSpecialization())
+                ? ", khu " + request.getSpecialization().trim() : "";
         auditTrail.record("CREATE_STAFF", "Users", null,
-                "Tạo tài khoản " + savedUser.getEmail() + " (user_id=" + savedUser.getUserId() + ", vai trò " + request.getRoleName() + ") - chờ nhân viên xác nhận qua email");
+                "Tạo tài khoản " + savedUser.getEmail() + " (user_id=" + savedUser.getUserId() + ", vai trò " + request.getRoleName() + zoneNote + ") - chờ nhân viên xác nhận qua email");
         return new StaffAccountService.CreatedStaff(savedUser, rawPassword, rawToken);
+    }
+
+    /** Khu chuồng đúng tên trong bảng Stalls. Bỏ trống thì chưa phân công. */
+    private String canonicalBarnZone(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            return null;
+        }
+        String wanted = raw.trim();
+        return stallRepository.findDistinctBarnZones().stream()
+                .filter(z -> z != null && z.trim().equalsIgnoreCase(wanted))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Khu '" + wanted + "' không tồn tại. Các khu hiện có: "
+                        + String.join(", ", stallRepository.findDistinctBarnZones()) + "."));
     }
 
     @Override

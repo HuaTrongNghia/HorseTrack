@@ -1,5 +1,6 @@
 package com.horsetrack.equinecare.modules.auth.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import com.horsetrack.equinecare.common.validation.StrongPassword;
 import com.horsetrack.equinecare.common.validation.ValidUsername;
 import jakarta.validation.constraints.Email;
@@ -40,5 +41,8 @@ public class StaffCreateRequestDTO {
 
     // Optional fields for specific roles
     private String licenseNumber;
+
+    /** Groom: khu chuồng phụ trách (cũng nhận tên barnZone). Bác sĩ: phòng khám. */
+    @JsonAlias("barnZone")
     private String specialization;
 }
