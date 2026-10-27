@@ -269,10 +269,6 @@ public class AuthServiceImpl implements AuthService {
         if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
             throw new BadCredentialsException("Tên đăng nhập hoặc mật khẩu không chính xác");
         }
-        // Chủ ngựa chỉ đăng nhập bằng email đã xác thực, không dùng tên đăng nhập hay số điện thoại
-        if ("Horse Owner".equalsIgnoreCase(user.getRoleName()) && !request.getIdentifier().contains("@")) {
-            throw new BadCredentialsException("Tài khoản chủ ngựa đăng nhập bằng email đã đăng ký, không dùng tên đăng nhập.");
-        }
         // Nhân viên chưa nhấn "Xác nhận tài khoản" trong email
         if (user.getEmailVerifiedAt() == null) {
             throw new DisabledException("Tài khoản chưa được xác nhận. Hãy mở email từ HorseTrack và nhấn \"Xác nhận tài khoản\".");
