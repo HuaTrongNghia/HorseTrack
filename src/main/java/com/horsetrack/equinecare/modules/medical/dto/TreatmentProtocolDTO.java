@@ -60,7 +60,7 @@ public class TreatmentProtocolDTO {
         private LocalDate startDate;
         private Integer durationDays;
         private String goal;
-        // Hóa đơn của giai đoạn (BR_16): phải thanh toán trước ngày bắt đầu
+        // Hóa đơn của giai đoạn. Giai đoạn sau chỉ thanh toán được khi giai đoạn trước đã hoàn thành lâm sàng.
         private Integer invoiceId;
         private String invoiceCode;
         private String invoiceStatus;

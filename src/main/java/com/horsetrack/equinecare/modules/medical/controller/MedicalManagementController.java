@@ -93,9 +93,18 @@ public class MedicalManagementController {
         return ResponseEntity.ok(ApiResponse.ok("Đã bổ sung thuốc vào phác đồ", service.addItemDuringTreatment(protocolId, request)));
     }
 
+    @PutMapping("/protocols/{protocolId}/phases/{phaseNo}/complete")
+    @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Hoàn thành giai đoạn", description = "Hoàn thành giai đoạn đang điều trị. continueTreatment=true: sang giai đoạn sau nếu chủ ngựa đã thanh toán, chờ thanh toán nếu chưa, hoặc kết thúc phác đồ nếu hết giai đoạn. continueTreatment=false: ngưng phác đồ sau giai đoạn này, hủy hoặc hoàn hóa đơn các giai đoạn chưa làm. Ghi chú bắt buộc khi ngưng.")
+    public ResponseEntity<ApiResponse<TreatmentProtocolDTO>> completePhase(@PathVariable Integer protocolId,
+                                                                           @PathVariable Integer phaseNo,
+                                                                           @Valid @RequestBody(required = false) ProtocolPhaseDecisionDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã hoàn thành giai đoạn " + phaseNo, service.completePhase(protocolId, phaseNo, request)));
+    }
+
     @PutMapping("/protocols/{protocolId}/phases/{phaseNo}/finish-early")
     @PreAuthorize("hasAuthority('Veterinarian')")
-    @Operation(summary = "Kết thúc sớm giai đoạn", description = "Bác sĩ kết thúc giai đoạn trước ngày đã định. Giai đoạn trước phải đã xong. Kho phải đã cấp thuốc giai đoạn này. Ghi chú không bắt buộc.")
+    @Operation(summary = "Kết thúc sớm giai đoạn", description = "Bác sĩ kết thúc giai đoạn trước ngày đã định. Giai đoạn trước phải đã xong. Kho phải đã cấp thuốc giai đoạn này. Ghi chú không bắt buộc. Không tự chuyển giai đoạn sau; dùng /complete để chuyển hoặc ngưng phác đồ.")
     public ResponseEntity<ApiResponse<TreatmentProtocolDTO>> finishPhaseEarly(@PathVariable Integer protocolId,
                                                                               @PathVariable Integer phaseNo,
                                                                               @Valid @RequestBody(required = false) ProtocolPhaseDecisionDTO request) {
@@ -104,7 +113,7 @@ public class MedicalManagementController {
 
     @PutMapping("/protocols/{protocolId}/phases/{phaseNo}/start-early")
     @PreAuthorize("hasAuthority('Veterinarian')")
-    @Operation(summary = "Bắt đầu sớm giai đoạn sau", description = "Bác sĩ chuyển ngày bắt đầu của giai đoạn về hôm nay. Giai đoạn trước phải đã kết thúc. Hóa đơn chưa trả của giai đoạn được kéo hạn về hôm nay.")
+    @Operation(summary = "Bắt đầu giai đoạn", description = "Bắt đầu giai đoạn kế tiếp khi giai đoạn trước đã hoàn thành và giai đoạn này đã thanh toán (ca cấp cứu hoặc giai đoạn không có hóa đơn thì không chờ tiền). Ngày bắt đầu còn ở tương lai thì kéo về hôm nay. Không yêu cầu kho đã cấp thuốc.")
     public ResponseEntity<ApiResponse<TreatmentProtocolDTO>> startPhaseEarly(@PathVariable Integer protocolId,
                                                                              @PathVariable Integer phaseNo,
                                                                              @Valid @RequestBody(required = false) ProtocolPhaseDecisionDTO request) {
