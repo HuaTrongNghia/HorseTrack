@@ -11,12 +11,18 @@ import com.horsetrack.equinecare.modules.training.entity.TrainingPlan;
 import com.horsetrack.equinecare.modules.training.entity.TrainingSession;
 import com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository;
 import com.horsetrack.equinecare.modules.training.service.OwnerTrainingService;
+import com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper;
+import com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator;
+import com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -62,31 +68,59 @@ public class OwnerTrainingServiceImpl implements OwnerTrainingService {
             throw new AccessDeniedException("You do not have permission to view this horse's training progress");
         }
 
-        TrainingPlan plan = trainingPlanRepository.findFirstByHorse_HorseIdAndStatusInOrderByCreatedAtDesc(horseId, com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES)
-                .orElseThrow(() -> new RuntimeException("Ngựa hiện chưa có giáo án nào"));
+        List<TrainingPlan> plans = trainingPlanRepository.findByHorse_HorseIdOrderByCreatedAtDesc(horseId);
+        TrainingPlan plan = plans.stream()
+                .filter(p -> TrainingPlanActivator.OPEN_PLAN_STATUSES.contains(String.valueOf(p.getStatus()).toUpperCase()))
+                .findFirst()
+                .orElse(plans.isEmpty() ? null : plans.get(0));
 
-        List<TrainingSession> sessions = plan.getSessions();
-        double progress = 0.0;
-        List<TrainingSessionLogDTO> sessionDTOs = List.of();
-
-        if (sessions != null && !sessions.isEmpty()) {
-            long completed = sessions.stream()
-                    .filter(s -> "COMPLETED".equalsIgnoreCase(s.getStatus()))
-                    .count();
-            progress = (double) completed / sessions.size() * 100.0;
-
-            sessionDTOs = sessions.stream()
-                    .sorted(Comparator.comparing(TrainingSession::getSessionDate))
-                    .map(s -> TrainingSessionLogDTO.builder()
-                            .sessionId(s.getSessionId())
-                            .sessionDate(s.getSessionDate())
-                            .activityType(s.getActivityType())
-                            .status(s.getStatus())
-                            .notes(s.getNotes())
-                            .assignedToName(s.getAssignedTo() != null ? s.getAssignedTo().getFullName() : null)
-                            .build())
-                    .collect(Collectors.toList());
+        if (plan == null) {
+            return OwnerTrainingProgressDTO.builder()
+                    .planId(null)
+                    .planName(null)
+                    .startDate(null)
+                    .endDate(null)
+                    .status("NONE")
+                    .progress(0.0)
+                    .sessions(List.of())
+                    .phases(List.of())
+                    .build();
         }
+
+        LocalDateTime startOfToday = LocalDate.now().atStartOfDay();
+        List<TrainingSessionLogDTO> sessionDTOs = new ArrayList<>();
+        for (TrainingPlan each : plans) {
+            if (each.getSessions() == null) {
+                continue;
+            }
+            for (TrainingSession s : each.getSessions()) {
+                SessionEvaluationHelper.EvaluationData eval = SessionEvaluationHelper.extractEvaluation(s.getNotes());
+                boolean late = "PENDING".equalsIgnoreCase(s.getStatus()) && s.getSessionDate() != null && s.getSessionDate().isBefore(startOfToday);
+                sessionDTOs.add(TrainingSessionLogDTO.builder()
+                        .sessionId(s.getSessionId())
+                        .sessionDate(s.getSessionDate())
+                        .activityType(s.getActivityType())
+                        .status(s.getStatus())
+                        .notes(SessionEvaluationHelper.removeEvaluation(s.getNotes()))
+                        .assignedToName(s.getAssignedTo() != null ? s.getAssignedTo().getFullName() : null)
+                        .evaluationScore(eval != null ? eval.getScore() : null)
+                        .evaluationComment(eval != null ? eval.getComment() : null)
+                        .evaluatedBy(eval != null ? eval.getBy() : null)
+                        .evaluatedAt(eval != null ? eval.getAt() : null)
+                        .planName(each.getPlanName())
+                        .late(late)
+                        .build());
+            }
+        }
+        sessionDTOs.sort(Comparator.comparing(TrainingSessionLogDTO::getSessionDate, Comparator.nullsLast(Comparator.reverseOrder())));
+
+        List<TrainingSession> currentSessions = plan.getSessions() == null ? List.of() : plan.getSessions();
+        double progress = 0.0;
+        if (!currentSessions.isEmpty()) {
+            long completed = currentSessions.stream().filter(s -> "COMPLETED".equalsIgnoreCase(s.getStatus())).count();
+            progress = (double) completed / currentSessions.size() * 100.0;
+        }
+        String delay = plan.getPausedReason() != null && plan.getPausedReason().startsWith("Trễ:") ? plan.getPausedReason() : null;
 
         return OwnerTrainingProgressDTO.builder()
                 .planId(plan.getPlanId())
@@ -95,6 +129,8 @@ public class OwnerTrainingServiceImpl implements OwnerTrainingService {
                 .endDate(plan.getEndDate())
                 .status(plan.getStatus())
                 .progress(progress)
+                .delayNote(delay)
+                .phases(TrainingPlanPhases.toDtos(plan))
                 .sessions(sessionDTOs)
                 .build();
     }
