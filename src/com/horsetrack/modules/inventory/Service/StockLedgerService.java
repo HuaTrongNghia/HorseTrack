@@ -44,10 +44,13 @@ public class StockLedgerService {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Số lượng nhập phải lớn hơn 0.");
         }
-        if (lotNo == null || lotNo.isBlank()) {
-            throw new IllegalArgumentException("Phải nhập số lô (lotNo) khi nhập kho.");
-        }
         InventoryItem item = lockItem(itemId);
+        // Không nhập số lô thì tự sinh (Inventory_Lots bắt buộc có số lô, duy nhất theo vật tư)
+        if (lotNo == null || lotNo.isBlank()) {
+            lotNo = autoLotNo(itemId);
+        } else {
+            lotNo = lotNo.trim();
+        }
 
         InventoryLot lot = lotRepository.findByItem_ItemIdAndLotNo(itemId, lotNo).orElse(null);
         if (lot != null) {
@@ -186,6 +189,45 @@ public class StockLedgerService {
     }
 
     /**
+     * Cấp hàng đã giữ, trừ lô theo hạn dùng gần nhất trước (FEFO; lô không có hạn dùng sau cùng).
+     * Mỗi lô ghi một dòng ISSUE kèm số lô; phần vượt số lượng các lô đang ghi nhận thì ghi một dòng không có lô.
+     */
+    public java.util.List<StockTransaction> issueHeldFefo(Integer itemId, double quantity, String refType, Integer refId, String note) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Số lượng cấp phải lớn hơn 0.");
+        }
+        InventoryItem item = lockItem(itemId);
+        double held = value(item.getHeldStock());
+        double onHand = value(item.getCurrentStock());
+        if (quantity > held + 0.001 || quantity > onHand + 0.001) {
+            throw new IllegalArgumentException(String.format("Số lượng đã giữ của %s không khớp (đang giữ %s, đang có %s, cần cấp %s).",
+                    item.getItemName(), fmt(held), fmt(onHand), fmt(quantity)));
+        }
+        item.setHeldStock(round2(held - quantity));
+        java.util.List<InventoryLot> lots = lotRepository.findByItem_ItemIdOrderByExpiryDateAscLotIdAsc(itemId).stream()
+                .filter(l -> value(l.getQuantity()) > 0)
+                .sorted(java.util.Comparator.comparing(InventoryLot::getExpiryDate, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder()))
+                        .thenComparing(InventoryLot::getLotId))
+                .toList();
+        java.util.List<StockTransaction> result = new java.util.ArrayList<>();
+        double remaining = round2(quantity);
+        for (InventoryLot lot : lots) {
+            if (remaining <= 0) {
+                break;
+            }
+            double take = round2(Math.min(remaining, value(lot.getQuantity())));
+            lot.setQuantity(round2(lot.getQuantity() - take));
+            lotRepository.save(lot);
+            result.add(applyChange(item, lot, "ISSUE", take, -take, refType, refId, note));
+            remaining = round2(remaining - take);
+        }
+        if (remaining > 0) {
+            result.add(applyChange(item, null, "ISSUE", remaining, -remaining, refType, refId, note));
+        }
+        return result;
+    }
+
+    /**
      * Đặt tồn kho về đúng số lượng thực tế (dùng khi chốt kiểm kê).
      * Khóa dòng rồi mới tính chênh lệch so với tồn kho hiện tại; trả về null nếu không chênh lệch.
      */
@@ -243,6 +285,16 @@ public class StockLedgerService {
     }
 
     // Gọi sau khi đã khóa vật tư; đọc lại lô để có số lượng mới nhất
+    // Số lô tự sinh: AUTO-yyMMdd-HHmmssSSS, thêm hậu tố nếu trùng
+    private String autoLotNo(Integer itemId) {
+        String base = "AUTO-" + LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyMMdd-HHmmssSSS"));
+        String lotNo = base;
+        for (int i = 2; lotRepository.findByItem_ItemIdAndLotNo(itemId, lotNo).isPresent(); i++) {
+            lotNo = base + "-" + i;
+        }
+        return lotNo;
+    }
+
     private InventoryLot findLot(InventoryItem item, String lotNo) {
         InventoryLot lot = lotRepository.findByItem_ItemIdAndLotNo(item.getItemId(), lotNo)
                 .orElseThrow(() -> new ResourceNotFoundException("Vật tư " + item.getItemName() + " không có lô " + lotNo + "."));
