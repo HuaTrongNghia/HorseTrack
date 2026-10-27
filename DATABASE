@@ -830,7 +830,7 @@ ALTER TABLE [dbo].[Invoice_Line_Items]  WITH CHECK ADD  CONSTRAINT [CHK_Expense_
 GO
 ALTER TABLE [dbo].[Invoice_Line_Items] CHECK CONSTRAINT [CHK_Expense_Category]
 GO
-ALTER TABLE [dbo].[Invoices]  WITH CHECK ADD  CONSTRAINT [CHK_Invoice_Status] CHECK  (([payment_status]='Cancelled' OR [payment_status]='Overdue' OR [payment_status]='Paid' OR [payment_status]='Partially_Paid' OR [payment_status]='Pending' OR [payment_status]='Draft'))
+ALTER TABLE [dbo].[Invoices]  WITH CHECK ADD  CONSTRAINT [CHK_Invoice_Status] CHECK  (([payment_status]='UNPAID' OR [payment_status]='OVERDUE' OR [payment_status]='PARTIALLY_PAID' OR [payment_status]='PAID' OR [payment_status]='CANCELLED' OR [payment_status]='REFUNDED' OR [payment_status]='DRAFT'))
 GO
 ALTER TABLE [dbo].[Invoices] CHECK CONSTRAINT [CHK_Invoice_Status]
 GO
