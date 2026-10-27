@@ -389,6 +389,13 @@ public class HorseServiceImpl implements HorseService {
             throw new IllegalArgumentException("Ngựa này đã được duyệt và cấp chuồng.");
         }
 
+        // Quản lý CLB chỉ duyệt khi hồ sơ có ảnh/tệp giấy tờ sở hữu thật để đối chiếu nội dung
+        List<com.horsetrack.equinecare.modules.horse.dto.RegistrationAttachmentDTO> docs =
+                attachmentService.byRegistration(List.of(reg.getRegistrationId())).getOrDefault(reg.getRegistrationId(), List.of());
+        if (docs.stream().noneMatch(d -> "OWNERSHIP".equalsIgnoreCase(d.getDocType()))) {
+            throw new IllegalArgumentException("Hồ sơ chưa có ảnh/tệp giấy tờ sở hữu. Không thể duyệt khi chưa xem được nội dung giấy tờ; hãy từ chối và cho phép nộp lại.");
+        }
+
         // SRS: chỉ duyệt khi mọi mục kiểm tra đều đạt
         if (request.getChecks() != null && !request.getChecks().isEmpty()) {
             Set<String> keys = request.getChecks().stream().map(c -> c.getCheckKey().toUpperCase()).collect(Collectors.toSet());

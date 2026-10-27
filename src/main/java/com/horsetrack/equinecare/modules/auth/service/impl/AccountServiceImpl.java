@@ -86,9 +86,28 @@ public class AccountServiceImpl implements AccountService {
         String before = "full_name=" + user.getFullName() + " | phone=" + user.getPhone();
         user.setFullName(fullName);
         user.setPhone(phone);
+        String professional = updateProfessionalProfile(user, request);
         userRepository.save(user);
-        auditTrail.record("UPDATE_PROFILE", "Users", before, "full_name=" + fullName + " | phone=" + phone + " | " + user.getUsername());
+        auditTrail.record("UPDATE_PROFILE", "Users", before, "full_name=" + fullName + " | phone=" + phone + professional + " | " + user.getUsername());
         return getMyProfile();
+    }
+
+    /** Cập nhật thông tin nghề nghiệp theo vai trò (mã chứng chỉ, kinh nghiệm, phòng khám); trả về phần ghi nhật ký */
+    private String updateProfessionalProfile(User user, com.horsetrack.equinecare.modules.auth.dto.ProfileUpdateRequestDTO request) {
+        String license = StringUtils.hasText(request.getLicenseNumber()) ? request.getLicenseNumber().trim() : null;
+        if ("Trainer".equalsIgnoreCase(user.getRoleName()) && user.getTrainerProfile() != null) {
+            TrainerProfile trainer = user.getTrainerProfile();
+            if (license != null) trainer.setLicenseNumber(license);
+            if (request.getExperienceYears() != null) trainer.setExperienceYears(request.getExperienceYears());
+            return " | license=" + trainer.getLicenseNumber() + " | experience=" + trainer.getExperienceYears();
+        }
+        if ("VETERINARIAN".equalsIgnoreCase(user.getRoleName()) && user.getVeterinarianProfile() != null) {
+            VeterinarianProfile vet = user.getVeterinarianProfile();
+            if (license != null) vet.setVetLicenseNo(license);
+            if (StringUtils.hasText(request.getClinicAffiliation())) vet.setClinicAffiliation(request.getClinicAffiliation().trim());
+            return " | license=" + vet.getVetLicenseNo() + " | clinic=" + vet.getClinicAffiliation();
+        }
+        return "";
     }
 
     @Override
