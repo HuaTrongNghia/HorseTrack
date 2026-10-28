@@ -88,16 +88,17 @@ public class TrainingExecutionController {
         return ResponseEntity.ok(ApiResponse.ok("Buổi tập tiếp tục", sessionMonitorService.resume(sessionId, request)));
     }
 
-    // HLV phụ trách dừng buổi tập đang tạm dừng vì chỉ số vượt ngưỡng. Mặc định gửi ca cho bác sĩ (WAITING_VET) và trả mã ca.
+    // HLV phụ trách dừng buổi tập đang tạm dừng vì chỉ số vượt ngưỡng: buổi tập kết thúc ngay (STOPPED), HLV đánh giá được.
+    // Mặc định gửi ca cho bác sĩ và trả mã ca; bác sĩ quyết định khóa / không khóa huấn luyện sau.
     @PutMapping("/{sessionId}/stop")
     @PreAuthorize("hasAuthority('Trainer')")
-    @Operation(summary = "Dừng buổi tập", description = "HLV dừng buổi đang tạm dừng vì vượt ngưỡng. Mặc định gửi ca cho bác sĩ (WAITING_VET) và trả mã ca.")
+    @Operation(summary = "Dừng buổi tập", description = "HLV dừng buổi đang tạm dừng vì vượt ngưỡng: buổi tập kết thúc ngay (STOPPED), đánh giá được bằng /evaluate. Mặc định gửi ca cho bác sĩ và trả mã ca.")
     public ResponseEntity<ApiResponse<com.horsetrack.equinecare.modules.training.dto.SessionStopResultDTO>> stopSession(
             @PathVariable Integer sessionId,
             @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.SessionStopRequestDTO request) {
         var result = trainingExecutionService.stopSession(sessionId, request);
-        String message = "WAITING_VET".equals(result.getStatus())
-                ? "Đã dừng buổi tập và gửi ca " + result.getCaseCode() + " cho bác sĩ."
+        String message = result.getCaseCode() != null
+                ? "Đã kết thúc buổi tập và gửi ca " + result.getCaseCode() + " cho bác sĩ. HLV có thể đánh giá buổi tập."
                 : "Đã dừng và kết thúc buổi tập.";
         return ResponseEntity.ok(ApiResponse.ok(message, result));
     }

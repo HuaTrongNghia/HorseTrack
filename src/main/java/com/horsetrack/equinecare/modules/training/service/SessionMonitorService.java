@@ -49,6 +49,7 @@ public class SessionMonitorService {
     private final EmailService emailService;
     private final AuditTrail auditTrail;
     private final SessionVetLink sessionVetLink;
+    private final com.horsetrack.equinecare.modules.medical.repository.VetCaseRepository vetCaseRepository;
 
     @Transactional
     public TrainingSessionDTO start(Integer sessionId) {
@@ -62,6 +63,7 @@ public class SessionMonitorService {
             throw new IllegalArgumentException("Buổi tập xếp ngày " + session.getSessionDate().toLocalDate() + ", chỉ bắt đầu được đúng ngày tập.");
         }
         checkNotLocked(session, "bắt đầu buổi tập");
+        checkNoPendingSessionStopCase(session);
         TrainingPlan plan = session.getTrainingPlan();
         planActivator.tryActivate(plan, LocalDate.now());
         if (plan != null && !TrainingPlanActivator.PLAN_ACTIVE.equalsIgnoreCase(plan.getStatus())) {
@@ -275,6 +277,19 @@ public class SessionMonitorService {
         if (session.getAssignedTo() == null || !session.getAssignedTo().getUserId().equals(user.getUserId())) {
             throw new AccessDeniedException("Bạn không được phân công buổi tập này");
         }
+    }
+
+    // Buổi tập trước bị dừng và gửi bác sĩ: chờ bác sĩ đóng ca (hoặc khóa huấn luyện) rồi mới tập tiếp
+    private void checkNoPendingSessionStopCase(TrainingSession session) {
+        Horse horse = session.getTrainingPlan() != null ? session.getTrainingPlan().getHorse() : null;
+        if (horse == null) {
+            return;
+        }
+        vetCaseRepository.findFirstByHorse_HorseIdAndSourceAndStatusNotInOrderByCaseIdDesc(horse.getHorseId(), "SESSION_STOP", List.of("CLOSED", "CANCELLED"))
+                .ifPresent(c -> {
+                    throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đang chờ bác sĩ khám (ca "
+                            + (c.getCaseCode() != null ? c.getCaseCode() : "#" + c.getCaseId()) + ") sau buổi tập bị dừng, chưa thể bắt đầu buổi tập mới.");
+                });
     }
 
     private static void checkNotLocked(TrainingSession session, String action) {

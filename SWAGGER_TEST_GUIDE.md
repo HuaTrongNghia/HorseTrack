@@ -827,12 +827,13 @@ Không cần body. Buổi tập HLV vừa phân công (6.5) ở trạng thái `P
 { "reason": "Nhịp tim vượt ngưỡng 210 bpm, ngựa thở gấp", "requestVet": true, "severity": "HIGH", "heartRate": 210, "speedKmh": 52 }
 ```
 
-- `requestVet` (mặc định `true`): buổi tập chuyển **`WAITING_VET`** (đã dừng, chờ bác sĩ) và hệ thống tự tạo ca khám nguồn `SESSION_STOP` trong hộp thư bác sĩ (`GET /medical/cases`). `requestVet: false`: buổi tập chuyển `STOPPED` ngay, **giáo án giữ nguyên** (các buổi khác vẫn thực hiện được).
-- Chỉ khi `requestVet: true` giáo án mới chuyển `PAUSED` (`pausedReason` "Buổi tập #... chờ bác sĩ xử lý ca ...") cho tới khi bác sĩ ra quyết định.
-- Khi bác sĩ ra quyết định, **dù khóa hay không khóa huấn luyện**, buổi tập chờ bác sĩ chuyển **`STOPPED`** (đã kết thúc), các buổi chưa thực hiện của giáo án bị hủy và **giáo án kết thúc** (`COMPLETED` nếu đã có buổi hoàn thành, ngược lại `CANCELLED`). HLV nhận email.
-  - **Không khóa:** bác sĩ đóng ca `PUT /medical/cases/{caseId}/close` → lập được giáo án mới ngay.
-  - **Khóa:** `POST /medical/vet-lock` (hoặc bệnh án chỉ định khóa tập, hoặc `PUT /horses/{id}` với `isLocked: true`) → giáo án đóng, không chuyển `PAUSED`; lập giáo án mới sau khi bác sĩ mở khóa (10.2).
-- Khi đang `WAITING_VET`: Groom không hoàn thành được buổi tập (`400`) và chưa lập được giáo án mới cho ngựa (giáo án cũ còn mở).
+- **Buổi tập kết thúc ngay (`STOPPED`)** trong mọi trường hợp; HLV đánh giá được ngay bằng 7.4A. Giáo án **không** bị tạm dừng.
+- `requestVet` (mặc định `true`): hệ thống tạo ca khám nguồn `SESSION_STOP` trong hộp thư bác sĩ (`GET /medical/cases`), `data.caseCode` là mã ca. `requestVet: false`: chỉ kết thúc buổi tập, không tạo ca.
+- **Trong lúc ca chưa đóng:** Groom chưa bắt đầu được buổi tập mới của ngựa (7.5 → `400` "Ngựa ... đang chờ bác sĩ khám (ca C-xxxx)...").
+- **Bác sĩ quyết định:**
+  - **Không khóa:** đóng ca `PUT /medical/cases/{caseId}/close` → ngựa tập tiếp theo giáo án hiện tại.
+  - **Khóa:** `POST /medical/vet-lock` → các buổi tập chưa thực hiện bị hủy, giáo án `PAUSED` cho tới khi bác sĩ mở khóa (10.2).
+- Dữ liệu cũ còn ở `WAITING_VET` (trước bản sửa) vẫn được chuyển `STOPPED` khi bác sĩ đóng ca / khóa huấn luyện.
 - **Test lỗi:** lý do dưới 10 ký tự → `400`; buổi tập không ở `PAUSED_PENDING_TRAINER` → `400`; Trainer không phụ trách ngựa hoặc Groom khác → `403`; `sessionId` sai → `404`.
 
 ### 7.4 `PUT /api/v1/training-sessions/{sessionId}/execute`
@@ -862,8 +863,8 @@ Không cần body. Buổi tập HLV vừa phân công (6.5) ở trạng thái `P
 { "score": 8, "comment": "Bứt tốc tốt ở 400m cuối" }
 ```
 
-- Chỉ buổi `COMPLETED`, **mỗi buổi đánh giá một lần**. **Mong đợi:** `200`; đánh giá trả về trong `evaluationScore`, `evaluationComment`, `evaluatedBy`, `evaluatedAt` của 6.3 / 7.1.
-- **Test lỗi:** buổi chưa hoàn thành → `400`; đánh giá lần 2 → `400` "Buổi tập này đã được đánh giá..."; Trainer không phụ trách ngựa → `403`; Groom → `403`.
+- Buổi **đã kết thúc**: `COMPLETED` hoặc `STOPPED` (dừng giữa chừng / dừng & gửi bác sĩ), **mỗi buổi đánh giá một lần**. **Mong đợi:** `200`; đánh giá trả về trong `evaluationScore`, `evaluationComment`, `evaluatedBy`, `evaluatedAt` của 6.3 / 7.1.
+- **Test lỗi:** buổi chưa kết thúc (chờ xác nhận, đang tập, tạm dừng) → `400`; đánh giá lần 2 → `400` "Buổi tập này đã được đánh giá..."; Trainer không phụ trách ngựa → `403`; Groom → `403`.
 
 ### 7.5 `PUT /api/v1/training-sessions/{sessionId}/start`: Groom bắt đầu buổi tập (`Groom` được giao)
 
