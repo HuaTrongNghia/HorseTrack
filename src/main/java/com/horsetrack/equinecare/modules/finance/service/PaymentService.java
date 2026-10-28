@@ -137,6 +137,7 @@ public class PaymentService {
     @Transactional
     public Map<String, String> handleIpn(Map<String, String> params) {
         if (!vnPay.verifySignature(params)) {
+            log.warn("VNPay IPN {}: chữ ký không hợp lệ - {}", params.get("vnp_TxnRef"), vnPay.signatureProblem(params));
             return rsp("97", "Invalid Checksum");
         }
         Optional<PaymentTransaction> found = transactionRepository.findByTransactionRef(params.get("vnp_TxnRef"));
@@ -173,11 +174,11 @@ public class PaymentService {
             // Ghi lại để tra cứu (thường do sai VNPAY_HASH_SECRET); giao dịch vẫn chờ xác minh lại
             transactionRepository.findByTransactionRef(txnRef).ifPresent(t -> {
                 if (PaymentTransaction.PENDING_VERIFICATION.equals(t.getPaymentStatus())) {
-                    t.setNotes(truncate(stamp() + " Return: chữ ký không hợp lệ (mã VNPay " + responseCode + ")"));
+                    t.setNotes(truncate(stamp() + " Return: chữ ký không hợp lệ (mã VNPay " + responseCode + ") - " + vnPay.signatureProblem(params)));
                     transactionRepository.save(t);
                 }
             });
-            log.warn("VNPay Return {}: chữ ký không hợp lệ (kiểm tra VNPAY_HASH_SECRET)", txnRef);
+            log.warn("VNPay Return {}: chữ ký không hợp lệ - {}", txnRef, vnPay.signatureProblem(params));
             return VnPayResultDTO.builder().status("INVALID").message("Chữ ký dữ liệu trả về không hợp lệ.").txnRef(txnRef).responseCode(responseCode).build();
         }
         Optional<PaymentTransaction> found = transactionRepository.findByTransactionRef(txnRef);

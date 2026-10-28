@@ -116,6 +116,26 @@ public class VnPayGateway {
     }
 
     /**
+     * Lý do chữ ký dữ liệu VNPay gửi về không khớp, để ghi vào giao dịch (không chứa chuỗi bí mật).
+     * Thường gặp khi giao dịch được tạo ở một máy chủ nhưng VNPay trả về máy chủ khác cấu hình VNPay khác
+     * (ví dụ VNPAY_RETURN_URL chưa đặt nên trình duyệt quay về localhost).
+     */
+    public String signatureProblem(Map<String, String> params) {
+        if (!isConfigured()) {
+            return "máy chủ nhận kết quả chưa cấu hình VNPAY_TMN_CODE / VNPAY_HASH_SECRET";
+        }
+        if (!StringUtils.hasText(params.get("vnp_SecureHash"))) {
+            return "dữ liệu trả về không có vnp_SecureHash";
+        }
+        String returnedTmn = params.get("vnp_TmnCode");
+        if (StringUtils.hasText(returnedTmn) && !returnedTmn.equals(tmnCode)) {
+            return "mã website VNPay trả về (" + returnedTmn + ") khác VNPAY_TMN_CODE của máy chủ này (" + tmnCode + ")";
+        }
+        return "VNPAY_HASH_SECRET của máy chủ nhận kết quả (" + URI.create(returnUrl).getHost()
+                + ") khác chuỗi bí mật đã dùng để tạo giao dịch, hoặc dữ liệu bị sửa";
+    }
+
+    /**
      * Kết quả truy vấn giao dịch phía server (querydr). ok = nhận được phản hồi hợp lệ từ VNPay: mã 00 phải đúng chữ ký;
      * mã lỗi (91, 94, 99...) VNPay không ký đủ trường nên chỉ dùng để biết lý do, không bao giờ làm hóa đơn thành đã thanh toán.
      */
