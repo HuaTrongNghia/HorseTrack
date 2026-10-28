@@ -3,6 +3,7 @@ package com.horsetrack.equinecare.modules.finance.service;
 import com.horsetrack.equinecare.modules.audit.service.AuditTrail;
 import com.horsetrack.equinecare.modules.finance.entity.Invoice;
 import com.horsetrack.equinecare.modules.finance.entity.InvoiceLineItem;
+import com.horsetrack.equinecare.modules.finance.entity.PaymentTransaction;
 import com.horsetrack.equinecare.modules.finance.repository.InvoiceRepository;
 import com.horsetrack.equinecare.modules.inventory.repository.StockHoldRepository;
 import com.horsetrack.equinecare.modules.medical.entity.ProtocolItem;
@@ -33,8 +34,10 @@ import java.util.regex.Pattern;
  *   dòng MEDICATION lấy từ Protocol_Items, hạn thanh toán là ngày bắt đầu giai đoạn.
  * - Sau khi bác sĩ xác nhận và kho đã cấp thuốc: nếu giai đoạn 1 chưa thanh toán, phác đồ ở ON_HOLD_PAYMENT
  *   (chờ thanh toán), chưa sang IN_TREATMENT. Chủ ngựa trả xong thì mới sang điều trị.
- * - Giai đoạn sau tới ngày mà chưa trả cũng chuyển ON_HOLD_PAYMENT (BR_16).
- * - Ngoại lệ BR_17: ca cấp cứu (Vet_Cases.severity = CRITICAL) sang điều trị mà không chờ thanh toán.
+ * - Chủ ngựa chỉ thanh toán giai đoạn kế tiếp sau khi giai đoạn liền trước đã hoàn thành lâm sàng.
+ *   Khi bác sĩ hoàn thành một giai đoạn mà giai đoạn sau chưa trả, phác đồ chờ thanh toán ngay, kể cả khi ngày bắt đầu còn ở tương lai.
+ * - Ngoại lệ BR_17: ca cấp cứu (Vet_Cases.severity = CRITICAL) hoặc ngựa ở trạng thái EMERGENCY
+ *   sang điều trị và được cấp thuốc, vật tư y tế mà không chờ thanh toán.
  * - Thanh toán xong (VNPay đã xác minh) và đã cấp thuốc: IN_TREATMENT. Chưa cấp thuốc thì vẫn VET_CONFIRMED.
  * - Thuốc bổ sung khi đang điều trị: hóa đơn riêng mã GD-&lt;protocol_id&gt;-&lt;phase_no&gt;-BS&lt;n&gt;; chưa thanh toán thì kho chưa cấp
  *   phần bổ sung (trừ ca cấp cứu) nhưng phác đồ không bị tạm dừng.
@@ -48,6 +51,8 @@ public class ProtocolPhaseBilling {
     /** Trạng thái phác đồ còn hiệu lực có thể bị tạm dừng vì chưa thanh toán */
     public static final List<String> PAYABLE_STATES = List.of("VET_CONFIRMED", "READY_FOR_DISPENSING", "IN_TREATMENT");
     private static final Pattern CODE = Pattern.compile("^GD-(\\d{6})-(\\d{2})");
+    private static final Pattern FINISHED_PHASE = Pattern.compile("Hoàn thành giai đoạn (\\d+)");
+    private static final Pattern STARTED_PHASE = Pattern.compile("Bắt đầu(?: sớm)? giai đoạn (\\d+)");
     /** Đoạn mã của hóa đơn thuốc bổ sung */
     public static final String SUPPLEMENT_MARK = "-BS";
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
@@ -123,8 +128,8 @@ public class ProtocolPhaseBilling {
             invoiceService.notify(protocol.getHorse().getOwner(), "[HorseTrack] Hóa đơn điều trị cho ngựa " + protocol.getHorse().getHorseName(),
                     "<p>Phác đồ điều trị <b>" + protocol.getProtocolCode() + "</b> của ngựa <b>" + HtmlUtils.htmlEscape(protocol.getHorse().getHorseName())
                             + "</b> đã được bác sĩ xác nhận. Chi phí thuốc được thu theo từng giai đoạn:</p><ul>" + rows + "</ul>"
-                            + "<p>Vui lòng thanh toán qua VNPay <b>trước ngày bắt đầu</b> mỗi giai đoạn. Giai đoạn chưa thanh toán sẽ bị "
-                            + "<b>tạm dừng điều trị</b> (BR_16), trừ trường hợp cấp cứu.</p>");
+                            + "<p>Giai đoạn đầu thanh toán sau khi bác sĩ xác nhận. Mỗi giai đoạn sau chỉ thanh toán được khi bác sĩ đã "
+                            + "<b>hoàn thành giai đoạn liền trước</b>. Giai đoạn tới hạn mà chưa thanh toán sẽ tạm dừng điều trị, trừ trường hợp cấp cứu.</p>");
         }
         return created;
     }
@@ -232,8 +237,11 @@ public class ProtocolPhaseBilling {
     // TẠM DỪNG / TIẾP TỤC (BR_16, BR_17)
     // ==========================================
 
-    /** Ca cấp cứu (BR_17): phác đồ gắn với ca khám mức CRITICAL */
+    /** Ca cấp cứu (BR_17): ngựa đang EMERGENCY, hoặc phác đồ gắn với ca khám mức CRITICAL. */
     public boolean isEmergency(TreatmentProtocol protocol) {
+        if (protocol.getHorse() != null && isEmergencyStatus(protocol.getHorse().getHealthStatus())) {
+            return true;
+        }
         if (protocol.getCaseId() == null) {
             return false;
         }
@@ -242,16 +250,85 @@ public class ProtocolPhaseBilling {
                 .orElse(false);
     }
 
-    /** Giai đoạn đầu tiên đã tới ngày bắt đầu nhưng hóa đơn chưa thanh toán (rỗng nếu không có hoặc là ca cấp cứu) */
+    public static boolean isEmergencyStatus(String status) {
+        return status != null && "EMERGENCY".equalsIgnoreCase(status.trim());
+    }
+
+    /** Ngựa vừa chuyển cấp cứu: phác đồ đang chờ tiền được tiếp tục để kho cấp phát ngay. */
+    @Transactional
+    public void releaseForEmergencyHorse(Integer horseId) {
+        for (TreatmentProtocol protocol : protocolRepository.search(ON_HOLD, horseId)) {
+            evaluate(protocol, LocalDate.now());
+        }
+    }
+
+    /** Bác sĩ bắt đầu giai đoạn sớm: hạn hóa đơn chưa trả kéo về ngày bắt đầu mới. */
+    @Transactional
+    public void bringPhaseDueForward(TreatmentProtocol protocol, int phaseNo, LocalDate date) {
+        findPhaseInvoice(protocol.getProtocolId(), phaseNo).filter(Invoice::isOpen).ifPresent(inv -> {
+            if (inv.getDueDate() != null && inv.getDueDate().isAfter(date)) {
+                inv.setDueDate(date);
+                invoiceRepository.save(inv);
+            }
+        });
+    }
+
+    /**
+     * Giai đoạn đang chặn điều trị vì chưa thanh toán.
+     * Giai đoạn 1 chặn khi đã tới ngày bắt đầu. Giai đoạn sau chỉ chặn khi giai đoạn liền trước đã hoàn thành lâm sàng,
+     * kể cả khi ngày bắt đầu trên lịch vẫn còn phía trước. Giai đoạn chưa được mở không làm tạm dừng giai đoạn đang chạy.
+     */
     @Transactional(readOnly = true)
     public Optional<ProtocolPhase> blockingPhase(TreatmentProtocol protocol, LocalDate today) {
         if (isEmergency(protocol)) {
             return Optional.empty();
         }
+        Set<Integer> finished = finishedPhaseNos(protocol.getProtocolId());
         return protocol.getPhases().stream()
-                .filter(ph -> !ph.getStartDate().isAfter(today))
+                .filter(ph -> ph.getPhaseNo() != null)
                 .filter(ph -> phaseInvoices(protocol.getProtocolId(), ph.getPhaseNo(), false).stream().anyMatch(Invoice::isOpen))
+                .filter(ph -> phasePaymentDue(protocol, ph, today, finished))
                 .min(Comparator.comparing(ProtocolPhase::getPhaseNo));
+    }
+
+    private boolean phasePaymentDue(TreatmentProtocol protocol, ProtocolPhase phase, LocalDate today, Set<Integer> finished) {
+        int no = phase.getPhaseNo();
+        for (ProtocolPhase earlier : protocol.getPhases()) {
+            if (earlier.getPhaseNo() != null && earlier.getPhaseNo() < no && !finished.contains(earlier.getPhaseNo())) {
+                return false;
+            }
+        }
+        if (no <= 1) {
+            return phase.getStartDate() != null && !phase.getStartDate().isAfter(today);
+        }
+        return true;
+    }
+
+    /** Ca cấp cứu, giai đoạn không có hóa đơn, hoặc hóa đơn đã trả / đã hủy. Hóa đơn hoàn tiền không tính là đã trả. */
+    @Transactional(readOnly = true)
+    public boolean isPhaseSettled(TreatmentProtocol protocol, int phaseNo) {
+        if (isEmergency(protocol)) {
+            return true;
+        }
+        Optional<Invoice> invoice = findPhaseInvoice(protocol.getProtocolId(), phaseNo);
+        if (invoice.isEmpty()) {
+            return true;
+        }
+        if (Invoice.REFUNDED.equals(invoice.get().getPaymentStatus())) {
+            return false;
+        }
+        return !invoice.get().isOpen();
+    }
+
+    /** Chờ thanh toán giai đoạn kế tiếp ngay, kể cả khi ngày bắt đầu còn ở tương lai. */
+    @Transactional
+    public void holdForUnpaidNextPhase(TreatmentProtocol protocol, ProtocolPhase phase) {
+        boolean open = phaseInvoices(protocol.getProtocolId(), phase.getPhaseNo(), false).stream().anyMatch(Invoice::isOpen);
+        if (!open) {
+            throw new IllegalArgumentException("Giai đoạn " + phase.getPhaseNo() + " (" + phase.getPhaseName()
+                    + ") chưa thanh toán, nhưng không có hóa đơn đang mở để chờ.");
+        }
+        hold(protocol, phase);
     }
 
     /** Giai đoạn 1 còn hóa đơn mở. Ca cấp cứu không bị chặn. */
@@ -338,7 +415,9 @@ public class ProtocolPhaseBilling {
         String body = "<p>Phác đồ <b>" + protocol.getProtocolCode() + "</b> của ngựa <b>" + HtmlUtils.htmlEscape(protocol.getHorse().getHorseName())
                 + "</b> đang <b>chờ thanh toán</b> giai đoạn " + phase.getPhaseNo() + " (bắt đầu " + phase.getStartDate().format(DATE)
                 + ") — hóa đơn <b>" + inv.getInvoiceCode() + "</b>.</p>"
-                + "<p>Phác đồ chỉ chuyển sang <b>điều trị</b> sau khi thanh toán qua VNPay được xác minh.</p>";
+                + (phase.getPhaseNo() != null && phase.getPhaseNo() > 1
+                ? "<p>Giai đoạn tiếp theo chỉ bắt đầu sau khi thanh toán qua VNPay được xác minh.</p>"
+                : "<p>Phác đồ chỉ chuyển sang <b>điều trị</b> sau khi thanh toán qua VNPay được xác minh.</p>");
         invoiceService.notify(protocol.getHorse().getOwner(), "[HorseTrack] Tạm dừng điều trị do chưa thanh toán", body);
         invoiceService.notify(protocol.getVet(), "[HorseTrack] Phác đồ " + protocol.getProtocolCode() + " tạm dừng do chưa thanh toán", body);
     }
@@ -358,7 +437,11 @@ public class ProtocolPhaseBilling {
     // TRA CỨU
     // ==========================================
 
-    /** Chủ ngựa trả giai đoạn theo số thứ tự tăng dần. Hóa đơn thuốc bổ sung không chặn giai đoạn. */
+    /**
+     * Chủ ngựa chỉ trả giai đoạn kế tiếp khi giai đoạn trước đã hoàn thành lâm sàng và hóa đơn trước không còn mở.
+     * Áp dụng cả ca cấp cứu, để không thu trước các giai đoạn bác sĩ có thể cho ngưng.
+     * Hóa đơn thuốc bổ sung không chặn giai đoạn.
+     */
     @Transactional(readOnly = true)
     public void assertPhaseOrder(Invoice invoice) {
         if (invoice.getInvoiceCode() == null || invoice.getInvoiceCode().contains(SUPPLEMENT_MARK)) {
@@ -370,13 +453,121 @@ public class ProtocolPhaseBilling {
         }
         int protocolId = Integer.parseInt(m.group(1));
         int phaseNo = Integer.parseInt(m.group(2));
+        TreatmentProtocol protocol = protocolRepository.findById(protocolId).orElse(null);
+        Set<Integer> finished = finishedPhaseNos(protocolId);
         for (int earlier = 1; earlier < phaseNo; earlier++) {
             Optional<Invoice> open = findPhaseInvoice(protocolId, earlier).filter(Invoice::isOpen);
             if (open.isPresent()) {
                 throw new IllegalArgumentException("Thanh toán theo thứ tự giai đoạn. Hãy trả hóa đơn " + open.get().getInvoiceCode()
                         + " (giai đoạn " + earlier + ") trước giai đoạn " + phaseNo + ".");
             }
+            if (protocol == null) {
+                continue;
+            }
+            int earlierNo = earlier;
+            protocol.getPhases().stream()
+                    .filter(ph -> ph.getPhaseNo() != null && ph.getPhaseNo() == earlierNo)
+                    .findFirst()
+                    .ifPresent(ph -> {
+                        if (!finished.contains(earlierNo)) {
+                            throw new IllegalArgumentException("Chủ ngựa chỉ thanh toán giai đoạn " + phaseNo
+                                    + " sau khi giai đoạn " + earlierNo + " (" + ph.getPhaseName() + ") đã hoàn thành.");
+                        }
+                    });
         }
+    }
+
+    /**
+     * Đóng các giai đoạn sau giai đoạn vừa xong: hủy hóa đơn còn mở, hoàn hóa đơn đã trả.
+     * Hóa đơn đã thu một phần hoặc đang có giao dịch chờ xác minh thì không đóng phác đồ.
+     */
+    @Transactional
+    public void closePhasesAfter(TreatmentProtocol protocol, int finishedThrough, String reason) {
+        StringBuilder rows = new StringBuilder();
+        BigDecimal total = BigDecimal.ZERO;
+        int refunded = 0;
+        for (ProtocolPhase phase : protocol.getPhases()) {
+            if (phase.getPhaseNo() == null || phase.getPhaseNo() <= finishedThrough) {
+                continue;
+            }
+            for (Invoice inv : phaseInvoices(protocol.getProtocolId(), phase.getPhaseNo(), true)) {
+                if (Invoice.REFUNDED.equals(inv.getPaymentStatus())) {
+                    continue;
+                }
+                if (Invoice.PAID.equals(inv.getPaymentStatus())) {
+                    inv.setPaymentStatus(Invoice.REFUNDED);
+                    invoiceRepository.save(inv);
+                    total = total.add(inv.getFinalPayableAmount() == null ? BigDecimal.ZERO : inv.getFinalPayableAmount());
+                    rows.append("<li>").append(inv.getInvoiceCode()).append(" — ").append(InvoiceGenerator.money(inv.getFinalPayableAmount())).append("</li>");
+                    auditTrail.record("REFUND_INVOICE", "Invoices", "payment_status=PAID",
+                            "payment_status=REFUNDED | " + inv.getInvoiceCode() + " | " + reason);
+                    refunded++;
+                    continue;
+                }
+                if (inv.isOpen() && (Invoice.PARTIALLY_PAID.equals(inv.getPaymentStatus()) || hasSettlingTransaction(inv))) {
+                    throw new IllegalArgumentException("Không thể kết thúc phác đồ vì hóa đơn " + inv.getInvoiceCode()
+                            + " của giai đoạn " + phase.getPhaseNo() + " đang có giao dịch thanh toán. Hãy hoàn tất hoặc hủy giao dịch đó trước.");
+                }
+                if (inv.isOpen()) {
+                    if (!cancelIfUnpaid(inv, reason)) {
+                        throw new IllegalArgumentException("Không thể hủy hóa đơn " + inv.getInvoiceCode()
+                                + " của giai đoạn " + phase.getPhaseNo() + ".");
+                    }
+                    continue;
+                }
+                throw new IllegalArgumentException("Hóa đơn " + inv.getInvoiceCode() + " đang ở trạng thái " + inv.getPaymentStatus()
+                        + ", chưa thể đóng phác đồ.");
+            }
+        }
+        if (refunded > 0 && protocol.getHorse() != null && protocol.getHorse().getOwner() != null) {
+            invoiceService.notify(protocol.getHorse().getOwner(),
+                    "[HorseTrack] Hoàn tiền giai đoạn không thực hiện — phác đồ " + protocol.getProtocolCode(),
+                    "<p>Bác sĩ đã kết thúc phác đồ <b>" + protocol.getProtocolCode() + "</b> của ngựa <b>"
+                            + HtmlUtils.htmlEscape(protocol.getHorse().getHorseName()) + "</b> trước khi làm hết các giai đoạn.</p>"
+                            + "<p>Lý do: " + HtmlUtils.htmlEscape(reason) + "</p>"
+                            + "<p>Số tiền đã thanh toán cho các giai đoạn không thực hiện được hoàn:</p><ul>" + rows + "</ul>"
+                            + "<p>Tổng <b>" + InvoiceGenerator.money(total) + "</b>.</p>");
+        }
+    }
+
+    private boolean hasSettlingTransaction(Invoice inv) {
+        if (inv.getTransactions() == null) {
+            return false;
+        }
+        return inv.getTransactions().stream().anyMatch(t -> PaymentTransaction.VERIFIED.equals(t.getPaymentStatus())
+                || PaymentTransaction.PENDING_VERIFICATION.equals(t.getPaymentStatus()));
+    }
+
+    /** Các giai đoạn đã có ghi chú hoàn thành. */
+    @Transactional(readOnly = true)
+    public Set<Integer> finishedPhaseNos(Integer protocolId) {
+        Set<Integer> finished = new HashSet<>();
+        for (var note : noteRepository.findByProtocol_ProtocolIdOrderByWrittenAtAsc(protocolId)) {
+            if (note.getContent() == null) {
+                continue;
+            }
+            Matcher done = FINISHED_PHASE.matcher(note.getContent());
+            while (done.find()) {
+                finished.add(Integer.parseInt(done.group(1)));
+            }
+        }
+        return finished;
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isPhaseStarted(Integer protocolId, int phaseNo) {
+        for (var note : noteRepository.findByProtocol_ProtocolIdOrderByWrittenAtAsc(protocolId)) {
+            if (note.getContent() == null) {
+                continue;
+            }
+            Matcher started = STARTED_PHASE.matcher(note.getContent());
+            while (started.find()) {
+                if (Integer.parseInt(started.group(1)) == phaseNo) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /** Phác đồ bị hủy sau khi chủ ngựa đã trả: ghi hoàn tiền và gửi email lý do. */
@@ -390,7 +581,7 @@ public class ProtocolPhaseBilling {
             if (!Invoice.PAID.equals(inv.getPaymentStatus())) {
                 continue;
             }
-            inv.setPaymentStatus("REFUNDED");
+            inv.setPaymentStatus(Invoice.REFUNDED);
             invoiceRepository.save(inv);
             total = total.add(inv.getFinalPayableAmount() == null ? java.math.BigDecimal.ZERO : inv.getFinalPayableAmount());
             rows.append("<li>").append(inv.getInvoiceCode()).append(" — ").append(InvoiceGenerator.money(inv.getFinalPayableAmount())).append("</li>");
