@@ -17,6 +17,9 @@ public interface CareTaskRepository extends JpaRepository<CareTask, Integer> {
 
     List<CareTask> findByTaskDateOrderByScheduledTimeAsc(LocalDate taskDate);
 
+    // Việc trễ SLA trong một ngày (đang mở hoặc đã hoàn thành trễ), trừ việc đã hủy
+    List<CareTask> findByTaskDateAndWarningNoteIsNotNullAndStatusNotOrderByScheduledTimeAsc(LocalDate taskDate, String status);
+
     long countByGroom_UserIdAndStatusNot(Integer groomId, String status);
 
     // Việc cho ăn sinh từ khẩu phần (ghi chú bắt đầu bằng KP-planId-MEAL:)

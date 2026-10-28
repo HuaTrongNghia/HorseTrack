@@ -49,10 +49,20 @@ public class CareTaskServiceImpl implements CareTaskService {
     // Việc chưa xong (còn có thể bị cảnh báo trễ)
     static final List<String> OPEN_STATUSES = List.of("TODO", "IN_PROGRESS");
 
+    @org.springframework.beans.factory.annotation.Value("${app.care.sla-minutes:45}")
+    private long slaMinutes;
+
     @Override
     @Transactional(readOnly = true)
     public List<CareTaskDTO> getOverdueTasks() {
         return careTaskRepository.findByWarningNoteIsNotNullAndStatusInOrderByTaskDateAscScheduledTimeAsc(OPEN_STATUSES).stream()
+                .map(this::mapToDTO).collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CareTaskDTO> getLateTasksOn(LocalDate date) {
+        return careTaskRepository.findByTaskDateAndWarningNoteIsNotNullAndStatusNotOrderByScheduledTimeAsc(date != null ? date : LocalDate.now(), "SKIPPED").stream()
                 .map(this::mapToDTO).collect(Collectors.toList());
     }
 
@@ -83,6 +93,17 @@ public class CareTaskServiceImpl implements CareTaskService {
         }
     }
 
+    // Số phút trễ so với giờ hẹn nếu đã quá SLA (tới lúc hoàn thành, hoặc tới hiện tại khi chưa xong); null nếu chưa trễ SLA
+    private Integer lateMinutes(CareTask task) {
+        if (task.getTaskDate() == null || task.getScheduledTime() == null || "SKIPPED".equals(task.getStatus())) {
+            return null;
+        }
+        LocalDateTime due = task.getTaskDate().atTime(task.getScheduledTime());
+        LocalDateTime end = task.getCompletedAt() != null ? task.getCompletedAt() : LocalDateTime.now();
+        long minutes = java.time.Duration.between(due, end).toMinutes();
+        return minutes > slaMinutes ? (int) minutes : null;
+    }
+
     private CareTaskDTO mapToDTO(CareTask task) {
         Horse horse = task.getHorse();
         return CareTaskDTO.builder()
@@ -103,6 +124,7 @@ public class CareTaskServiceImpl implements CareTaskService {
                 .groomName(task.getGroom() != null ? task.getGroom().getFullName() : null)
                 .warningNote(task.getWarningNote())
                 .overdue(task.getWarningNote() != null && OPEN_STATUSES.contains(task.getStatus()))
+                .lateMinutes(lateMinutes(task))
                 .dietNote(task.getDietNote())
                 .medicalDiet(task.getIsMedicalDiet())
                 .build();
@@ -111,8 +133,14 @@ public class CareTaskServiceImpl implements CareTaskService {
     @Override
     @Transactional(readOnly = true)
     public List<CareTaskDTO> getMyTasksToday() {
+        return getMyTasks(null);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CareTaskDTO> getMyTasks(LocalDate date) {
         User user = getLoggedInUser();
-        return careTaskRepository.findByGroom_UserIdAndTaskDateOrderByScheduledTimeAsc(user.getUserId(), LocalDate.now())
+        return careTaskRepository.findByGroom_UserIdAndTaskDateOrderByScheduledTimeAsc(user.getUserId(), date != null ? date : LocalDate.now())
                 .stream().map(this::mapToDTO).collect(Collectors.toList());
     }
 
@@ -145,9 +173,21 @@ public class CareTaskServiceImpl implements CareTaskService {
         if ("DONE".equals(task.getStatus())) {
             throw new IllegalArgumentException("Công việc này đã được đánh dấu hoàn thành trước đó");
         }
+        // Việc của ngày sau (ví dụ việc cho ăn ngày mai đã gửi trước) chỉ xem trước, chưa được hoàn thành
+        if (task.getTaskDate() != null && task.getTaskDate().isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("Công việc được lên lịch ngày " + task.getTaskDate() + ", chưa thể hoàn thành trước ngày đó.");
+        }
 
         task.setStatus("DONE");
         task.setCompletedAt(LocalDateTime.now());
+        // BR_05: hoàn thành sau giờ hẹn + SLA thì ghi nhận trễ (kể cả khi SLA Monitor chưa kịp cảnh báo) để Club Manager thống kê
+        Integer late = lateMinutes(task);
+        if (late != null) {
+            String done = "Hoàn thành trễ " + late + " phút (hẹn " + task.getScheduledTime() + ", xong "
+                    + task.getCompletedAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM")) + ")";
+            String note = task.getWarningNote() == null ? done : task.getWarningNote() + " | " + done;
+            task.setWarningNote(note.length() > 500 ? note.substring(0, 500) : note);
+        }
         careTaskRepository.save(task);
 
         auditTrail.record("COMPLETE_CARE_TASK", "Daily_Tasks", "status=TODO",

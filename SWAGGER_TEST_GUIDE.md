@@ -618,7 +618,7 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 - `mealType`: `MORNING` (07:00), `NOON` (11:30), `EVENING` (17:00). `AFTERNOON` vẫn được nhận và lưu thành `NOON`. Giờ từng bữa chỉnh bằng `app.nutrition.*-time`.
 - **Mong đợi:** `201`, `data` là `planId`, `status = ACTIVE`, `planType` theo BR_03. Ghi Audit Log `CREATE_NUTRITION_PLAN`.
 - **Thay thế:** mỗi ngựa chỉ có một khẩu phần áp dụng tại một thời điểm. Khẩu phần mới giao thời gian với khẩu phần đang áp dụng thì khẩu phần cũ **kết thúc trước ngày khẩu phần mới bắt đầu** (hoặc bị hủy nếu chưa bắt đầu); việc cho ăn của khẩu phần cũ từ ngày đó bị hủy.
-- **Gửi cho nhân viên:** khi lập (và mỗi ngày lúc 00:05), mỗi bữa của khẩu phần thành một **việc cho ăn** (`FEED`) giao cho Groom phụ trách khu chuồng của ngựa, kèm định lượng từng món (`instructions`) và lưu ý đặc biệt (`dietNote`). Hôm nay chỉ gửi các bữa chưa tới giờ. Groom xem ở `GET /care-tasks/my-tasks` (9.1).
+- **Gửi cho nhân viên:** khi lập (và mỗi ngày lúc 00:05), mỗi bữa của khẩu phần thành một **việc cho ăn** (`FEED`) giao cho Groom phụ trách khu chuồng của ngựa, kèm định lượng từng món (`instructions`) và lưu ý đặc biệt (`dietNote`). Hôm nay chỉ gửi các bữa chưa tới giờ, **đồng thời gửi luôn các bữa của ngày mai** (lập khẩu phần buổi tối thì Groom vẫn thấy lịch ngày mai ngay). Áp dụng giống nhau cho khẩu phần thường của HLV và khẩu phần y tế của bác sĩ (việc có `medicalDiet = true`, tiêu đề "(khẩu phần y tế)"). Groom xem ở `GET /care-tasks/my-tasks` (9.1), ngày mai: `?date=yyyy-MM-dd`.
 
 | Trường hợp | Kết quả |
 |---|---|
@@ -957,12 +957,19 @@ Chỉ `Trainer` được gọi. Lấy `groomId` từ `GET /training-plans/assign
 ### 9.1 `GET /api/v1/care-tasks/my-tasks` (`Groom`)
 
 - Login bằng đúng Groom được giao ở 9.0.
-- **Mong đợi:** `200`, danh sách việc có `taskDate` là hôm nay, sắp theo `scheduledTime`. **Ghi lại `taskId`**.
+- Query `date` (tùy chọn, `yyyy-MM-dd`): mặc định hôm nay; truyền ngày mai để xem trước việc cho ăn đã gửi trước.
+- **Mong đợi:** `200`, danh sách việc có `taskDate` là ngày đó, sắp theo `scheduledTime`. **Ghi lại `taskId`**.
+- Việc của ngày sau chỉ xem trước: `PUT /care-tasks/{id}/complete` trước ngày đó → `400` "chưa thể hoàn thành trước ngày đó".
 
 ### 9.3 `GET /api/v1/care-tasks/overdue`: việc trễ hạn (`Club Manager`, BR_05)
 
 - Hệ thống quét **mỗi 5 phút**. Việc chưa xong (`TODO` hoặc `IN_PROGRESS`) quá **45 phút** sau giờ hẹn thì được đánh dấu trễ (`warningNote`, `overdue = true`), và các Club Manager nhận **một email tổng hợp**. Mỗi việc chỉ bị cảnh báo một lần.
-- **Mong đợi:** `200`, danh sách việc đang trễ. `GET /care-tasks/my-tasks` của Groom cũng có `overdue` và `warningNote`.
+- Groom hoàn thành sau giờ hẹn quá 45 phút thì việc cũng được ghi nhận trễ: `warningNote` thêm "Hoàn thành trễ N phút (hẹn HH:mm, xong HH:mm dd/MM)".
+- Mọi `CareTaskDTO` có `lateMinutes`: số phút trễ so với giờ hẹn (tới lúc hoàn thành, hoặc tới hiện tại nếu chưa xong), `null` nếu chưa quá 45 phút. FE dùng trường này, không tự tính.
+- **Query:**
+  - Không tham số (`scope=open`): chỉ việc **đang mở** đã trễ.
+  - `scope=today` hoặc `date=yyyy-MM-dd`: **mọi việc trễ của ngày đó**, kể cả đã hoàn thành trễ (trừ `SKIPPED`). Dùng cho thẻ thống kê "Việc trễ SLA > 45 phút".
+- **Mong đợi:** `200`, danh sách việc trễ. `GET /care-tasks/my-tasks` của Groom cũng có `overdue`, `lateMinutes` và `warningNote`.
 - **Cách test nhanh:** giao việc (9.0) với `taskDate` là hôm nay và `scheduledTime` sớm hơn hiện tại ít nhất 45 phút, chờ tối đa 5 phút rồi gọi API này.
 
 ### 9.2 `PUT /api/v1/care-tasks/{taskId}/complete` (`Groom`)

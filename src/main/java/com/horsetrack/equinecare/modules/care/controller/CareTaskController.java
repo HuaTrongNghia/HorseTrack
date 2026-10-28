@@ -34,9 +34,14 @@ public class CareTaskController {
     // Club Manager xem các việc chăm sóc bị cảnh báo trễ quá 45 phút mà chưa xong (BR_05)
     @GetMapping("/overdue")
     @PreAuthorize("hasAuthority('Club Manager')")
-    @Operation(summary = "Việc chăm sóc trễ hạn", description = "Việc quá 45 phút sau giờ hẹn mà chưa xong (BR_05).")
-    public ResponseEntity<ApiResponse<List<CareTaskDTO>>> getOverdueTasks() {
-        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách việc trễ hạn thành công", careTaskService.getOverdueTasks()));
+    @Operation(summary = "Việc chăm sóc trễ hạn", description = "Mặc định (scope=open): việc quá 45 phút sau giờ hẹn mà chưa xong (BR_05). "
+            + "scope=today (hoặc date=yyyy-MM-dd): mọi việc trễ SLA của ngày đó, kể cả đã hoàn thành trễ - dùng cho thống kê.")
+    public ResponseEntity<ApiResponse<List<CareTaskDTO>>> getOverdueTasks(
+            @RequestParam(required = false) String scope,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate date) {
+        boolean byDay = date != null || "today".equalsIgnoreCase(scope);
+        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách việc trễ hạn thành công",
+                byDay ? careTaskService.getLateTasksOn(date) : careTaskService.getOverdueTasks()));
     }
 
     // HLV theo dõi việc đã giao cho Groom (ngựa mình phụ trách), Club Manager xem mọi ngựa: trạng thái, giờ hoàn thành
@@ -51,9 +56,10 @@ public class CareTaskController {
 
     @GetMapping("/my-tasks")
     @PreAuthorize("hasAuthority('Groom')")
-    @Operation(summary = "Việc chăm sóc của tôi hôm nay")
-    public ResponseEntity<ApiResponse<List<CareTaskDTO>>> getMyTasks() {
-        List<CareTaskDTO> tasks = careTaskService.getMyTasksToday();
+    @Operation(summary = "Việc chăm sóc của tôi", description = "Mặc định hôm nay; date=yyyy-MM-dd để xem trước ngày khác (ví dụ việc cho ăn ngày mai).")
+    public ResponseEntity<ApiResponse<List<CareTaskDTO>>> getMyTasks(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate date) {
+        List<CareTaskDTO> tasks = careTaskService.getMyTasks(date);
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách công việc thành công", tasks));
     }
 

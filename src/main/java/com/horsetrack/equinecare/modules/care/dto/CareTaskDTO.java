@@ -31,6 +31,7 @@ public class CareTaskDTO {
     private String groomName;
     private String warningNote;   // Có giá trị khi việc bị cảnh báo trễ quá 45 phút (BR_05)
     private Boolean overdue;
+    private Integer lateMinutes;   // số phút trễ so với giờ hẹn khi đã quá SLA (tính tới lúc hoàn thành, hoặc tới hiện tại nếu chưa xong); null nếu không trễ SLA
     private String dietNote;       // Lưu ý đặc biệt của khẩu phần (việc cho ăn)
     private Boolean medicalDiet;   // Khẩu phần y tế do bác sĩ chỉ định
 }

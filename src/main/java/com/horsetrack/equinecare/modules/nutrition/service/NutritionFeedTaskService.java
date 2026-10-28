@@ -151,6 +151,16 @@ public class NutritionFeedTaskService {
         return created;
     }
 
+    /**
+     * Gửi việc cho ăn khi lập / sửa khẩu phần: các bữa còn lại của hôm nay và cả ngày mai.
+     * Lập khẩu phần buổi tối (đã qua bữa tối) thì Groom vẫn thấy ngay lịch cho ăn ngày mai, không phải chờ job 00:05.
+     */
+    @Transactional
+    public int generateUpcoming(NutritionPlan plan) {
+        LocalDate today = LocalDate.now();
+        return generateForPlan(plan, today, true) + generateForPlan(plan, today.plusDays(1), false);
+    }
+
     /** Khẩu phần bị hủy / thay thế / kết thúc: các việc cho ăn chưa làm từ hôm nay trở đi chuyển SKIPPED */
     @Transactional
     public int skipOpenTasks(NutritionPlan plan, String reason) {
