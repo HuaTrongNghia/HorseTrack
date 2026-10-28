@@ -52,6 +52,9 @@ public class CareTaskServiceImpl implements CareTaskService {
     @org.springframework.beans.factory.annotation.Value("${app.care.sla-minutes:45}")
     private long slaMinutes;
 
+    @org.springframework.beans.factory.annotation.Value("${app.care.early-complete-minutes:30}")
+    private long earlyCompleteMinutes;
+
     @Override
     @Transactional(readOnly = true)
     public List<CareTaskDTO> getOverdueTasks() {
@@ -93,6 +96,16 @@ public class CareTaskServiceImpl implements CareTaskService {
         }
     }
 
+    // Thời điểm sớm nhất được xác nhận hoàn thành: giờ hẹn trừ khung xác nhận sớm; việc không có giờ hẹn thì từ đầu ngày của việc
+    private LocalDateTime completableFrom(CareTask task) {
+        if (task.getTaskDate() == null) {
+            return null;
+        }
+        return task.getScheduledTime() != null
+                ? task.getTaskDate().atTime(task.getScheduledTime()).minusMinutes(earlyCompleteMinutes)
+                : task.getTaskDate().atStartOfDay();
+    }
+
     // Số phút trễ so với giờ hẹn nếu đã quá SLA (tới lúc hoàn thành, hoặc tới hiện tại khi chưa xong); null nếu chưa trễ SLA
     private Integer lateMinutes(CareTask task) {
         if (task.getTaskDate() == null || task.getScheduledTime() == null || "SKIPPED".equals(task.getStatus())) {
@@ -127,6 +140,9 @@ public class CareTaskServiceImpl implements CareTaskService {
                 .lateMinutes(lateMinutes(task))
                 .dietNote(task.getDietNote())
                 .medicalDiet(task.getIsMedicalDiet())
+                .completableFrom(completableFrom(task))
+                .canComplete(OPEN_STATUSES.contains(task.getStatus())
+                        && (completableFrom(task) == null || !LocalDateTime.now().isBefore(completableFrom(task))))
                 .build();
     }
 
@@ -173,9 +189,12 @@ public class CareTaskServiceImpl implements CareTaskService {
         if ("DONE".equals(task.getStatus())) {
             throw new IllegalArgumentException("Công việc này đã được đánh dấu hoàn thành trước đó");
         }
-        // Việc của ngày sau (ví dụ việc cho ăn ngày mai đã gửi trước) chỉ xem trước, chưa được hoàn thành
-        if (task.getTaskDate() != null && task.getTaskDate().isAfter(LocalDate.now())) {
-            throw new IllegalArgumentException("Công việc được lên lịch ngày " + task.getTaskDate() + ", chưa thể hoàn thành trước ngày đó.");
+        // Chưa tới giờ hẹn (trừ khung xác nhận sớm) thì chưa được hoàn thành, kể cả việc ngày mai đã gửi trước
+        LocalDateTime from = completableFrom(task);
+        if (from != null && LocalDateTime.now().isBefore(from)) {
+            throw new IllegalArgumentException("Chưa tới giờ thực hiện: việc hẹn " + (task.getScheduledTime() != null ? task.getScheduledTime() + " " : "")
+                    + task.getTaskDate().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")) + ", chỉ được xác nhận hoàn thành từ "
+                    + from.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM")) + ".");
         }
 
         task.setStatus("DONE");

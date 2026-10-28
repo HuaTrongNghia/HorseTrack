@@ -34,4 +34,6 @@ public class CareTaskDTO {
     private Integer lateMinutes;   // số phút trễ so với giờ hẹn khi đã quá SLA (tính tới lúc hoàn thành, hoặc tới hiện tại nếu chưa xong); null nếu không trễ SLA
     private String dietNote;       // Lưu ý đặc biệt của khẩu phần (việc cho ăn)
     private Boolean medicalDiet;   // Khẩu phần y tế do bác sĩ chỉ định
+    private LocalDateTime completableFrom;   // thời điểm sớm nhất Groom được xác nhận hoàn thành (giờ hẹn - app.care.early-complete-minutes)
+    private Boolean canComplete;             // việc đang mở và đã tới khung giờ được xác nhận
 }

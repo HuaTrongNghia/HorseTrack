@@ -959,7 +959,8 @@ Chỉ `Trainer` được gọi. Lấy `groomId` từ `GET /training-plans/assign
 - Login bằng đúng Groom được giao ở 9.0.
 - Query `date` (tùy chọn, `yyyy-MM-dd`): mặc định hôm nay; truyền ngày mai để xem trước việc cho ăn đã gửi trước.
 - **Mong đợi:** `200`, danh sách việc có `taskDate` là ngày đó, sắp theo `scheduledTime`. **Ghi lại `taskId`**.
-- Việc của ngày sau chỉ xem trước: `PUT /care-tasks/{id}/complete` trước ngày đó → `400` "chưa thể hoàn thành trước ngày đó".
+- Mỗi việc có `completableFrom` (giờ hẹn trừ 30 phút, cấu hình `CARE_EARLY_COMPLETE_MINUTES`) và `canComplete`. FE dùng `canComplete` để bật / tắt nút hoàn thành.
+- Chưa tới `completableFrom` (ví dụ 00:20 xác nhận bữa trưa 11:30, hoặc việc ngày mai) → `PUT /care-tasks/{id}/complete` trả `400` "Chưa tới giờ thực hiện: việc hẹn ..., chỉ được xác nhận hoàn thành từ HH:mm dd/MM."
 
 ### 9.3 `GET /api/v1/care-tasks/overdue`: việc trễ hạn (`Club Manager`, BR_05)
 
