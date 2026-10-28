@@ -22,7 +22,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Map;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -34,7 +36,9 @@ public class HorseServiceImpl implements HorseService {
     private static final String ROLE_OWNER = "Horse Owner";
     private static final String ROLE_VET = "Veterinarian";
     // 3 mục kiểm tra bắt buộc của hồ sơ (Registration_Checks.check_key)
-    private static final Set<String> REQUIRED_CHECKS = Set.of("IDENTITY", "HEALTH", "OWNERSHIP");
+    // Không còn kiểm tra giấy chứng nhận sức khỏe (đã bỏ khỏi hồ sơ đăng ký)
+    private static final Set<String> REQUIRED_CHECKS = Set.of("IDENTITY", "OWNERSHIP");
+    private static final BigDecimal CM_PER_HAND = new BigDecimal("10.16");
 
     private final HorseRepository horseRepository;
     private final UserRepository userRepository;
@@ -46,6 +50,10 @@ public class HorseServiceImpl implements HorseService {
     private final HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository;
     private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
+    private final com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests;
+    private final com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService;
+    private final RegistrationAttachmentService attachmentService;
+    private final com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier;
 
     public HorseServiceImpl(HorseRepository horseRepository, UserRepository userRepository, StallRepository stallRepository,
                             HorseRegistrationRepository registrationRepository, EntityManager entityManager,
@@ -53,7 +61,11 @@ public class HorseServiceImpl implements HorseService {
                             com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler,
                             HorseAccessGuard horseAccessGuard,
                             com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository,
-                            com.horsetrack.equinecare.modules.notification.service.EmailService emailService) {
+                            com.horsetrack.equinecare.modules.notification.service.EmailService emailService,
+                            com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests,
+                            com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService,
+                            RegistrationAttachmentService attachmentService,
+                            com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier) {
         this.horseRepository = horseRepository;
         this.userRepository = userRepository;
         this.stallRepository = stallRepository;
@@ -64,6 +76,10 @@ public class HorseServiceImpl implements HorseService {
         this.horseAccessGuard = horseAccessGuard;
         this.trainingPlanRepository = trainingPlanRepository;
         this.emailService = emailService;
+        this.assignmentRequests = assignmentRequests;
+        this.injuryService = injuryService;
+        this.attachmentService = attachmentService;
+        this.conditionNotifier = conditionNotifier;
     }
 
     private boolean currentUserHasRole(String role) {
@@ -108,16 +124,16 @@ public class HorseServiceImpl implements HorseService {
                 .isLocked(horse.getIsLocked())
                 .prizeSharePct(horse.getPrizeSharePct())
                 .ownerId(horse.getOwner().getUserId())
+                .ownerName(horse.getOwner().getFullName())
+                .ownerPhone(horse.getOwner().getPhone())
                 .stallId(horse.getStall() != null ? horse.getStall().getStallId() : null)
                 .stallCode(horse.getStall() != null ? horse.getStall().getStallCode() : null)
                 .approvalStatus(horse.getApprovalStatus())
                 .createdAt(horse.getCreatedAt())
                 .horseCode(horse.getHorseCode())
                 .color(horse.getColor())
-                .heightHands(horse.getHeightHands())
-                .passportNo(horse.getPassportNo())
-                .healthCertIssuer(horse.getHealthCertIssuer())
-                .healthCertExpiry(horse.getHealthCertExpiry())
+                .heightCm(horse.getHeightCm() != null ? horse.getHeightCm()
+                        : horse.getHeightHands() != null ? horse.getHeightHands().multiply(CM_PER_HAND).setScale(1, java.math.RoundingMode.HALF_UP) : null)
                 .registrationId(latest != null ? latest.getRegistrationId() : null)
                 .registrationCode(latest != null ? latest.getRegistrationCode() : null)
                 .rejectReason(rejected ? latest.getDecisionNote() : null)
@@ -174,33 +190,61 @@ public class HorseServiceImpl implements HorseService {
         Horse horse = findHorse(horseId);
         checkOwnerAccess(horse.getOwner().getUserId(), "Bạn không phải chủ của ngựa này");
         horseAccessGuard.checkAssigned(horse);
+        HorseResponseDTO dto = mapToResponseDTO(horse);
+        dto.setInjuries(injuryService.listForHorse(horse.getHorseId()));
+        return dto;
+    }
+
+    @Override
+    @Transactional
+    public HorseResponseDTO unassignTrainer(Integer horseId) {
+        Horse horse = findHorse(horseId);
+        User previous = horse.getAssignedTrainer();
+        if (previous == null) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được phân công HLV.");
+        }
+        assertNoOpenPlan(horse);
+        assignmentRequests.openTrainerRelease(horse, previous, currentUser());
+        return mapToResponseDTO(horse);
+    }
+
+    @Override
+    @Transactional
+    public HorseResponseDTO applyTrainerRelease(Integer horseId) {
+        Horse horse = findHorse(horseId);
+        User previous = horse.getAssignedTrainer();
+        if (previous == null) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được phân công HLV.");
+        }
+        assertNoOpenPlan(horse);
+        horse.setAssignedTrainer(null);
+        horseRepository.save(horse);
+        auditTrail.record("UNASSIGN_TRAINER", "Horses", "assigned_trainer_id=" + previous.getUserId(),
+                "assigned_trainer_id=null | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ")");
+        mailTrainer(previous, "[HorseTrack] Bạn không còn phụ trách ngựa " + horse.getHorseName(),
+                "<p>Xin chào <b>" + esc(previous.getFullName()) + "</b>,</p>"
+                        + "<p>Bạn đã xác nhận bỏ phân công ngựa <b>" + esc(horse.getHorseName()) + "</b>.</p>");
         return mapToResponseDTO(horse);
     }
 
     @Override
     @Transactional
     public HorseResponseDTO assignTrainer(Integer horseId, HorseAssignTrainerRequestDTO request) {
-        Horse horse = findHorse(horseId);
-        if (horse.getStall() == null) {
-            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được duyệt và cấp chuồng, chưa thể phân công HLV.");
-        }
-        User trainer = userRepository.findById(request.getTrainerId())
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên với ID: " + request.getTrainerId()));
-        if (!HorseAccessGuard.ROLE_TRAINER.equals(trainer.getRoleName())) {
-            throw new IllegalArgumentException("Chỉ được phân công nhân viên có vai trò Trainer (người được chọn có vai trò " + trainer.getRoleName() + ").");
-        }
-        if (Boolean.FALSE.equals(trainer.getIsActive())) {
-            throw new IllegalArgumentException("Tài khoản Trainer " + trainer.getFullName() + " đã bị vô hiệu hóa.");
-        }
+        PreparedTrainer prepared = prepareTrainer(horseId, request.getTrainerId());
+        assignmentRequests.openTrainerHorse(prepared.horse, prepared.trainer, prepared.previous, currentUser());
+        return mapToResponseDTO(prepared.horse);
+    }
 
-        User previous = horse.getAssignedTrainer();
-        if (previous != null && previous.getUserId().equals(trainer.getUserId())) {
-            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đã được phân công cho " + trainer.getFullName() + ".");
-        }
+    @Override
+    @Transactional
+    public HorseResponseDTO applyTrainerAssignment(Integer horseId, Integer trainerId) {
+        PreparedTrainer prepared = prepareTrainer(horseId, trainerId);
+        Horse horse = prepared.horse;
+        User trainer = prepared.trainer;
+        User previous = prepared.previous;
         horse.setAssignedTrainer(trainer);
         horseRepository.save(horse);
 
-        // Giáo án chưa kết thúc (PENDING / ACTIVE / PAUSED) của ngựa được bàn giao cho HLV mới
         int handedOver = 0;
         for (String st : com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES) {
             for (var plan : trainingPlanRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), st)) {
@@ -215,19 +259,63 @@ public class HorseServiceImpl implements HorseService {
                 "assigned_trainer_id=" + trainer.getUserId() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId()
                         + ") | bàn giao " + handedOver + " giáo án");
 
-        if (StringUtils.hasText(trainer.getEmail())) {
-            try {
-                emailService.sendAsync(trainer.getEmail(), "[HorseTrack] Bạn được phân công phụ trách ngựa " + horse.getHorseName(),
-                        "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(trainer.getFullName()) + "</b>,</p>"
-                                + "<p>Club Manager đã phân công bạn phụ trách huấn luyện ngựa <b>"
-                                + org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName()) + "</b>"
-                                + (horse.getStall() != null ? " (chuồng " + horse.getStall().getStallCode() + ")" : "") + ".</p>"
-                                + (handedOver > 0 ? "<p>Bạn tiếp nhận " + handedOver + " giáo án đang chạy của ngựa này.</p>" : ""));
-            } catch (Exception ignored) {
-                // Email chỉ là thông báo, không làm hỏng việc phân công
-            }
+        String stall = horse.getStall() != null ? " (chuồng " + esc(horse.getStall().getStallCode()) + ")" : "";
+        mailTrainer(trainer, "[HorseTrack] Bạn đã nhận ngựa " + horse.getHorseName(),
+                "<p>Xin chào <b>" + esc(trainer.getFullName()) + "</b>,</p>"
+                        + "<p>Bạn đã xác nhận phụ trách ngựa <b>" + esc(horse.getHorseName()) + "</b>" + stall + ". Phân công có hiệu lực.</p>"
+                        + (handedOver > 0 ? "<p>Bạn tiếp nhận " + handedOver + " giáo án đang chạy của ngựa này.</p>" : ""));
+        if (previous != null) {
+            mailTrainer(previous, "[HorseTrack] Ngựa " + horse.getHorseName() + " đã chuyển sang HLV khác",
+                    "<p>Xin chào <b>" + esc(previous.getFullName()) + "</b>,</p>"
+                            + "<p>HLV <b>" + esc(trainer.getFullName()) + "</b> đã xác nhận nhận ngựa <b>" + esc(horse.getHorseName()) + "</b>. Bạn không còn phụ trách ngựa này.</p>");
         }
         return mapToResponseDTO(horse);
+    }
+
+    private void assertNoOpenPlan(Horse horse) {
+        for (String st : com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES) {
+            if (!trainingPlanRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), st).isEmpty()) {
+                throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đang có giáo án " + st
+                        + ". Hãy phân công HLV khác để bàn giao giáo án, hoặc kết thúc / hủy giáo án trước khi bỏ phân công.");
+            }
+        }
+    }
+
+    private PreparedTrainer prepareTrainer(Integer horseId, Integer trainerId) {
+        Horse horse = findHorse(horseId);
+        if (horse.getStall() == null) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được duyệt và cấp chuồng, chưa thể phân công HLV.");
+        }
+        User trainer = userRepository.findById(trainerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy nhân viên với ID: " + trainerId));
+        if (!HorseAccessGuard.ROLE_TRAINER.equals(trainer.getRoleName())) {
+            throw new IllegalArgumentException("Chỉ được phân công nhân viên có vai trò Trainer (người được chọn có vai trò " + trainer.getRoleName() + ").");
+        }
+        if (Boolean.FALSE.equals(trainer.getIsActive())) {
+            throw new IllegalArgumentException("Tài khoản Trainer " + trainer.getFullName() + " đã bị vô hiệu hóa.");
+        }
+        com.horsetrack.equinecare.modules.auth.service.StaffAccountService.requireConfirmed(trainer, "phân công phụ trách ngựa");
+        User previous = horse.getAssignedTrainer();
+        if (previous != null && previous.getUserId().equals(trainer.getUserId())) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đã được phân công cho " + trainer.getFullName() + ".");
+        }
+        return new PreparedTrainer(horse, trainer, previous);
+    }
+
+    private void mailTrainer(User user, String subject, String html) {
+        if (user == null || !StringUtils.hasText(user.getEmail())) return;
+        try {
+            emailService.sendAsync("TRAINER_ASSIGNMENT", user.getEmail(), subject, html);
+        } catch (Exception ignored) {
+            // Email chỉ là thông báo
+        }
+    }
+
+    private static String esc(String value) {
+        return org.springframework.web.util.HtmlUtils.htmlEscape(value == null ? "" : value);
+    }
+
+    private record PreparedTrainer(Horse horse, User trainer, User previous) {
     }
 
     // ==========================================
@@ -237,19 +325,31 @@ public class HorseServiceImpl implements HorseService {
     @Override
     @Transactional
     public HorseResponseDTO registerHorse(HorseRegistrationRequestDTO request) {
-        checkOwnerAccess(request.getOwnerId(), "Chủ ngựa chỉ được đăng ký ngựa cho chính mình (ownerId phải là userId của bạn)");
-        if (horseRepository.existsByHorseNameAndOwner_UserId(request.getHorseName(), request.getOwnerId())) {
+        // Chủ ngựa đăng ký cho chính mình (không cần gửi ownerId); Club Manager đăng ký hộ thì phải chọn chủ ngựa
+        Integer ownerId = request.getOwnerId();
+        if (currentUserHasRole(ROLE_OWNER)) {
+            Integer me = currentUser().getUserId();
+            if (ownerId != null && !ownerId.equals(me)) {
+                throw new AccessDeniedException("Chủ ngựa chỉ được đăng ký ngựa cho chính mình (ownerId phải là userId của bạn)");
+            }
+            ownerId = me;
+        } else if (ownerId == null) {
+            throw new IllegalArgumentException("Phải chọn chủ ngựa (ownerId).");
+        }
+        if (horseRepository.existsByHorseNameAndOwner_UserId(request.getHorseName(), ownerId)) {
             throw new IllegalArgumentException("Bạn đã có ngựa tên '" + request.getHorseName() + "'.");
         }
-        User owner = userRepository.findById(request.getOwnerId())
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chủ ngựa với ID: " + request.getOwnerId()));
+        Integer finalOwnerId = ownerId;
+        User owner = userRepository.findById(ownerId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy chủ ngựa với ID: " + finalOwnerId));
         if (!ROLE_OWNER.equals(owner.getRoleName())) {
-            throw new IllegalArgumentException("Người dùng ID " + request.getOwnerId() + " không phải chủ ngựa.");
+            throw new IllegalArgumentException("Người dùng ID " + ownerId + " không phải chủ ngựa.");
         }
-        String passport = trimToNull(request.getPassportNo());
-        if (passport != null && horseRepository.existsByPassportNoIgnoreCase(passport)) {
-            throw new IllegalArgumentException("Số hộ chiếu '" + passport + "' đã được dùng cho ngựa khác.");
+        // Số điện thoại liên hệ lấy từ hồ sơ chủ ngựa, không nhập lại trên hồ sơ ngựa
+        if (!StringUtils.hasText(owner.getPhone())) {
+            throw new IllegalArgumentException("Tài khoản chủ ngựa chưa có số điện thoại. Cập nhật tại Hồ sơ cá nhân (PUT /api/v1/account/my-profile) trước khi đăng ký ngựa.");
         }
+        BigDecimal heightCm = heightCm(request.getHeightCm(), request.getHeightHands());
 
         Horse horse = Horse.builder()
                 .horseName(request.getHorseName().trim())
@@ -259,10 +359,8 @@ public class HorseServiceImpl implements HorseService {
                 .pedigree(trimToNull(request.getPedigree()))
                 .weightKg(request.getWeightKg())
                 .color(trimToNull(request.getColor()))
-                .heightHands(request.getHeightHands())
-                .passportNo(passport)
-                .healthCertIssuer(trimToNull(request.getHealthCertIssuer()))
-                .healthCertExpiry(request.getHealthCertExpiry())
+                .heightCm(heightCm)
+                .heightHands(toHands(heightCm))
                 .healthStatus("HEALTHY")
                 .isLocked(false)
                 .prizeSharePct(java.math.BigDecimal.ZERO)
@@ -294,11 +392,18 @@ public class HorseServiceImpl implements HorseService {
             throw new IllegalArgumentException("Ngựa này đã được duyệt và cấp chuồng.");
         }
 
+        // Quản lý CLB chỉ duyệt khi hồ sơ có ảnh/tệp giấy tờ sở hữu thật để đối chiếu nội dung
+        List<com.horsetrack.equinecare.modules.horse.dto.RegistrationAttachmentDTO> docs =
+                attachmentService.byRegistration(List.of(reg.getRegistrationId())).getOrDefault(reg.getRegistrationId(), List.of());
+        if (docs.stream().noneMatch(d -> "OWNERSHIP".equalsIgnoreCase(d.getDocType()))) {
+            throw new IllegalArgumentException("Hồ sơ chưa có ảnh/tệp giấy tờ sở hữu. Không thể duyệt khi chưa xem được nội dung giấy tờ; hãy từ chối và cho phép nộp lại.");
+        }
+
         // SRS: chỉ duyệt khi mọi mục kiểm tra đều đạt
         if (request.getChecks() != null && !request.getChecks().isEmpty()) {
             Set<String> keys = request.getChecks().stream().map(c -> c.getCheckKey().toUpperCase()).collect(Collectors.toSet());
             if (!keys.containsAll(REQUIRED_CHECKS)) {
-                throw new IllegalArgumentException("Checklist phải có đủ 3 mục IDENTITY, HEALTH, OWNERSHIP.");
+                throw new IllegalArgumentException("Checklist phải có đủ 2 mục IDENTITY, OWNERSHIP.");
             }
             if (request.getChecks().stream().anyMatch(c -> !Boolean.TRUE.equals(c.getPassed()))) {
                 throw new IllegalArgumentException("Chỉ được duyệt khi mọi mục kiểm tra đều đạt. Hãy từ chối hồ sơ nếu có mục chưa đạt.");
@@ -375,15 +480,10 @@ public class HorseServiceImpl implements HorseService {
         if (request.getWeightKg() != null) horse.setWeightKg(request.getWeightKg());
         if (request.getPedigree() != null) horse.setPedigree(trimToNull(request.getPedigree()));
         if (request.getColor() != null) horse.setColor(trimToNull(request.getColor()));
-        if (request.getHeightHands() != null) horse.setHeightHands(request.getHeightHands());
-        if (request.getHealthCertIssuer() != null) horse.setHealthCertIssuer(trimToNull(request.getHealthCertIssuer()));
-        if (request.getHealthCertExpiry() != null) horse.setHealthCertExpiry(request.getHealthCertExpiry());
-        if (request.getPassportNo() != null) {
-            String passport = trimToNull(request.getPassportNo());
-            if (passport != null && horseRepository.existsByPassportNoIgnoreCaseAndHorseIdNot(passport, horseId)) {
-                throw new IllegalArgumentException("Số hộ chiếu '" + passport + "' đã được dùng cho ngựa khác.");
-            }
-            horse.setPassportNo(passport);
+        BigDecimal heightCm = heightCm(request.getHeightCm(), request.getHeightHands());
+        if (heightCm != null) {
+            horse.setHeightCm(heightCm);
+            horse.setHeightHands(toHands(heightCm));
         }
         horseRepository.save(horse);
 
@@ -404,7 +504,10 @@ public class HorseServiceImpl implements HorseService {
     public List<RegistrationHistoryDTO> getRegistrationHistory(Integer horseId) {
         Horse horse = findHorse(horseId);
         checkOwnerAccess(horse.getOwner().getUserId(), "Bạn không phải chủ của ngựa này");
-        return registrationRepository.findByHorse_HorseIdOrderByRegistrationIdDesc(horseId).stream()
+        List<HorseRegistration> regs = registrationRepository.findByHorse_HorseIdOrderByRegistrationIdDesc(horseId);
+        Map<Integer, List<com.horsetrack.equinecare.modules.horse.dto.RegistrationAttachmentDTO>> attachments =
+                attachmentService.byRegistration(regs.stream().map(HorseRegistration::getRegistrationId).toList());
+        return regs.stream()
                 .map(r -> RegistrationHistoryDTO.builder()
                         .registrationId(r.getRegistrationId())
                         .registrationCode(r.getRegistrationCode())
@@ -427,6 +530,7 @@ public class HorseServiceImpl implements HorseService {
                                         .checkedAt(c.getCheckedAt())
                                         .build())
                                 .collect(Collectors.toList()))
+                        .attachments(attachments.getOrDefault(r.getRegistrationId(), List.of()))
                         .build())
                 .collect(Collectors.toList());
     }
@@ -489,7 +593,10 @@ public class HorseServiceImpl implements HorseService {
             if (!currentUserHasRole(ROLE_VET)) {
                 throw new AccessDeniedException("Chỉ Bác sĩ thú y mới được thay đổi trạng thái sức khỏe (healthStatus)");
             }
-            horse.setHealthStatus(request.getHealthStatus().toUpperCase());
+            String nextStatus = request.getHealthStatus().toUpperCase();
+            horse.setHealthStatus(nextStatus);
+            horseRepository.save(horse);
+            conditionNotifier.onStatus(horse, nextStatus, "Bác sĩ thú y cập nhật trạng thái sức khỏe.");
         }
         if (request.getIsLocked() != null && !request.getIsLocked().equals(horse.getIsLocked())) {
             // Khóa/mở khóa huấn luyện là quyết định y tế, chỉ Bác sĩ thú y được thay đổi
@@ -516,6 +623,25 @@ public class HorseServiceImpl implements HorseService {
         Horse horse = findHorse(horseId);
         horse.setIsLocked(true);
         horseRepository.save(horse);
+    }
+
+    // Chiều cao theo cm; FE cũ gửi heightHands thì đổi sang cm
+    private static BigDecimal heightCm(BigDecimal cm, BigDecimal hands) {
+        if (cm != null) {
+            return cm.setScale(1, java.math.RoundingMode.HALF_UP);
+        }
+        if (hands == null) {
+            return null;
+        }
+        BigDecimal converted = hands.multiply(CM_PER_HAND).setScale(1, java.math.RoundingMode.HALF_UP);
+        if (converted.compareTo(new BigDecimal("120")) < 0 || converted.compareTo(new BigDecimal("205")) > 0) {
+            throw new IllegalArgumentException("Chiều cao phải từ 120 đến 205 cm (gửi heightCm theo cm).");
+        }
+        return converted;
+    }
+
+    private static BigDecimal toHands(BigDecimal cm) {
+        return cm == null ? null : cm.divide(CM_PER_HAND, 1, java.math.RoundingMode.HALF_UP);
     }
 
     private static String trimToNull(String s) {
