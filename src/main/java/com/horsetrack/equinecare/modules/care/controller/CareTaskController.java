@@ -39,6 +39,16 @@ public class CareTaskController {
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách việc trễ hạn thành công", careTaskService.getOverdueTasks()));
     }
 
+    // HLV theo dõi việc đã giao cho Groom (ngựa mình phụ trách), Club Manager xem mọi ngựa: trạng thái, giờ hoàn thành
+    @GetMapping("/assigned")
+    @PreAuthorize("hasAnyAuthority('Trainer', 'Club Manager')")
+    @io.swagger.v3.oas.annotations.Operation(summary = "Việc chăm sóc đã giao", description = "HLV: ngựa mình phụ trách; Club Manager: mọi ngựa. date mặc định hôm nay (yyyy-MM-dd), status TODO / IN_PROGRESS / DONE / SKIPPED.")
+    public ResponseEntity<com.horsetrack.equinecare.common.base.ApiResponse<java.util.List<com.horsetrack.equinecare.modules.care.dto.CareTaskDTO>>> assigned(
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate date,
+            @RequestParam(required = false) String status) {
+        return ResponseEntity.ok(com.horsetrack.equinecare.common.base.ApiResponse.ok("Lấy danh sách việc đã giao thành công", careTaskService.getAssignedTasks(date, status)));
+    }
+
     @GetMapping("/my-tasks")
     @PreAuthorize("hasAuthority('Groom')")
     @Operation(summary = "Việc chăm sóc của tôi hôm nay")

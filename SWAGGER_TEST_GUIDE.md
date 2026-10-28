@@ -2,7 +2,7 @@
 
 Swagger UI: http://localhost:8080/swagger-ui/index.html
 
-Tổng cộng **164 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
+Tổng cộng **165 endpoint**, chia thành 23 nhóm. Một số endpoint có thêm bản sao dưới `/api/...` (không có `v1`), ví dụ `/api/medical/vet-lock`. Hai bản chạy giống hệt nhau, chỉ cần test bản `/api/v1/...`.
 
 > **Bắt buộc trước khi chạy bản backend này:** chạy `DATABASE_fe_requests_schema.sql` trên DB (thêm cột ngưỡng / tạm dừng cho buổi tập, `Session_Readings.session_id`, chấn thương gắn với ngựa, `Users.avatar_url`, `Competition_Entries.proposal_note`). Chưa chạy script thì các API buổi tập, chấn thương, hồ sơ cá nhân, đề xuất thi đấu trả `500` "Invalid column name".
 >
@@ -627,7 +627,7 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 | Ngựa đang khóa, Trainer | `403` "...Chỉ Bác sĩ thú y được lập khẩu phần lúc này (BR_03)" |
 | Ngựa đang khóa, Veterinarian | `201`, `planType = MEDICAL` |
 | Trainer không phụ trách ngựa | `403` |
-| Ngựa chưa có chuồng; `endDate` trước `startDate` hoặc ở quá khứ; `details` rỗng; `mealType` sai | `400` |
+| Ngựa chưa có chuồng; `endDate` trước `startDate` hoặc ở quá khứ; **`startDate` ở quá khứ** (sửa khẩu phần: chỉ được giữ nguyên ngày bắt đầu cũ, không đổi sang ngày đã qua); `details` rỗng; `mealType` sai | `400` |
 | Món không phải thức ăn (thuốc kê đơn, thuốc tiêm / bôi, vaccine, vật tư y tế) | `400` "...không phải thức ăn. Chọn món trong danh sách GET /nutrition-plans/feed-items..." |
 | `horseId` / `inventoryItemId` không tồn tại | `404` |
 
@@ -966,6 +966,9 @@ Chỉ `Trainer` được gọi. Lấy `groomId` từ `GET /training-plans/assign
 - **Cách test nhanh:** giao việc (9.0) với `taskDate` là hôm nay và `scheduledTime` sớm hơn hiện tại ít nhất 45 phút, chờ tối đa 5 phút rồi gọi API này.
 
 ### 9.2 `PUT /api/v1/care-tasks/{taskId}/complete` (`Groom`)
+
+- Hoàn thành xong, **HLV phụ trách ngựa nhận email** "Đã hoàn thành: ..." (giờ hoàn thành theo giờ Việt Nam; việc cho ăn tự sinh từ khẩu phần không gửi email để tránh quá nhiều thư), nhật ký `COMPLETE_CARE_TASK`.
+- **`GET /api/v1/care-tasks/assigned?date=&status=`** (`Trainer`, `Club Manager`): HLV xem việc chăm sóc của ngựa mình phụ trách (Club Manager: mọi ngựa) trong ngày `date` (mặc định hôm nay), có `status` và `completedAt`; lọc `status` = `TODO` / `IN_PROGRESS` / `DONE` / `SKIPPED`.
 
 - **Mong đợi:** `200` "Đã hoàn thành công việc!". Task chuyển sang `status = "DONE"` và có `completedAt`.
 - Nếu task là `FEED`, tồn kho (`Inventory_Items.current_stock`) của các món trong thực đơn của ngựa bị trừ. Kiểm tra lại bằng SQL.

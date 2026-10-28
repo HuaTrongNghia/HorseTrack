@@ -42,6 +42,8 @@ public class CareTaskServiceImpl implements CareTaskService {
     private final GroomProfileRepository groomProfileRepository;
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.nutrition.service.NutritionFeedTaskService feedTaskService;
+    private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.nutrition.service.StallService stallService;
 
     // Việc chưa xong (còn có thể bị cảnh báo trễ)
@@ -58,6 +60,27 @@ public class CareTaskServiceImpl implements CareTaskService {
         String username = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByUsername(username)
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
+    }
+
+    // Báo HLV phụ trách ngựa khi Groom hoàn thành việc (việc cho ăn tự sinh từ khẩu phần thì không gửi, tránh quá nhiều email)
+    private void notifyTrainerDone(CareTask task, User groom) {
+        Horse horse = task.getHorse();
+        User trainer = horse != null ? horse.getAssignedTrainer() : null;
+        if (trainer == null || trainer.getEmail() == null || trainer.getEmail().isBlank()
+                || (task.getNotes() != null && task.getNotes().startsWith("KP-"))) {
+            return;
+        }
+        String when = task.getCompletedAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
+        String title = task.getTitle() != null ? task.getTitle() : task.getTaskType();
+        try {
+            emailService.sendAsync("CARE_TASK_DONE", trainer.getEmail(), "[HorseTrack] Đã hoàn thành: " + title + " - ngựa " + horse.getHorseName(),
+                    "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(trainer.getFullName()) + "</b>,</p>"
+                            + "<p>Groom <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(groom.getFullName()) + "</b> đã hoàn thành việc <b>"
+                            + org.springframework.web.util.HtmlUtils.htmlEscape(title) + "</b> cho ngựa <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName())
+                            + "</b> (lịch " + task.getScheduledTime() + " ngày " + task.getTaskDate() + ") lúc <b>" + when + "</b>.</p>");
+        } catch (Exception ex) {
+            // Không làm hỏng việc ghi nhận hoàn thành nếu gửi email lỗi
+        }
     }
 
     private CareTaskDTO mapToDTO(CareTask task) {
@@ -94,6 +117,18 @@ public class CareTaskServiceImpl implements CareTaskService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public List<CareTaskDTO> getAssignedTasks(LocalDate date, String status) {
+        User user = getLoggedInUser();
+        LocalDate day = date != null ? date : LocalDate.now();
+        List<CareTask> tasks = "Trainer".equals(user.getRoleName())
+                ? careTaskRepository.findByHorse_AssignedTrainer_UserIdAndTaskDateOrderByScheduledTimeAsc(user.getUserId(), day)
+                : careTaskRepository.findByTaskDateOrderByScheduledTimeAsc(day);
+        String st = status != null && !status.isBlank() ? status.trim().toUpperCase() : null;
+        return tasks.stream().filter(t -> st == null || st.equals(t.getStatus())).map(this::mapToDTO).collect(Collectors.toList());
+    }
+
+    @Override
     @Transactional(rollbackFor = Exception.class)
     public void completeTask(Integer taskId) {
         User user = getLoggedInUser();
@@ -114,6 +149,11 @@ public class CareTaskServiceImpl implements CareTaskService {
         task.setStatus("DONE");
         task.setCompletedAt(LocalDateTime.now());
         careTaskRepository.save(task);
+
+        auditTrail.record("COMPLETE_CARE_TASK", "Daily_Tasks", "status=TODO",
+                "status=DONE | " + (task.getTaskCode() != null ? task.getTaskCode() : "#" + task.getTaskId()) + " | " + task.getTaskType()
+                        + (task.getHorse() != null ? " | ngựa " + task.getHorse().getHorseName() : "") + " | Groom " + user.getFullName());
+        notifyTrainerDone(task, user);
 
         // Việc cho ăn sinh từ khẩu phần: trừ kho đúng các món của bữa đó qua sổ cái và ghi chi phí vật tư
         if ("FEED".equalsIgnoreCase(task.getTaskType()) && task.getHorse() != null) {

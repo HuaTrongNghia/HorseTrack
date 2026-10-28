@@ -12,6 +12,11 @@ public interface CareTaskRepository extends JpaRepository<CareTask, Integer> {
 
     List<CareTask> findByGroom_UserIdAndTaskDateOrderByScheduledTimeAsc(Integer groomId, LocalDate taskDate);
 
+    // Việc chăm sóc của các ngựa HLV phụ trách trong một ngày (HLV theo dõi việc đã giao)
+    List<CareTask> findByHorse_AssignedTrainer_UserIdAndTaskDateOrderByScheduledTimeAsc(Integer trainerId, LocalDate taskDate);
+
+    List<CareTask> findByTaskDateOrderByScheduledTimeAsc(LocalDate taskDate);
+
     long countByGroom_UserIdAndStatusNot(Integer groomId, String status);
 
     // Việc cho ăn sinh từ khẩu phần (ghi chú bắt đầu bằng KP-planId-MEAL:)

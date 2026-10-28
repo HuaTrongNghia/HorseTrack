@@ -62,6 +62,10 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
             throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được duyệt và cấp chuồng, chưa thể lập khẩu phần.");
         }
         validateDates(request);
+        // Khẩu phần mới không bắt đầu từ ngày đã qua (tránh sinh việc cho ăn đã trễ ngay khi tạo)
+        if (request.getStartDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Ngày bắt đầu khẩu phần không được ở quá khứ (hôm nay là " + LocalDate.now() + ").");
+        }
 
         String planType = Boolean.TRUE.equals(horse.getIsLocked()) ? "MEDICAL" : "STANDARD";
         NutritionPlan plan = NutritionPlan.builder()
@@ -151,6 +155,10 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
             throw new IllegalArgumentException("Không thể đổi ngựa của khẩu phần.");
         }
         validateDates(request);
+        // Khẩu phần đang chạy giữ nguyên ngày bắt đầu cũ; đổi ngày bắt đầu thì không được lùi về quá khứ
+        if (!request.getStartDate().equals(plan.getStartDate()) && request.getStartDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Ngày bắt đầu mới không được ở quá khứ (hôm nay là " + LocalDate.now() + ").");
+        }
 
         plan.setStartDate(request.getStartDate());
         plan.setEndDate(request.getEndDate());
