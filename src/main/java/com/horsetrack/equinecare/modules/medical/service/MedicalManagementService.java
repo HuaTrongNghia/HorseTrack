@@ -91,6 +91,7 @@ public class MedicalManagementService {
 
     @Transactional(rollbackFor = Exception.class)
     public TreatmentProtocolDTO createProtocol(ProtocolCreateRequestDTO request) {
+        markEmergency(request, null);
         TreatmentProtocol protocol = buildProtocol(request, null);
         return mapper.toDTO(saveAndReload(protocol), true);
     }
@@ -164,6 +165,7 @@ public class MedicalManagementService {
         old.setClosedAt(LocalDateTime.now());
         protocolRepository.saveAndFlush(old);
 
+        markEmergency(request, old);
         TreatmentProtocol next = buildProtocol(request, old);
         return mapper.toDTO(saveAndReload(next), true);
     }
@@ -586,6 +588,32 @@ public class MedicalManagementService {
         // Đọc lại để lấy protocol_code và line_total do DB tự sinh
         entityManager.refresh(saved);
         return saved;
+    }
+
+    /**
+     * BR_17: bác sĩ chọn "Trạng thái cấp cứu" khi lập phác đồ → ca khám chuyển mức CRITICAL. Phác đồ của ca CRITICAL được coi là
+     * cấp cứu (ProtocolPhaseBilling.isEmergency): kho cấp phát ngay, không chờ thanh toán, cấp xong chuyển thẳng "Đang điều trị".
+     * Bỏ chọn không hạ mức ca khám.
+     */
+    private void markEmergency(ProtocolCreateRequestDTO request, TreatmentProtocol previous) {
+        if (!Boolean.TRUE.equals(request.getEmergency())) {
+            return;
+        }
+        Integer caseId = request.getCaseId() != null ? request.getCaseId() : (previous != null ? previous.getCaseId() : null);
+        if (caseId == null) {
+            throw new IllegalArgumentException("Phác đồ cấp cứu phải gắn với ca khám (caseId) để ghi nhận mức cấp cứu.");
+        }
+        // Sửa qua entity (không dùng native UPDATE) để ProtocolPhaseBilling.isEmergency đọc đúng mức mới trong cùng transaction
+        com.horsetrack.equinecare.modules.medical.entity.VetCase vetCase = entityManager.find(com.horsetrack.equinecare.modules.medical.entity.VetCase.class, caseId);
+        if (vetCase == null) {
+            throw new ResourceNotFoundException("Không tìm thấy ca khám với ID: " + caseId);
+        }
+        String old = vetCase.getSeverity();
+        if (!"CRITICAL".equalsIgnoreCase(old)) {
+            vetCase.setSeverity("CRITICAL");
+            auditTrail.record("MARK_EMERGENCY", "Vet_Cases", "severity=" + old,
+                    "severity=CRITICAL | ca khám #" + caseId + " | bác sĩ chọn trạng thái cấp cứu khi lập phác đồ (BR_17)");
+        }
     }
 
     private boolean vetCaseExists(Integer caseId) {

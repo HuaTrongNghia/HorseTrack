@@ -42,6 +42,15 @@ public class DietChangeServiceImpl implements DietChangeService {
     private final com.horsetrack.equinecare.modules.nutrition.service.NutritionScope scope;
     private final com.horsetrack.equinecare.modules.nutrition.service.NutritionFeedTaskService feedTaskService;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
+    private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
+
+    private User currentUserOrNull() {
+        try {
+            return getLoggedInUser();
+        } catch (RuntimeException ex) {
+            return null;
+        }
+    }
 
     private User getLoggedInUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -66,6 +75,14 @@ public class DietChangeServiceImpl implements DietChangeService {
             throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa ở CLB, không thể đề xuất thức ăn.");
         }
 
+        // Ngựa không khóa: đề xuất gửi HLV phụ trách. HLV muốn đổi khẩu phần ngựa khỏe thì sửa trực tiếp, không gửi cho chính mình
+        if (!locked(horse) && com.horsetrack.equinecare.modules.nutrition.service.NutritionScope.ROLE_TRAINER.equals(user.getRoleName())) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " không bị khóa huấn luyện: HLV phụ trách điều chỉnh trực tiếp khẩu phần (PUT /api/v1/nutrition-plans/{planId}), không cần gửi đề xuất.");
+        }
+        if (!locked(horse) && horse.getAssignedTrainer() == null) {
+            throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được phân công HLV, chưa có người duyệt đề xuất thức ăn.");
+        }
+
         InventoryItem item = null;
         if (dto.getItemId() != null) {
             item = itemRepository.findById(dto.getItemId())
@@ -83,6 +100,7 @@ public class DietChangeServiceImpl implements DietChangeService {
                 .build();
 
         DietChangeRequest saved = requestRepository.save(req);
+        notifyApprover(saved);
         return toDTO(saved);
     }
 
@@ -121,6 +139,12 @@ public class DietChangeServiceImpl implements DietChangeService {
 
         if (!"PENDING".equalsIgnoreCase(req.getStatus())) {
             throw new IllegalArgumentException("Yêu cầu này đã được xử lý (trạng thái: " + req.getStatus() + ").");
+        }
+        // BR_03: ngựa không khóa → HLV phụ trách ngựa duyệt; ngựa đang khóa huấn luyện → bác sĩ thú y duyệt
+        if (!canDecide(user, req.getHorse())) {
+            throw new AccessDeniedException(locked(req.getHorse())
+                    ? "Ngựa " + req.getHorse().getHorseName() + " đang bị khóa huấn luyện: đề xuất thức ăn do Bác sĩ thú y xét duyệt."
+                    : "Ngựa " + req.getHorse().getHorseName() + " không bị khóa huấn luyện: đề xuất thức ăn do HLV phụ trách ngựa xét duyệt.");
         }
 
         boolean approve = Boolean.TRUE.equals(decision.getApprove());
@@ -163,6 +187,45 @@ public class DietChangeServiceImpl implements DietChangeService {
         return toDTO(saved);
     }
 
+    private static boolean locked(Horse horse) {
+        return horse != null && Boolean.TRUE.equals(horse.getIsLocked());
+    }
+
+    private static String approverRole(Horse horse) {
+        return locked(horse) ? com.horsetrack.equinecare.modules.nutrition.service.NutritionScope.ROLE_VET
+                : com.horsetrack.equinecare.modules.nutrition.service.NutritionScope.ROLE_TRAINER;
+    }
+
+    private static boolean canDecide(User user, Horse horse) {
+        if (horse == null || user == null || !approverRole(horse).equals(user.getRoleName())) {
+            return false;
+        }
+        return locked(horse) || (horse.getAssignedTrainer() != null && horse.getAssignedTrainer().getUserId().equals(user.getUserId()));
+    }
+
+    // Báo người duyệt: HLV phụ trách (ngựa không khóa) hoặc các bác sĩ thú y (ngựa đang khóa)
+    private void notifyApprover(DietChangeRequest r) {
+        Horse horse = r.getHorse();
+        List<User> to = locked(horse)
+                ? userRepository.findByRoleNameInAndIsActiveTrue(List.of(com.horsetrack.equinecare.modules.nutrition.service.NutritionScope.ROLE_VET))
+                : (horse.getAssignedTrainer() != null ? List.of(horse.getAssignedTrainer()) : List.<User>of());
+        String esc = org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName());
+        for (User u : to) {
+            if (!StringUtils.hasText(u.getEmail())) {
+                continue;
+            }
+            try {
+                emailService.sendAsync("DIET_REQUEST", u.getEmail(), "[HorseTrack] Đề nghị điều chỉnh khẩu phần - ngựa " + horse.getHorseName(),
+                        "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(u.getFullName()) + "</b>,</p>"
+                                + "<p><b>" + org.springframework.web.util.HtmlUtils.htmlEscape(r.getRequestedBy().getFullName()) + "</b> đề nghị điều chỉnh khẩu phần cho ngựa <b>" + esc + "</b>: "
+                                + org.springframework.web.util.HtmlUtils.htmlEscape(r.getRequestDetail()) + ".</p><p>Lý do: " + org.springframework.web.util.HtmlUtils.htmlEscape(r.getReason()) + "</p>"
+                                + "<p>Vui lòng xét duyệt (PUT /api/v1/diet-requests/" + r.getRequestId() + "/decide).</p>");
+            } catch (Exception ex) {
+                // Không làm hỏng việc gửi đề xuất nếu email lỗi
+            }
+        }
+    }
+
     private DietChangeResponseDTO toDTO(DietChangeRequest r) {
         return DietChangeResponseDTO.builder()
                 .requestId(r.getRequestId())
@@ -184,6 +247,10 @@ public class DietChangeServiceImpl implements DietChangeService {
                 .decidedAt(r.getDecidedAt())
                 .vetNote(r.getVetNote())
                 .nutritionPlanId(r.getNutritionPlanId())
+                .approverRole(approverRole(r.getHorse()))
+                .approverName(locked(r.getHorse()) ? "Bác sĩ thú y"
+                        : r.getHorse() != null && r.getHorse().getAssignedTrainer() != null ? r.getHorse().getAssignedTrainer().getFullName() : null)
+                .canDecide("PENDING".equals(r.getStatus()) && canDecide(currentUserOrNull(), r.getHorse()))
                 .build();
     }
 }

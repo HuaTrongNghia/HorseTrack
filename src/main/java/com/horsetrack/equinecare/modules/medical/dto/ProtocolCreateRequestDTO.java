@@ -44,6 +44,10 @@ public class ProtocolCreateRequestDTO {
     @Size(max = 1000, message = "Ghi chú (note) không được vượt quá 1000 ký tự")
     private String note;
 
+    // Bác sĩ đánh dấu cấp cứu (BR_17): ca khám chuyển mức CRITICAL, kho cấp thuốc ngay không chờ chủ ngựa thanh toán
+    @com.fasterxml.jackson.annotation.JsonAlias("isEmergency")
+    private Boolean emergency;
+
     @NotEmpty(message = "Phác đồ phải có ít nhất một giai đoạn (phases)")
     @Valid
     private List<Phase> phases;

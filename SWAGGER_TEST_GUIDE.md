@@ -658,9 +658,13 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
   { "horseId": 6, "itemId": 3, "item": "Cà rốt 1 kg/ngày", "reason": "Ngựa biếng ăn, cần bổ sung" }
   ```
   `itemId` tùy chọn (phải tồn tại nếu gửi); `reason` 10–500 ký tự. **Mong đợi:** `201`, `status = PENDING`.
-- `GET /api/v1/diet-requests?horseId=&status=`, `GET /api/v1/diet-requests/{id}`: lọc theo phạm vi người gọi.
-- `PUT /api/v1/diet-requests/{id}/decide` (**chỉ `Veterinarian`**): `{ "approve": true, "note": "Đồng ý" }`. Duyệt → món được thêm vào `specialInstructions` của khẩu phần đang áp dụng và hiện ngay trên các việc cho ăn chưa làm của Groom (`dietNote`). Từ chối → `note` ≥ 10 ký tự. Ghi Audit Log.
-- **Test lỗi:** Groom ngoài khu / Trainer không phụ trách → `403`; duyệt khi ngựa chưa có khẩu phần đang áp dụng → `400` "...Hãy lập khẩu phần trước khi duyệt"; xử lý lần 2 → `400`; Club Manager duyệt → `403`.
+- **Người duyệt theo trạng thái khóa của ngựa (BR_03):**
+  - Ngựa **không khóa** huấn luyện → gửi **HLV phụ trách ngựa** (email `DIET_REQUEST`). HLV gửi đề xuất cho ngựa khỏe → `400` (HLV sửa khẩu phần trực tiếp, 5.x). Ngựa chưa có HLV → `400`.
+  - Ngựa **đang khóa** huấn luyện → gửi **Bác sĩ thú y** (email cho mọi bác sĩ đang hoạt động).
+  - Xét theo trạng thái khóa **tại thời điểm duyệt**: ngựa bị khóa / mở khóa sau khi gửi thì đề xuất đang chờ tự chuyển người duyệt.
+- `GET /api/v1/diet-requests?horseId=&status=`, `GET /api/v1/diet-requests/{id}`: lọc theo phạm vi người gọi. Mỗi đề xuất có `approverRole` (`Trainer` / `Veterinarian`), `approverName`, `canDecide` (người đang đăng nhập được duyệt).
+- `PUT /api/v1/diet-requests/{id}/decide` (**HLV phụ trách** nếu ngựa không khóa, **`Veterinarian`** nếu ngựa đang khóa; sai người → `403`): `{ "approve": true, "note": "Đồng ý" }`. Duyệt → món được thêm vào `specialInstructions` của khẩu phần đang áp dụng và hiện ngay trên các việc cho ăn chưa làm của Groom (`dietNote`). Từ chối → `note` ≥ 10 ký tự. Ghi Audit Log.
+- **Test lỗi:** Groom ngoài khu / Trainer không phụ trách → `403`; duyệt khi ngựa chưa có khẩu phần đang áp dụng → `400` "...Hãy lập khẩu phần trước khi duyệt"; xử lý lần 2 → `400`; Club Manager duyệt → `403`; bác sĩ duyệt đề xuất của ngựa không khóa hoặc HLV duyệt đề xuất của ngựa đang khóa → `403`.
 
 ---
 
@@ -1160,6 +1164,7 @@ Club Manager được **xem** danh mục thuốc và phác đồ (12.1, 12.3) nh
 ```
 
 - **Mong đợi:** `201`. `protocolCode` do DB tự sinh dạng `PD-0001`, `versionNo = 1`, `state = "WAITING_STOCK_CHECK"`, có `totalCost` = tổng (số lượng × đơn giá). **Ghi lại `protocolId`**.
+- **Cấp cứu (BR_17):** thêm `"emergency": true` (nhận cả `isEmergency`) và bắt buộc có `caseId` → ca khám chuyển `severity = CRITICAL` (ghi Audit `MARK_EMERGENCY`), phác đồ trả `emergency = true`: kho cấp thuốc ngay, cấp xong không chuyển `ON_HOLD_PAYMENT` mà vào điều trị, hóa đơn giai đoạn vẫn được lập (12F.8). `emergency: true` mà không có `caseId` → `400`. Bỏ chọn không hạ mức ca khám. Cũng áp dụng cho 12.6 (phiên bản mới).
 - **Test lỗi:**
   - Kê vật tư không phải thuốc (ví dụ nhóm `FEED`) → `400`.
   - Trùng `itemId` trong cùng một giai đoạn → `400`.

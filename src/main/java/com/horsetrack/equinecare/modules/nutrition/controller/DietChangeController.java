@@ -19,14 +19,14 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1")
 @RequiredArgsConstructor
-@Tag(name = "Diet Change Requests", description = "Mã phu đề xuất thức ăn đặc biệt, Bác sĩ thú y xét duyệt")
+@Tag(name = "Diet Change Requests", description = "Groom đề nghị điều chỉnh khẩu phần: ngựa không khóa → HLV phụ trách duyệt; ngựa đang khóa huấn luyện → Bác sĩ thú y duyệt")
 public class DietChangeController {
 
     private final DietChangeService dietChangeService;
 
     @PostMapping("/diet-requests")
     @PreAuthorize("hasAnyAuthority('Groom', 'Trainer')")
-    @Operation(summary = "Mã phu hoặc HLV gửi đề xuất thức ăn đặc biệt cho ngựa")
+    @Operation(summary = "Gửi đề nghị điều chỉnh khẩu phần", description = "Groom (khu của ngựa) hoặc HLV phụ trách. Ngựa không khóa → gửi HLV phụ trách ngựa (HLV tự sửa khẩu phần, không gửi đề xuất); ngựa đang khóa huấn luyện → gửi Bác sĩ thú y. Người duyệt nhận email.")
     public ResponseEntity<ApiResponse<DietChangeResponseDTO>> createDietRequest(
             @Valid @RequestBody DietChangeRequestCreateDTO request) {
         DietChangeResponseDTO response = dietChangeService.createDietRequest(request);
@@ -36,7 +36,7 @@ public class DietChangeController {
 
     @GetMapping("/diet-requests")
     @PreAuthorize("hasAnyAuthority('Veterinarian', 'Groom', 'Trainer', 'Club Manager')")
-    @Operation(summary = "Xem danh sách đề xuất thức ăn đặc biệt")
+    @Operation(summary = "Xem danh sách đề xuất thức ăn đặc biệt", description = "Mỗi đề xuất có approverRole, approverName và canDecide (người đang đăng nhập được duyệt).")
     public ResponseEntity<ApiResponse<List<DietChangeResponseDTO>>> getDietRequests(
             @RequestParam(required = false) Integer horseId,
             @RequestParam(required = false) String status) {
@@ -53,10 +53,10 @@ public class DietChangeController {
         return ResponseEntity.ok(ApiResponse.ok("Lấy chi tiết đề xuất thức ăn đặc biệt thành công", response));
     }
 
-    // Chỉ Bác sĩ thú y xét duyệt (quyết định chuyên môn dinh dưỡng)
+    // BR_03: ngựa không khóa → HLV phụ trách ngựa duyệt; ngựa đang khóa huấn luyện → Bác sĩ thú y duyệt
     @PutMapping("/diet-requests/{requestId}/decide")
-    @PreAuthorize("hasAuthority('Veterinarian')")
-    @Operation(summary = "Bác sĩ thú y duyệt hoặc từ chối đề xuất thức ăn đặc biệt")
+    @PreAuthorize("hasAnyAuthority('Veterinarian', 'Trainer')")
+    @Operation(summary = "Duyệt hoặc từ chối đề nghị điều chỉnh khẩu phần", description = "Ngựa không khóa: HLV phụ trách ngựa. Ngựa đang khóa huấn luyện: Bác sĩ thú y. Sai người duyệt → 403.")
     public ResponseEntity<ApiResponse<DietChangeResponseDTO>> decideDietRequest(
             @PathVariable Integer requestId,
             @Valid @RequestBody DietChangeDecisionDTO decision) {
