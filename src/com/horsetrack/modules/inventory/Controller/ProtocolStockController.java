@@ -46,6 +46,7 @@ public class ProtocolStockController {
     // Lịch sử cấp phát thuốc theo phác đồ (I1): thời điểm, người cấp, số lô, hạn dùng, số lượng
     @GetMapping("/{protocolId}/dispensing")
     @PreAuthorize("hasAnyAuthority('Warehouse Manager', 'Veterinarian', 'Club Manager')")
+    @Operation(summary = "Lịch sử cấp phát thuốc", description = "Thời điểm, người cấp, số lô, hạn dùng và số lượng. Thủ kho, bác sĩ hoặc Club Manager.")
     public ResponseEntity<ApiResponse<java.util.List<com.horsetrack.equinecare.modules.inventory.service.DispensingHistory.Record>>> dispensing(@PathVariable Integer protocolId) {
         return ResponseEntity.ok(ApiResponse.ok("Lấy lịch sử cấp phát thành công", protocolStockService.dispensingHistory(protocolId)));
     }
@@ -57,8 +58,10 @@ public class ProtocolStockController {
     }
 
     @PutMapping("/{protocolId}/dispense")
-    @Operation(summary = "Cấp thuốc", description = "Chỉ sau khi bác sĩ xác nhận (VET_CONFIRMED). Xuất phần đã giữ, phác đồ chuyển sang IN_TREATMENT.")
-    public ResponseEntity<ApiResponse<TreatmentProtocolDTO>> dispense(@PathVariable Integer protocolId) {
-        return ResponseEntity.ok(ApiResponse.ok("Đã cấp thuốc cho phác đồ", protocolStockService.dispense(protocolId)));
+    @Operation(summary = "Cấp thuốc", description = "Chỉ sau khi bác sĩ xác nhận. phaseNos chọn giai đoạn cần cấp; bỏ trống thì cấp mọi giai đoạn còn lại.")
+    public ResponseEntity<ApiResponse<TreatmentProtocolDTO>> dispense(@PathVariable Integer protocolId,
+            @RequestBody(required = false) com.horsetrack.equinecare.modules.inventory.dto.DispenseRequestDTO request) {
+        java.util.List<Integer> phaseNos = request == null ? null : request.getPhaseNos();
+        return ResponseEntity.ok(ApiResponse.ok("Đã cấp thuốc cho phác đồ", protocolStockService.dispense(protocolId, phaseNos)));
     }
 }
