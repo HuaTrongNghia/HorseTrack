@@ -29,6 +29,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -186,16 +187,7 @@ public class MedicalManagementService {
         java.util.regex.Matcher phaseDone = java.util.regex.Pattern.compile("Hoàn thành giai đoạn (\\d+)").matcher(request.getContent());
         if (phaseDone.find()) {
             int phaseNo = Integer.parseInt(phaseDone.group(1));
-            java.util.Set<Integer> finished = new java.util.HashSet<>();
-            for (ProtocolProgressNote note : noteRepository.findByProtocol_ProtocolIdOrderByWrittenAtAsc(protocolId)) {
-                if (note.getContent() == null) {
-                    continue;
-                }
-                java.util.regex.Matcher earlier = java.util.regex.Pattern.compile("Hoàn thành giai đoạn (\\d+)").matcher(note.getContent());
-                if (earlier.find()) {
-                    finished.add(Integer.parseInt(earlier.group(1)));
-                }
-            }
+            Set<Integer> finished = finishedPhases(protocolId);
             for (ProtocolPhase phase : protocol.getPhases()) {
                 if (phase.getPhaseNo() == null || phase.getPhaseNo() >= phaseNo) {
                     continue;
@@ -289,6 +281,196 @@ public class MedicalManagementService {
         return mapper.toDTO(protocol, true);
     }
 
+    /**
+     * Bác sĩ kết thúc giai đoạn trước ngày kết thúc đã định.
+     * Giai đoạn được rút còn tới hôm nay và ghi nhận hoàn thành.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public TreatmentProtocolDTO finishPhaseEarly(Integer protocolId, Integer phaseNo, ProtocolPhaseDecisionDTO request) {
+        TreatmentProtocol protocol = findProtocol(protocolId);
+        if (!"IN_TREATMENT".equals(protocol.getState())
+                && !com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())) {
+            throw new IllegalArgumentException("Chỉ kết thúc sớm giai đoạn khi phác đồ đang điều trị hoặc đang chờ thanh toán. Hiện tại: " + protocol.getState() + ".");
+        }
+        ProtocolPhase phase = phase(protocol, phaseNo);
+        Set<Integer> finished = finishedPhases(protocolId);
+        if (finished.contains(phaseNo)) {
+            throw new IllegalArgumentException("Giai đoạn " + phaseNo + " (" + phase.getPhaseName() + ") đã hoàn thành.");
+        }
+        for (ProtocolPhase earlier : protocol.getPhases()) {
+            if (earlier.getPhaseNo() != null && earlier.getPhaseNo() < phaseNo && !finished.contains(earlier.getPhaseNo())) {
+                throw new IllegalArgumentException("Phải hoàn thành giai đoạn " + earlier.getPhaseNo() + " (" + earlier.getPhaseName() + ") trước.");
+            }
+        }
+        LocalDate today = LocalDate.now();
+        if (phase.getStartDate().isAfter(today)) {
+            throw new IllegalArgumentException("Giai đoạn " + phaseNo + " chưa bắt đầu (ngày " + phase.getStartDate() + "). Hãy bắt đầu sớm giai đoạn này trước.");
+        }
+        phaseBilling.assertCanFinishPhase(protocol, phaseNo);
+        LocalDate plannedEnd = phase.getStartDate().plusDays(Math.max(1, phase.getDurationDays()) - 1L);
+        if (plannedEnd.isAfter(today)) {
+            phase.setDurationDays((int) ChronoUnit.DAYS.between(phase.getStartDate(), today) + 1);
+        }
+        String note = decisionNote(request);
+        String content = "Hoàn thành giai đoạn " + phaseNo + " (kết thúc sớm)";
+        if (!note.isEmpty()) {
+            content = content + ". " + note;
+        }
+        noteRepository.save(ProtocolProgressNote.builder()
+                .protocol(protocol)
+                .writtenBy(currentUser())
+                .writtenAt(LocalDateTime.now())
+                .content(content)
+                .build());
+        protocolRepository.save(protocol);
+        auditTrail.record("FINISH_PHASE_EARLY", "Protocol_Phases", "phase_no=" + phaseNo,
+                "kết thúc sớm giai đoạn " + phaseNo + " (" + phase.getPhaseName() + ") | phác đồ " + protocol.getProtocolCode()
+                        + (note.isEmpty() ? "" : " | " + note));
+        return mapper.toDTO(protocol, true);
+    }
+
+    /**
+     * Bác sĩ hoàn thành giai đoạn đang điều trị.
+     * Có giai đoạn sau và chủ ngựa đã trả: chuyển sang giai đoạn đó.
+     * Có giai đoạn sau nhưng chưa trả: chờ thanh toán, không thu các giai đoạn xa hơn.
+     * Hết giai đoạn, hoặc bác sĩ ngưng vì lý do chuyên môn: đóng phác đồ, hủy hoặc hoàn hóa đơn phần chưa làm.
+     */
+    @Transactional(rollbackFor = Exception.class)
+    public TreatmentProtocolDTO completePhase(Integer protocolId, Integer phaseNo, ProtocolPhaseDecisionDTO request) {
+        TreatmentProtocol protocol = findProtocol(protocolId);
+        if (!"IN_TREATMENT".equals(protocol.getState())
+                && !com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())) {
+            throw new IllegalArgumentException("Chỉ hoàn thành giai đoạn khi phác đồ đang điều trị hoặc đang chờ thanh toán. Hiện tại: " + protocol.getState() + ".");
+        }
+        ProtocolPhase phase = phase(protocol, phaseNo);
+        boolean continueTreatment = request == null || request.getContinueTreatment() == null || Boolean.TRUE.equals(request.getContinueTreatment());
+        String note = decisionNote(request);
+        if (!continueTreatment && note.isEmpty()) {
+            throw new IllegalArgumentException("Cần ghi lý do chuyên môn khi ngưng phác đồ sau giai đoạn " + phaseNo + ".");
+        }
+        Set<Integer> finished = finishedPhases(protocolId);
+        if (finished.contains(phaseNo)) {
+            throw new IllegalArgumentException("Giai đoạn " + phaseNo + " (" + phase.getPhaseName() + ") đã hoàn thành.");
+        }
+        for (ProtocolPhase earlier : protocol.getPhases()) {
+            if (earlier.getPhaseNo() != null && earlier.getPhaseNo() < phaseNo && !finished.contains(earlier.getPhaseNo())) {
+                throw new IllegalArgumentException("Phải hoàn thành giai đoạn " + earlier.getPhaseNo() + " (" + earlier.getPhaseName() + ") trước.");
+            }
+        }
+        phaseBilling.assertCanFinishPhase(protocol, phaseNo);
+        LocalDate today = LocalDate.now();
+        boolean early = shortenPhaseToToday(phase, today);
+        String content = "Hoàn thành giai đoạn " + phaseNo + (early ? " (kết thúc sớm)" : "");
+        if (!note.isEmpty()) {
+            content = content + ". " + note;
+        }
+        writeNote(protocol, cap(content));
+        protocolRepository.saveAndFlush(protocol);
+
+        ProtocolPhase next = null;
+        for (ProtocolPhase candidate : protocol.getPhases()) {
+            if (candidate.getPhaseNo() != null && candidate.getPhaseNo() > phaseNo && (next == null || candidate.getPhaseNo() < next.getPhaseNo())) {
+                next = candidate;
+            }
+        }
+        if (!continueTreatment || next == null) {
+            String outcome = !continueTreatment
+                    ? "Ngưng sau giai đoạn " + phaseNo + ": " + note
+                    : (note.isEmpty() ? "Hoàn thành giai đoạn " + phaseNo : note);
+            closeAfterPhase(protocol, phaseNo, cap(outcome));
+            auditTrail.record("COMPLETE_PHASE", "Protocol_Phases", "phase_no=" + phaseNo,
+                    "hoàn thành giai đoạn " + phaseNo + " | kết thúc phác đồ " + protocol.getProtocolCode()
+                            + (continueTreatment ? "" : " | ngưng | " + note));
+            return mapper.toDTO(protocol, true);
+        }
+        if (!phaseBilling.isPhaseSettled(protocol, next.getPhaseNo())
+                && phaseBilling.findPhaseInvoice(protocol.getProtocolId(), next.getPhaseNo())
+                .filter(inv -> "REFUNDED".equals(inv.getPaymentStatus())).isPresent()) {
+            throw new IllegalArgumentException("Hóa đơn giai đoạn " + next.getPhaseNo() + " (" + next.getPhaseName()
+                    + ") đã được hoàn tiền. Không thể chuyển sang giai đoạn này.");
+        }
+        if (phaseBilling.isPhaseSettled(protocol, next.getPhaseNo())) {
+            LocalDate oldStart = next.getStartDate();
+            boolean pulled = oldStart.isAfter(today);
+            if (pulled) {
+                next.setStartDate(today);
+            }
+            if (com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())) {
+                protocol.setState("IN_TREATMENT");
+            }
+            String start = pulled
+                    ? "Bắt đầu sớm giai đoạn " + next.getPhaseNo() + " (từ " + oldStart + " chuyển thành " + today + ")"
+                    : "Bắt đầu giai đoạn " + next.getPhaseNo();
+            writeNote(protocol, start);
+            protocolRepository.saveAndFlush(protocol);
+            phaseBilling.evaluate(protocol, today);
+            auditTrail.record("COMPLETE_PHASE", "Protocol_Phases", "phase_no=" + phaseNo,
+                    "hoàn thành giai đoạn " + phaseNo + " | bắt đầu giai đoạn " + next.getPhaseNo() + " | phác đồ " + protocol.getProtocolCode());
+            return mapper.toDTO(protocol, true);
+        }
+        if (next.getStartDate().isAfter(today)) {
+            phaseBilling.bringPhaseDueForward(protocol, next.getPhaseNo(), today);
+        }
+        writeNote(protocol, "Chờ chủ ngựa thanh toán giai đoạn " + next.getPhaseNo() + " (" + next.getPhaseName() + ") trước khi bắt đầu.");
+        phaseBilling.holdForUnpaidNextPhase(protocol, next);
+        auditTrail.record("COMPLETE_PHASE", "Protocol_Phases", "phase_no=" + phaseNo,
+                "hoàn thành giai đoạn " + phaseNo + " | chờ thanh toán giai đoạn " + next.getPhaseNo() + " | phác đồ " + protocol.getProtocolCode());
+        return mapper.toDTO(protocol, true);
+    }
+
+    /** Bác sĩ cho giai đoạn sau bắt đầu. Giai đoạn trước phải đã xong và giai đoạn này đã thanh toán. Không yêu cầu kho đã cấp thuốc. */
+    @Transactional(rollbackFor = Exception.class)
+    public TreatmentProtocolDTO startPhaseEarly(Integer protocolId, Integer phaseNo, ProtocolPhaseDecisionDTO request) {
+        TreatmentProtocol protocol = findProtocol(protocolId);
+        if (!Set.of("VET_CONFIRMED", "READY_FOR_DISPENSING", "IN_TREATMENT",
+                com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD).contains(protocol.getState())) {
+            throw new IllegalArgumentException("Chỉ bắt đầu giai đoạn khi phác đồ đã được xác nhận. Hiện tại: " + protocol.getState() + ".");
+        }
+        ProtocolPhase phase = phase(protocol, phaseNo);
+        LocalDate today = LocalDate.now();
+        if (phaseBilling.isPhaseStarted(protocolId, phaseNo)) {
+            throw new IllegalArgumentException("Giai đoạn " + phaseNo + " (" + phase.getPhaseName() + ") đã bắt đầu.");
+        }
+        if (phaseNo > 1) {
+            Set<Integer> finished = finishedPhases(protocolId);
+            for (ProtocolPhase earlier : protocol.getPhases()) {
+                if (earlier.getPhaseNo() != null && earlier.getPhaseNo() < phaseNo && !finished.contains(earlier.getPhaseNo())) {
+                    throw new IllegalArgumentException("Hãy kết thúc giai đoạn " + earlier.getPhaseNo() + " (" + earlier.getPhaseName() + ") trước khi bắt đầu giai đoạn " + phaseNo + ".");
+                }
+            }
+        } else if (!phase.getStartDate().isAfter(today)
+                && ("IN_TREATMENT".equals(protocol.getState())
+                || com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState()))) {
+            throw new IllegalArgumentException("Giai đoạn 1 đã bắt đầu từ " + phase.getStartDate() + ".");
+        }
+        if (!phaseBilling.isPhaseSettled(protocol, phaseNo)) {
+            throw new IllegalArgumentException("Chủ ngựa chưa thanh toán giai đoạn " + phaseNo + " (" + phase.getPhaseName() + "). Chưa thể bắt đầu giai đoạn này.");
+        }
+        LocalDate oldStart = phase.getStartDate();
+        boolean early = oldStart.isAfter(today);
+        if (early) {
+            phase.setStartDate(today);
+            phaseBilling.bringPhaseDueForward(protocol, phaseNo, today);
+        }
+        if (com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())) {
+            protocol.setState("IN_TREATMENT");
+        }
+        protocolRepository.saveAndFlush(protocol);
+        String note = decisionNote(request);
+        String content = early
+                ? "Bắt đầu sớm giai đoạn " + phaseNo + " (từ " + oldStart + " chuyển thành " + today + ")"
+                : "Bắt đầu giai đoạn " + phaseNo;
+        if (!note.isEmpty()) {
+            content = content + ". " + note;
+        }
+        writeNote(protocol, cap(content));
+        phaseBilling.evaluate(protocol, today);
+        auditTrail.record("START_PHASE_EARLY", "Protocol_Phases", "start_date=" + oldStart,
+                (early ? "bắt đầu sớm giai đoạn " : "bắt đầu giai đoạn ") + phaseNo + " (" + phase.getPhaseName() + ") ngày " + (early ? today : oldStart)
+                        + " | phác đồ " + protocol.getProtocolCode() + (note.isEmpty() ? "" : " | " + note));
+        return mapper.toDTO(protocol, true);
+    }
+
     @Transactional(rollbackFor = Exception.class)
     public TreatmentProtocolDTO complete(Integer protocolId, ProtocolTextRequestDTO request) {
         TreatmentProtocol protocol = findProtocol(protocolId);
@@ -296,16 +478,7 @@ public class MedicalManagementService {
         if (!"IN_TREATMENT".equals(protocol.getState()) && !com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())) {
             throw new IllegalArgumentException("Chỉ kết thúc được phác đồ đang điều trị (IN_TREATMENT) hoặc đang tạm dừng do chưa thanh toán. Hiện tại: " + protocol.getState() + ".");
         }
-        java.util.Set<Integer> finished = new java.util.HashSet<>();
-        for (ProtocolProgressNote note : noteRepository.findByProtocol_ProtocolIdOrderByWrittenAtAsc(protocolId)) {
-            if (note.getContent() == null) {
-                continue;
-            }
-            java.util.regex.Matcher done = java.util.regex.Pattern.compile("Hoàn thành giai đoạn (\\d+)").matcher(note.getContent());
-            if (done.find()) {
-                finished.add(Integer.parseInt(done.group(1)));
-            }
-        }
+        Set<Integer> finished = finishedPhases(protocolId);
         for (ProtocolPhase phase : protocol.getPhases()) {
             if (!finished.contains(phase.getPhaseNo())) {
                 throw new IllegalArgumentException("Phải hoàn thành giai đoạn " + phase.getPhaseNo() + " (" + phase.getPhaseName() + ") trước khi kết thúc phác đồ.");
@@ -433,6 +606,71 @@ public class MedicalManagementService {
     private TreatmentProtocol findProtocol(Integer protocolId) {
         return protocolRepository.findById(protocolId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy phác đồ với ID: " + protocolId));
+    }
+
+    private Set<Integer> finishedPhases(Integer protocolId) {
+        return phaseBilling.finishedPhaseNos(protocolId);
+    }
+
+    /** Giai đoạn đã cấp mà ngày bắt đầu còn ở tương lai vẫn hoàn thành được: kéo về hôm nay. Giai đoạn đang chạy thì rút ngày kết thúc về hôm nay. */
+    private static boolean shortenPhaseToToday(ProtocolPhase phase, LocalDate today) {
+        int days = Math.max(1, phase.getDurationDays() == null ? 1 : phase.getDurationDays());
+        if (phase.getStartDate().isAfter(today)) {
+            phase.setStartDate(today);
+            phase.setDurationDays(1);
+            return true;
+        }
+        LocalDate plannedEnd = phase.getStartDate().plusDays(days - 1L);
+        if (plannedEnd.isAfter(today)) {
+            phase.setDurationDays((int) ChronoUnit.DAYS.between(phase.getStartDate(), today) + 1);
+            return true;
+        }
+        return false;
+    }
+
+    private void closeAfterPhase(TreatmentProtocol protocol, int finishedThrough, String outcome) {
+        String reason = outcome == null || outcome.isBlank() ? "Phác đồ " + protocol.getProtocolCode() + " kết thúc sau giai đoạn " + finishedThrough : outcome;
+        phaseBilling.closePhasesAfter(protocol, finishedThrough, reason);
+        java.util.Map<Integer, Integer> lineItem = new java.util.HashMap<>();
+        protocol.getPhases().forEach(ph -> ph.getItems().forEach(it -> lineItem.put(it.getProtocolItemId(), it.getItem().getItemId())));
+        for (StockHold hold : holdRepository.findByProtocolIdAndStatusIn(protocol.getProtocolId(), List.of("HELD", "SHORT", "PENDING_REVIEW"))) {
+            phaseBilling.cancelSupplementInvoice(protocol.getProtocolId(), hold.getItem().getItemId(), lineItem::get, reason);
+        }
+        protocolStockService.releaseHolds(protocol.getProtocolId(), "Trả hàng chưa cấp do phác đồ " + protocol.getProtocolCode() + " kết thúc sau giai đoạn " + finishedThrough);
+        protocol.setState("COMPLETED");
+        protocol.setOutcome(outcome);
+        protocol.setClosedAt(LocalDateTime.now());
+        protocolRepository.save(protocol);
+    }
+
+    private void writeNote(TreatmentProtocol protocol, String content) {
+        noteRepository.saveAndFlush(ProtocolProgressNote.builder()
+                .protocol(protocol)
+                .writtenBy(currentUser())
+                .writtenAt(LocalDateTime.now())
+                .content(content)
+                .build());
+    }
+
+    private static String cap(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.length() > 1000 ? value.substring(0, 1000) : value;
+    }
+
+    private static ProtocolPhase phase(TreatmentProtocol protocol, Integer phaseNo) {
+        return protocol.getPhases().stream()
+                .filter(ph -> ph.getPhaseNo() != null && ph.getPhaseNo().equals(phaseNo))
+                .findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Phác đồ " + protocol.getProtocolCode() + " không có giai đoạn " + phaseNo + "."));
+    }
+
+    private static String decisionNote(ProtocolPhaseDecisionDTO request) {
+        if (request == null || !StringUtils.hasText(request.getNote())) {
+            return "";
+        }
+        return request.getNote().trim();
     }
 
     private User currentUser() {
