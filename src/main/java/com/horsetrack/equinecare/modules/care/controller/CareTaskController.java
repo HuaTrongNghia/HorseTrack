@@ -4,6 +4,7 @@ import com.horsetrack.equinecare.common.base.ApiResponse;
 import com.horsetrack.equinecare.modules.care.dto.CareTaskCreateRequestDTO;
 import com.horsetrack.equinecare.modules.care.dto.CareTaskDTO;
 import com.horsetrack.equinecare.modules.care.service.CareTaskService;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -23,6 +24,7 @@ public class CareTaskController {
     // Trainer giao việc chăm sóc cho Groom
     @PostMapping
     @PreAuthorize("hasAuthority('Trainer')")
+    @Operation(summary = "Giao việc chăm sóc", description = "HLV giao việc cho Groom đã xác nhận tài khoản và phụ trách khu của ngựa.")
     public ResponseEntity<ApiResponse<CareTaskDTO>> createTask(@Valid @RequestBody CareTaskCreateRequestDTO request) {
         CareTaskDTO task = careTaskService.createTask(request);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -32,12 +34,14 @@ public class CareTaskController {
     // Club Manager xem các việc chăm sóc bị cảnh báo trễ quá 45 phút mà chưa xong (BR_05)
     @GetMapping("/overdue")
     @PreAuthorize("hasAuthority('Club Manager')")
+    @Operation(summary = "Việc chăm sóc trễ hạn", description = "Việc quá 45 phút sau giờ hẹn mà chưa xong (BR_05).")
     public ResponseEntity<ApiResponse<List<CareTaskDTO>>> getOverdueTasks() {
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách việc trễ hạn thành công", careTaskService.getOverdueTasks()));
     }
 
     @GetMapping("/my-tasks")
     @PreAuthorize("hasAuthority('Groom')")
+    @Operation(summary = "Việc chăm sóc của tôi hôm nay")
     public ResponseEntity<ApiResponse<List<CareTaskDTO>>> getMyTasks() {
         List<CareTaskDTO> tasks = careTaskService.getMyTasksToday();
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách công việc thành công", tasks));
@@ -45,6 +49,7 @@ public class CareTaskController {
 
     @PutMapping("/{taskId}/complete")
     @PreAuthorize("hasAuthority('Groom')")
+    @Operation(summary = "Hoàn thành việc chăm sóc")
     public ResponseEntity<ApiResponse<Void>> completeTask(@PathVariable Integer taskId) {
         careTaskService.completeTask(taskId);
         return ResponseEntity.ok(ApiResponse.ok("Đã hoàn thành công việc!", null));

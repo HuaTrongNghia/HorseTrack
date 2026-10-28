@@ -7,6 +7,7 @@ import com.horsetrack.equinecare.modules.medical.dto.MedicalCaseDTO;
 import com.horsetrack.equinecare.modules.medical.dto.VetActionRequestDTO;
 import com.horsetrack.equinecare.modules.medical.dto.VetLockRequestDTO;
 import com.horsetrack.equinecare.modules.medical.service.MedicalService;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -28,6 +29,7 @@ public class MedicalController {
     // Trainer / Groom phát hiện chấn thương thì báo sự cố qua POST /cases để bác sĩ khám và quyết định khóa.
     @PostMapping("/vet-lock")
     @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Khóa huấn luyện (VetLock)", description = "Chỉ bác sĩ. Ngựa bị khóa thì không tập được; các buổi tập chưa thực hiện bị hủy.")
     public ResponseEntity<ApiResponse<String>> applyVetLock(@RequestBody VetLockRequestDTO dto) {
         try {
             medicalService.applyVetLock(dto);
@@ -42,6 +44,7 @@ public class MedicalController {
     // API 2: Nút mở khóa khi ngựa đã khỏe lại (chỉ Bác sĩ thú y được xác nhận ngựa đủ điều kiện tập lại)
     @PostMapping("/release-lock/{horseId}")
     @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Mở khóa huấn luyện", description = "Chỉ bác sĩ, khi ngựa đủ điều kiện tập lại.")
     public ResponseEntity<ApiResponse<String>> releaseVetLock(@PathVariable Integer horseId) {
         try {
             medicalService.releaseVetLock(horseId);
@@ -54,6 +57,7 @@ public class MedicalController {
     // API 3: Hộp thư ca khám. Bác sĩ xem mọi ca; Groom / Trainer chỉ xem ca do chính mình báo
     @GetMapping("/cases")
     @PreAuthorize("hasAnyAuthority('Veterinarian', 'Groom', 'Trainer')")
+    @Operation(summary = "Hộp thư ca khám", description = "Bác sĩ xem mọi ca. Groom và HLV chỉ xem ca do chính mình báo. status lọc trạng thái, mặc định ALL.")
     public ResponseEntity<ApiResponse<List<MedicalCaseDTO>>> getInboxCases(@RequestParam(required = false, defaultValue = "ALL") String status) {
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách ca khám thành công", medicalService.getInboxCases(status)));
     }
@@ -61,6 +65,7 @@ public class MedicalController {
     // API 4: Groom / Trainer báo sự cố sức khỏe của ngựa -> ca mới (NEW) trong hộp thư của bác sĩ
     @PostMapping("/cases")
     @PreAuthorize("hasAnyAuthority('Groom', 'Trainer')")
+    @Operation(summary = "Báo sự cố sức khỏe", description = "Groom hoặc HLV gửi ca mới (NEW) vào hộp thư của bác sĩ.")
     public ResponseEntity<ApiResponse<MedicalCaseDTO>> reportCase(@Valid @RequestBody CaseReportRequestDTO dto) {
         MedicalCaseDTO created = medicalService.reportCase(dto);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -71,6 +76,7 @@ public class MedicalController {
     // Tham số vetId cũ vẫn được chấp nhận nhưng bỏ qua: bác sĩ là người đang đăng nhập.
     @PostMapping("/cases/action")
     @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Ghi kết quả khám", description = "Bác sĩ ghi hướng xử lý. Ca chuyển sang MONITORING.")
     public ResponseEntity<ApiResponse<MedicalCaseDTO>> processVetAction(@Valid @RequestBody VetActionRequestDTO dto) {
         return ResponseEntity.ok(ApiResponse.ok("Xử lý ca khám thành công", medicalService.processVetAction(dto)));
     }
@@ -78,6 +84,7 @@ public class MedicalController {
     // API 6: Bác sĩ đóng ca khi không cần điều trị thêm
     @PutMapping("/cases/{caseId}/close")
     @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Đóng ca khám", description = "Bác sĩ đóng ca khi không cần điều trị thêm. outcome là kết quả đóng ca.")
     public ResponseEntity<ApiResponse<MedicalCaseDTO>> closeCase(@PathVariable String caseId,
                                                                  @Valid @RequestBody CaseCloseRequestDTO dto) {
         return ResponseEntity.ok(ApiResponse.ok("Đã đóng ca khám", medicalService.closeCase(caseId, dto.getOutcome())));

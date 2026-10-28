@@ -11,6 +11,7 @@ import com.horsetrack.equinecare.modules.medical.dto.HealthStatusUpdateDTO;
 import com.horsetrack.equinecare.modules.medical.dto.InjuryCreateDTO;
 import com.horsetrack.equinecare.modules.medical.dto.InjuryDTO;
 import com.horsetrack.equinecare.modules.medical.service.HorseHealthService;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -36,6 +37,7 @@ public class HorseHealthController {
 
     @GetMapping("/{id}/injuries")
     @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Veterinarian', 'Groom', 'Horse Owner')")
+    @Operation(summary = "Danh sách chấn thương", description = "Chủ ngựa chỉ xem ngựa của mình. HLV và Groom chỉ xem ngựa trong phạm vi được giao.")
     public ResponseEntity<ApiResponse<List<InjuryDTO>>> listInjuries(@PathVariable Integer id) {
         Horse horse = findHorse(id);
         horseAccessGuard.checkAssigned(horse);
@@ -50,12 +52,14 @@ public class HorseHealthController {
 
     @PostMapping("/{id}/injuries")
     @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Đánh dấu chấn thương", description = "Chỉ bác sĩ ghi vị trí và mức độ chấn thương trên ngựa.")
     public ResponseEntity<ApiResponse<InjuryDTO>> addInjury(@PathVariable Integer id, @Valid @RequestBody InjuryCreateDTO request) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok("Đã đánh dấu chấn thương", horseHealthService.addInjury(id, request)));
     }
 
     @DeleteMapping("/{id}/injuries/{injuryId}")
     @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Gỡ đánh dấu chấn thương")
     public ResponseEntity<ApiResponse<Void>> deleteInjury(@PathVariable Integer id, @PathVariable Integer injuryId) {
         horseHealthService.deleteInjury(id, injuryId);
         return ResponseEntity.ok(ApiResponse.ok("Đã gỡ đánh dấu chấn thương", null));
@@ -63,6 +67,7 @@ public class HorseHealthController {
 
     @PutMapping("/{id}/health-status")
     @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Cập nhật trạng thái sức khỏe", description = "Chỉ bác sĩ đổi healthStatus của ngựa.")
     public ResponseEntity<ApiResponse<String>> updateHealthStatus(@PathVariable Integer id, @Valid @RequestBody HealthStatusUpdateDTO request) {
         String status = horseHealthService.updateHealthStatus(id, request);
         return ResponseEntity.ok(ApiResponse.ok("Đã cập nhật trạng thái sức khỏe", status));
@@ -72,6 +77,7 @@ public class HorseHealthController {
     @GetMapping("/{id}/grooms")
     @PreAuthorize("hasAnyAuthority('Trainer', 'Club Manager')")
     @Transactional(readOnly = true)
+    @Operation(summary = "Groom phụ trách khu của ngựa", description = "Groom đang hoạt động trong khu chuồng của ngựa. HLV dùng khi giao việc chăm sóc hoặc buổi tập.")
     public ResponseEntity<ApiResponse<List<GroomZoneResponseDTO>>> grooms(@PathVariable Integer id) {
         Horse horse = findHorse(id);
         horseAccessGuard.checkAssigned(horse);

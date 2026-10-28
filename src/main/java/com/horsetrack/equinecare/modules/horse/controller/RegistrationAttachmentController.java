@@ -3,6 +3,7 @@ package com.horsetrack.equinecare.modules.horse.controller;
 import com.horsetrack.equinecare.common.base.ApiResponse;
 import com.horsetrack.equinecare.modules.horse.dto.RegistrationAttachmentDTO;
 import com.horsetrack.equinecare.modules.horse.service.RegistrationAttachmentService;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ContentDisposition;
 import org.springframework.http.HttpHeaders;
@@ -27,6 +28,7 @@ public class RegistrationAttachmentController {
     // Chủ ngựa tải giấy tờ (PDF / JPG / PNG, tối đa 10 MB) lên hồ sơ đang chờ duyệt
     @PostMapping(value = "/{horseId}/registration-attachments", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAuthority('Horse Owner')")
+    @Operation(summary = "Đính kèm giấy tờ hồ sơ", description = "PDF, JPG hoặc PNG, tối đa 10 MB. Chủ ngựa tải lên hồ sơ đang chờ duyệt.")
     public ResponseEntity<ApiResponse<RegistrationAttachmentDTO>> upload(@PathVariable Integer horseId,
                                                                          @RequestParam("file") MultipartFile file,
                                                                          @RequestParam(value = "docType", required = false) String docType) {
@@ -35,6 +37,7 @@ public class RegistrationAttachmentController {
 
     @GetMapping("/{horseId}/registration-attachments")
     @PreAuthorize("hasAnyAuthority('Club Manager', 'Horse Owner')")
+    @Operation(summary = "Danh sách giấy tờ hồ sơ")
     public ResponseEntity<ApiResponse<List<RegistrationAttachmentDTO>>> list(@PathVariable Integer horseId) {
         return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách giấy tờ thành công", attachmentService.list(horseId)));
     }
@@ -42,6 +45,7 @@ public class RegistrationAttachmentController {
     // Xem / tải tệp: download=true để tải về, mặc định mở xem trên trình duyệt
     @GetMapping("/registration-attachments/{attachmentId}/file")
     @PreAuthorize("hasAnyAuthority('Club Manager', 'Horse Owner')")
+    @Operation(summary = "Xem hoặc tải giấy tờ", description = "download=true để tải về. Mặc định mở xem trên trình duyệt.")
     public ResponseEntity<byte[]> file(@PathVariable Integer attachmentId, @RequestParam(defaultValue = "false") boolean download) {
         RegistrationAttachmentService.FileContent f = attachmentService.download(attachmentId);
         ContentDisposition disposition = (download ? ContentDisposition.attachment() : ContentDisposition.inline())
@@ -55,6 +59,7 @@ public class RegistrationAttachmentController {
 
     @DeleteMapping("/{horseId}/registration-attachments/{attachmentId}")
     @PreAuthorize("hasAuthority('Horse Owner')")
+    @Operation(summary = "Gỡ giấy tờ hồ sơ")
     public ResponseEntity<ApiResponse<Void>> delete(@PathVariable Integer horseId, @PathVariable Integer attachmentId) {
         attachmentService.delete(horseId, attachmentId);
         return ResponseEntity.ok(ApiResponse.ok("Đã gỡ giấy tờ", null));

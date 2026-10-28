@@ -39,6 +39,7 @@ public class BillingController {
     }
 
     @GetMapping("/invoices/{invoiceId}")
+    @Operation(summary = "Chi tiết hóa đơn", description = "Dòng phí, hạn thanh toán, phí trễ hạn và lịch sử giao dịch.")
     public ResponseEntity<ApiResponse<InvoiceDTO>> getInvoice(@PathVariable Integer invoiceId) {
         return ResponseEntity.ok(ApiResponse.ok("Lấy chi tiết hóa đơn thành công", invoiceService.getInvoice(invoiceId)));
     }
@@ -57,11 +58,13 @@ public class BillingController {
     }
 
     @PutMapping("/invoices/{invoiceId}/cancel")
+    @Operation(summary = "Hủy hóa đơn", description = "Club Manager hủy hóa đơn chưa thanh toán. Bắt buộc lý do.")
     public ResponseEntity<ApiResponse<InvoiceDTO>> cancel(@PathVariable Integer invoiceId, @Valid @RequestBody CancelInvoiceRequestDTO request) {
         return ResponseEntity.ok(ApiResponse.ok("Đã hủy hóa đơn", invoiceService.cancelInvoice(invoiceId, request.getReason())));
     }
 
     @GetMapping("/owners/{ownerId}/service")
+    @Operation(summary = "Trạng thái dịch vụ của chủ ngựa", description = "Đang hoạt động, đình chỉ hoặc chờ kích hoạt lại.")
     public ResponseEntity<ApiResponse<OwnerServiceDTO>> getOwnerService(@PathVariable Integer ownerId) {
         return ResponseEntity.ok(ApiResponse.ok("Lấy trạng thái dịch vụ thành công", invoiceService.getOwnerService(ownerId)));
     }

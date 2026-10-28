@@ -4,6 +4,7 @@ import com.horsetrack.equinecare.common.base.ApiResponse;
 import com.horsetrack.equinecare.modules.medical.dto.PreRaceExamDTO;
 import com.horsetrack.equinecare.modules.medical.dto.SubmitExamResultDTO;
 import com.horsetrack.equinecare.modules.medical.service.PreRaceExamService;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -22,6 +23,7 @@ public class PreRaceExamController {
     // Lấy dữ liệu cho bảng. Frontend gọi: GET /api/prerace-exams?tab=CHO_KHAM
     @GetMapping
     @PreAuthorize("hasAnyAuthority('Veterinarian', 'Club Manager')")
+    @Operation(summary = "Danh sách khám tiền thi đấu", description = "tab mặc định CHO_KHAM. Dùng cho bảng khám trước giải.")
     public ResponseEntity<ApiResponse<List<PreRaceExamDTO>>> getExams(@RequestParam(defaultValue = "CHO_KHAM") String tab) {
         List<PreRaceExamDTO> data = examService.getExamsByTab(tab);
         return ResponseEntity.ok(ApiResponse.ok("Thành công", data));
@@ -31,6 +33,7 @@ public class PreRaceExamController {
     // Đạt -> READY_TO_SUBMIT (HLV gửi BTC); không đạt (bắt buộc vetNotes) -> VET_FAILED
     @PostMapping("/{proposalCode}/examine")
     @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Ghi kết quả khám tiền thi đấu", description = "Đạt thì đề xuất sang READY_TO_SUBMIT để HLV gửi ban tổ chức. Không đạt bắt buộc vetNotes và chuyển VET_FAILED.")
     public ResponseEntity<ApiResponse<String>> submitResult(
             @PathVariable String proposalCode,
             @RequestBody SubmitExamResultDTO dto) {

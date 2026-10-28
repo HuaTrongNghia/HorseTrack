@@ -13,6 +13,7 @@ import com.horsetrack.equinecare.modules.medical.entity.ProtocolItem;
 import com.horsetrack.equinecare.modules.medical.entity.TreatmentProtocol;
 import com.horsetrack.equinecare.modules.medical.repository.TreatmentProtocolRepository;
 import com.horsetrack.equinecare.modules.medical.repository.VetCaseRepository;
+import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
@@ -66,6 +67,7 @@ public class ProtocolController {
     // Phác đồ đang mở (tab chứa "đóng" thì trả phác đồ đã đóng), lọc theo quyền xem ngựa
     @GetMapping
     @Transactional(readOnly = true)
+    @Operation(summary = "Danh sách phác đồ tóm tắt", description = "Tab có chữ \"đóng\" trả phác đồ đã đóng, còn lại trả phác đồ đang mở. Chủ ngựa, HLV và Groom chỉ thấy ngựa trong phạm vi của mình.")
     public ResponseEntity<ApiResponse<List<ProtocolDTO>>> getProtocols(@RequestParam(defaultValue = "Cần bác sĩ xử lý") String tab) {
         User user = currentUser();
         boolean closedTab = tab.toLowerCase().contains("đóng");
@@ -80,6 +82,7 @@ public class ProtocolController {
     // Đơn nhập hàng đang mở phục vụ phác đồ (đơn quá ETA được tính là trễ)
     @GetMapping("/shipments")
     @Transactional(readOnly = true)
+    @Operation(summary = "Lô hàng phục vụ phác đồ", description = "Đơn nhập đang mở gắn với phác đồ. Đơn quá ngày dự kiến được tính là trễ.")
     public ResponseEntity<ApiResponse<List<ShipmentLotDTO>>> getRelatedShipments() {
         User user = currentUser();
         Map<Integer, TreatmentProtocol> protocols = protocolRepository.findAll().stream()

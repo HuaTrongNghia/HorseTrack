@@ -46,6 +46,7 @@ public class ProtocolStockController {
     // Lịch sử cấp phát thuốc theo phác đồ (I1): thời điểm, người cấp, số lô, hạn dùng, số lượng
     @GetMapping("/{protocolId}/dispensing")
     @PreAuthorize("hasAnyAuthority('Warehouse Manager', 'Veterinarian', 'Club Manager')")
+    @Operation(summary = "Lịch sử cấp phát thuốc", description = "Thời điểm, người cấp, số lô, hạn dùng và số lượng. Thủ kho, bác sĩ hoặc Club Manager.")
     public ResponseEntity<ApiResponse<java.util.List<com.horsetrack.equinecare.modules.inventory.service.DispensingHistory.Record>>> dispensing(@PathVariable Integer protocolId) {
         return ResponseEntity.ok(ApiResponse.ok("Lấy lịch sử cấp phát thành công", protocolStockService.dispensingHistory(protocolId)));
     }

@@ -85,9 +85,10 @@ public class MedicalManagementController {
         return ResponseEntity.ok(ApiResponse.ok("Đã ghi tiến trình điều trị", service.addProgressNote(protocolId, request)));
     }
 
-    // Thêm thuốc khi phác đồ đang điều trị: kho giữ hàng ngay, chủ ngựa nhận hóa đơn thuốc bổ sung, kho cấp sau khi thanh toán
+    // Thêm thuốc khi phác đồ đang điều trị: kho duyệt giữ hàng, chủ ngựa nhận hóa đơn thuốc bổ sung, kho cấp sau khi thanh toán
     @PostMapping("/protocols/{protocolId}/items")
     @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Thêm thuốc khi đang điều trị", description = "Chỉ khi phác đồ đang điều trị (IN_TREATMENT) và giai đoạn chưa kết thúc. Thuốc đã có trong giai đoạn thì cộng số lượng. Kho duyệt (giữ hàng hoặc ghi thiếu) rồi lập hóa đơn; cấp sau khi chủ ngựa thanh toán. Phác đồ chưa cấp thuốc thì tạo phiên bản mới.")
     public ResponseEntity<ApiResponse<TreatmentProtocolDTO>> addItemDuringTreatment(@PathVariable Integer protocolId,
             @jakarta.validation.Valid @RequestBody com.horsetrack.equinecare.modules.medical.dto.ProtocolItemAddRequestDTO request) {
         return ResponseEntity.ok(ApiResponse.ok("Đã bổ sung thuốc vào phác đồ", service.addItemDuringTreatment(protocolId, request)));

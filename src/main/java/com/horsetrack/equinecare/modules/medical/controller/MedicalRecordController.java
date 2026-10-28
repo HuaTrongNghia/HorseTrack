@@ -4,6 +4,7 @@ import com.horsetrack.equinecare.common.base.ApiResponse;
 import com.horsetrack.equinecare.modules.medical.dto.MedicalRecordCreateRequestDTO;
 import com.horsetrack.equinecare.modules.medical.exception.InvalidPrescriptionException;
 import com.horsetrack.equinecare.modules.medical.service.MedicalRecordService;
+import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,6 +21,7 @@ public class MedicalRecordController {
     private final MedicalRecordService medicalRecordService;
 
     @PostMapping
+    @Operation(summary = "Lập bệnh án", description = "Bác sĩ tạo bệnh án và đơn thuốc. Đơn không hợp lệ trả 400.")
     public ResponseEntity<ApiResponse<Integer>> createMedicalRecord(@Valid @RequestBody MedicalRecordCreateRequestDTO request) {
         Integer recordId = medicalRecordService.createMedicalRecord(request);
         return ResponseEntity.status(HttpStatus.CREATED)

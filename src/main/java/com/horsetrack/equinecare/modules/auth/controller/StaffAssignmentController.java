@@ -21,6 +21,7 @@ public class StaffAssignmentController {
     private final StaffAssignmentService staffAssignmentService;
 
     @GetMapping("/{id}/barn-zone")
+    @Operation(summary = "Khu chăm sóc của Groom")
     public ResponseEntity<ApiResponse<GroomZoneResponseDTO>> getGroomZone(@PathVariable Integer id) {
         return ResponseEntity.ok(ApiResponse.ok("Lấy khu chăm sóc thành công", staffAssignmentService.getGroomZone(id)));
     }
