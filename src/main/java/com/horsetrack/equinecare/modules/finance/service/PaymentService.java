@@ -57,6 +57,13 @@ public class PaymentService {
     @Value("${app.vnpay.verify-on-return:true}")
     private boolean verifyOnReturn;
 
+    // querydr không khả dụng thì tin dữ liệu Return đã ký (cùng chuỗi bí mật với IPN), kiểm tra như IPN
+    @Value("${app.vnpay.trust-signed-return:true}")
+    private boolean trustSignedReturn;
+
+    // Mã querydr cho biết VNPay không trả lời được câu hỏi (không phải câu trả lời về giao dịch)
+    private static final java.util.Set<String> QUERYDR_UNAVAILABLE = java.util.Set.of("99", "03", "94");
+
     /** Chủ ngựa tạo giao dịch VNPay cho hóa đơn của mình, số tiền = gốc + phí trễ hạn (+ phí kích hoạt lại) tính tới hôm nay */
     @Transactional
     public VnPayPaymentDTO createVnPayPayment(Integer invoiceId, String clientIp) {
@@ -187,34 +194,59 @@ public class PaymentService {
         }
         PaymentTransaction tx = lock(found.get());
 
+        VnPayGateway.QueryResult q = null;
         if (PaymentTransaction.PENDING_VERIFICATION.equals(tx.getPaymentStatus()) && verifyOnReturn) {
-            verifyWithVnPay(tx, clientIp, "Return");   // trình duyệt vừa quay về: luôn hỏi
+            q = verifyWithVnPay(tx, clientIp, "Return");   // trình duyệt vừa quay về: luôn hỏi
+        }
+        // querydr trả lời được thì kết quả querydr quyết định; không trả lời được thì dùng dữ liệu Return đã ký
+        boolean querydrUnavailable = q == null || !q.ok() || QUERYDR_UNAVAILABLE.contains(q.responseCode());
+        if (PaymentTransaction.PENDING_VERIFICATION.equals(tx.getPaymentStatus()) && trustSignedReturn && querydrUnavailable) {
+            acceptSignedReturn(tx, params, q);
         }
         return result(tx, responseCode);
+    }
+
+    /** Dữ liệu Return đã qua kiểm tra chữ ký: đối chiếu số tiền và mã kết quả như IPN rồi kết thúc giao dịch */
+    private void acceptSignedReturn(PaymentTransaction tx, Map<String, String> params, VnPayGateway.QueryResult q) {
+        BigDecimal amount;
+        try {
+            amount = VnPayGateway.fromVnpAmount(params.get("vnp_Amount"));
+        } catch (Exception e) {
+            return;
+        }
+        if (amount.compareTo(tx.getAmountPaid()) != 0) {
+            tx.setNotes(truncate(stamp() + " Return: số tiền VNPay " + amount + " khác số tiền giao dịch " + tx.getAmountPaid() + ", chưa ghi nhận"));
+            transactionRepository.save(tx);
+            return;
+        }
+        String code = params.get("vnp_ResponseCode");
+        boolean success = "00".equals(code) && "00".equals(params.get("vnp_TransactionStatus"));
+        String why = q == null ? "không hỏi querydr" : "querydr không khả dụng - mã " + q.responseCode();
+        finish(tx, success, params.get("vnp_TransactionNo"), code, "Return đã ký, " + why);
     }
 
     /**
      * Hỏi lại VNPay (querydr) cho giao dịch còn chờ xác minh. Dùng khi chạy localhost (VNPay không gọi được IPN)
      * hoặc khi trình duyệt không quay về Return URL. Kết quả mỗi lần hỏi được ghi vào ghi chú giao dịch.
      */
-    private void verifyWithVnPay(PaymentTransaction tx, String clientIp, String source) {
+    private VnPayGateway.QueryResult verifyWithVnPay(PaymentTransaction tx, String clientIp, String source) {
         lastQueried.put(tx.getTransactionRef(), java.time.Instant.now());
         VnPayGateway.QueryResult q = vnPay.queryTransaction(tx.getTransactionRef(), orderInfo(tx.getInvoice()), txnTime(tx), clientIp);
         if (q.paid() && q.amount() != null && q.amount().compareTo(tx.getAmountPaid()) == 0) {
             finish(tx, true, q.transactionNo(), q.responseCode(), "querydr/" + source);
-            return;
+            return q;
         }
         if (q.ok() && "00".equals(q.responseCode()) && q.transactionStatus() != null
                 && !"00".equals(q.transactionStatus()) && !"01".equals(q.transactionStatus())) {
             // VNPay xác nhận giao dịch không thành công (01 = đang xử lý thì giữ nguyên)
             finish(tx, false, q.transactionNo(), q.transactionStatus(), "querydr/" + source);
-            return;
+            return q;
         }
         boolean expired = tx.getPaidAt() != null && tx.getPaidAt().isBefore(LocalDateTime.now().minusMinutes(vnPay.getExpireMinutes() + 30L));
         if (expired && q.ok() && "91".equals(q.responseCode())) {
             // VNPay không có giao dịch này và đã quá hạn thanh toán: chủ ngựa chưa thanh toán
             finish(tx, false, null, "91", "querydr/" + source + " - quá hạn, VNPay không ghi nhận giao dịch");
-            return;
+            return q;
         }
         String detail = q.paid() ? "số tiền VNPay " + q.amount() + " khác số tiền giao dịch " + tx.getAmountPaid()
                 : q.duplicateRequest() ? "VNPay từ chối truy vấn trùng lặp (mã 94), hỏi lại sau " + (querydrIntervalSeconds / 60) + " phút"
@@ -222,6 +254,7 @@ public class PaymentService {
         tx.setNotes(truncate(stamp() + " " + source + " querydr: " + detail));
         transactionRepository.save(tx);
         log.warn("VNPay querydr {} ({}): {}", tx.getTransactionRef(), source, detail);
+        return q;
     }
 
     /** Hỏi lại VNPay các giao dịch còn chờ xác minh của chủ ngựa đang đăng nhập */
