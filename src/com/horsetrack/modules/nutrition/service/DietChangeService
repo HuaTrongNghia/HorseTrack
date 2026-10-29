@@ -1,1 +1,15 @@
+package com.horsetrack.equinecare.modules.nutrition.service;
+
+import com.horsetrack.equinecare.modules.nutrition.dto.DietChangeDecisionDTO;
+import com.horsetrack.equinecare.modules.nutrition.dto.DietChangeRequestCreateDTO;
+import com.horsetrack.equinecare.modules.nutrition.dto.DietChangeResponseDTO;
+
+import java.util.List;
+
+public interface DietChangeService {
+    DietChangeResponseDTO createDietRequest(DietChangeRequestCreateDTO request);
+    List<DietChangeResponseDTO> getDietRequests(Integer horseId, String status);
+    DietChangeResponseDTO getDietRequestDetail(Integer requestId);
+    DietChangeResponseDTO decideDietRequest(Integer requestId, DietChangeDecisionDTO decision);
+}
 
