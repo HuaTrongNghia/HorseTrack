@@ -94,7 +94,7 @@ public class MedicalService {
 
         horse.setIsLocked(false);
 
-       
+        // Đặt lại health_status về trạng thái khỏe mạnh hợp lệ của DB (Ví dụ: "Healthy" hoặc "Khỏe mạnh")
         horse.setHealthStatus("HEALTHY");
 
         horseRepository.save(horse);
@@ -119,7 +119,12 @@ public class MedicalService {
     }
 
     /** Groom / Trainer báo sự cố; Groom chỉ báo được cho ngựa thuộc khu mình phụ trách (SRS màn hình 51). */
-    
+    @Transactional
+    public MedicalCaseDTO reportCase(CaseReportRequestDTO dto) {
+        User reporter = currentUser();
+        Horse horse = horseRepository.findById(dto.getHorseId())
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngựa với ID: " + dto.getHorseId()));
+
         // Trainer chỉ báo sự cố cho ngựa được phân công cho mình
         horseAccessGuard.checkAssigned(horse);
         boolean isGroom = "Groom".equals(reporter.getRoleName());
