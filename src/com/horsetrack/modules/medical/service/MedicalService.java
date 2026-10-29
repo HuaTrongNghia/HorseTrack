@@ -217,5 +217,23 @@ public class MedicalService {
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + username));
     }
 
-    
+    private MedicalCaseDTO toCaseDTO(VetCase c) {
+        return MedicalCaseDTO.builder()
+                .caseId(c.getCaseCode())
+                .id(c.getCaseId())
+                .horseId(c.getHorse().getHorseId())
+                .horseName(c.getHorse().getHorseName())
+                .source(c.getSource())
+                .issueType(c.getCaseType())
+                .severity(c.getSeverity())
+                .status(c.getStatus())
+                .description(c.getDescription())
+                .reportedById(c.getReportedBy().getUserId())
+                .reportedByName(c.getReportedBy().getFullName())
+                .assignedVetName(c.getAssignedVet() != null ? c.getAssignedVet().getFullName() : null)
+                .vetResult(c.getOutcome())
+                .createdAt(c.getReportedAt())
+                .closedAt(c.getClosedAt())
+                .build();
+    }
 }
