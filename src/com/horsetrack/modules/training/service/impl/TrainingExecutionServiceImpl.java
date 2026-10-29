@@ -186,8 +186,9 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
         session.setNotes(session.getNotes() == null || session.getNotes().isBlank() ? stopNote : session.getNotes() + " | " + stopNote);
 
         String caseCode = null;
+        // Buổi tập kết thúc ngay (STOPPED) để HLV đánh giá; gửi bác sĩ thì kèm ca khám, bác sĩ quyết định khóa / không khóa sau
+        session.setStatus(TrainingPlanActivator.SESSION_STOPPED);
         if (requestVet && horse != null) {
-            session.setStatus(TrainingPlanActivator.SESSION_WAITING_VET);
             var vetCase = vetCaseRepository.saveAndFlush(com.horsetrack.equinecare.modules.medical.entity.VetCase.builder()
                     .horse(horse)
                     .reportedBy(user)
@@ -202,17 +203,11 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
                     .build());
             caseCode = vetCase.getCaseCode() != null ? vetCase.getCaseCode() : "#" + vetCase.getCaseId();
             session.setNotes(session.getNotes() + " | Ca khám " + caseCode);
-        } else {
-            session.setStatus(TrainingPlanActivator.SESSION_STOPPED);
         }
         trainingSessionRepository.save(session);
-        if (caseCode != null && plan != null && (TrainingPlanActivator.PLAN_ACTIVE.equalsIgnoreCase(plan.getStatus()) || TrainingPlanActivator.PLAN_PENDING.equalsIgnoreCase(plan.getStatus()))) {
-            plan.setStatus("PAUSED");
-            plan.setPausedReason("Buổi tập #" + session.getSessionId() + " chờ bác sĩ xử lý ca " + caseCode);
-            trainingPlanRepository.save(plan);
-        } else if (caseCode == null) {
-            planLifecycle.completeIfFinished(plan);
-        }
+        // Giáo án không tạm dừng: bác sĩ khóa huấn luyện thì TrainingLockHandler hủy buổi còn lại và tạm dừng giáo án;
+        // trong lúc chờ khám, Groom không bắt đầu được buổi tập mới của ngựa (SessionMonitorService.start)
+        planLifecycle.completeIfFinished(plan);
         auditTrail.record("STOP_SESSION", "training_sessions", "status=OPEN",
                 "status=" + session.getStatus() + " | buổi tập #" + session.getSessionId() + (horse != null ? " | ngựa " + horse.getHorseName() : "")
                         + (caseCode != null ? " | ca " + caseCode : "") + " | " + reason);
@@ -263,8 +258,8 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
 
         // QA H1: Trainer chỉ đánh giá buổi tập của ngựa được phân công cho mình (Club Manager không giới hạn)
         horseAccessGuard.checkAssigned(session.getTrainingPlan() != null ? session.getTrainingPlan().getHorse() : null);
-        if (!"COMPLETED".equalsIgnoreCase(session.getStatus())) {
-            throw new IllegalArgumentException("Chỉ đánh giá được phiên đã hoàn thành.");
+        if (!"COMPLETED".equalsIgnoreCase(session.getStatus()) && !TrainingPlanActivator.SESSION_STOPPED.equalsIgnoreCase(session.getStatus())) {
+            throw new IllegalArgumentException("Chỉ đánh giá được phiên đã kết thúc (hoàn thành hoặc dừng giữa chừng). Hiện tại: " + session.getStatus() + ".");
         }
         if (com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper.extractEvaluation(session.getNotes()) != null) {
             throw new IllegalArgumentException("Buổi tập này đã được đánh giá, không đánh giá lại.");
