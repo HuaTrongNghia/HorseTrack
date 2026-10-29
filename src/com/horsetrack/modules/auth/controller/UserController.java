@@ -25,6 +25,7 @@ import java.util.List;
 public class UserController {
 
     private final UserService userService;
+    private final com.horsetrack.equinecare.modules.auth.service.StaffAccountService staffAccountService;
 
     private String getClientIp(HttpServletRequest request) {
         String xf = request.getHeader("X-Forwarded-For");
@@ -65,10 +66,21 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok("Lấy chi tiết người dùng thành công", response));
     }
 
+    // Nhân viên chưa xác nhận (mất email / liên kết hết hạn): tạo mật khẩu tạm mới và gửi lại email xác nhận
+    @PostMapping("/{id}/resend-confirmation")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @Operation(summary = "Gửi lại email xác nhận tài khoản nhân viên", description = "Chỉ khi nhân viên chưa xác nhận. Mật khẩu tạm mới và liên kết xác nhận mới được gửi trong email; liên kết cũ hết hiệu lực.")
+    public ResponseEntity<ApiResponse<Void>> resendConfirmation(@PathVariable Integer id) {
+        var created = staffAccountService.resend(id);
+        String message = staffAccountService.emailResultMessage(staffAccountService.sendAccountEmail(created), created.user().getEmail(),
+                "Đã tạo liên kết xác nhận và mật khẩu tạm mới.");
+        return ResponseEntity.ok(ApiResponse.ok(message, null));
+    }
+
     @PutMapping("/{id}/lock")
     @PreAuthorize("hasAuthority('Club Manager')")
     @Operation(summary = "Khóa tài khoản người dùng (BR_10)",
-               description = "Khóa tài khoản kèm lý do (tối thiểu 10 ký tự), tự động thu hồi phiên đăng nhập và ghi Audit Log.")
+               description = "Khóa tài khoản kèm lý do, tự động thu hồi phiên đăng nhập và ghi Audit Log.")
     public ResponseEntity<ApiResponse<UserResponseDTO>> lockUser(
             @PathVariable Integer id,
             @Valid @RequestBody UserLockRequestDTO request,
@@ -80,7 +92,7 @@ public class UserController {
     @PutMapping("/{id}/unlock")
     @PreAuthorize("hasAuthority('Club Manager')")
     @Operation(summary = "Mở khóa tài khoản người dùng (BR_10)",
-               description = "Mở khóa tài khoản kèm lý do (tối thiểu 10 ký tự) và ghi Audit Log.")
+               description = "Mở khóa tài khoản kèm lý do và ghi Audit Log.")
     public ResponseEntity<ApiResponse<UserResponseDTO>> unlockUser(
             @PathVariable Integer id,
             @Valid @RequestBody UserLockRequestDTO request,
