@@ -39,9 +39,6 @@ public class VetCase {
     @Column(name = "description", nullable = false, columnDefinition = "NVARCHAR(MAX)")
     private String description;
 
-    @Column(name = "image_url", length = 255)
-    private String imageUrl;
-
     @Column(name = "severity", nullable = false, length = 20)
     private String severity; // LOW, MEDIUM, HIGH, CRITICAL
 
