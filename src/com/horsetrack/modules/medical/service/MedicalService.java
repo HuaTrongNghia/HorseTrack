@@ -55,7 +55,7 @@ public class MedicalService {
         return auth != null && auth.getAuthorities().stream().anyMatch(a -> "Veterinarian".equals(a.getAuthority()));
     }
 
-    // 1. Hàm kích hoạt Khóa y tế (VetLock)
+   
     @Transactional
     public void applyVetLock(VetLockRequestDTO dto) throws Exception {
         Horse horse = horseRepository.findById(dto.getHorseId())
