@@ -17,6 +17,9 @@ public interface CareTaskRepository extends JpaRepository<CareTask, Integer> {
 
     List<CareTask> findByTaskDateOrderByScheduledTimeAsc(LocalDate taskDate);
 
+    // Việc chăm sóc của một ngựa trong ngày (kiểm tra trùng giờ với buổi tập)
+    List<CareTask> findByHorse_HorseIdAndTaskDate(Integer horseId, LocalDate taskDate);
+
     // Việc trễ SLA trong một ngày (đang mở hoặc đã hoàn thành trễ), trừ việc đã hủy
     List<CareTask> findByTaskDateAndWarningNoteIsNotNullAndStatusNotOrderByScheduledTimeAsc(LocalDate taskDate, String status);
 

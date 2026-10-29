@@ -48,6 +48,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
     private final DietChangeRequestRepository dietChangeRequestRepository;
     private final NutritionScope scope;
     private final NutritionFeedTaskService feedTaskService;
+    private final com.horsetrack.equinecare.modules.nutrition.service.NutritionStockService stockService;
     private final AuditTrail auditTrail;
 
     @Override
@@ -84,13 +85,13 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         // Mỗi ngựa chỉ có một khẩu phần áp dụng tại một thời điểm: khẩu phần mới thay thế khẩu phần đang áp dụng
         int replaced = replaceOverlapping(savedPlan);
 
-        // Gửi cho nhân viên: tạo việc cho ăn hôm nay (các bữa chưa tới giờ) và ngày mai cho Groom của khu chuồng
-        int tasks = feedTaskService.generateUpcoming(savedPlan);
+        // Gửi kho phiếu cấp thức ăn hôm nay (các bữa chưa tới giờ) và ngày mai; kho cấp xong mới giao việc cho ăn cho Groom
+        int tasks = stockService.requestUpcoming(savedPlan);
 
         auditTrail.record("CREATE_NUTRITION_PLAN", "Nutrition_Plans", null,
                 "Khẩu phần #" + savedPlan.getPlanId() + " (" + planType + ") cho ngựa " + horse.getHorseName()
                         + " " + request.getStartDate() + " → " + request.getEndDate()
-                        + (replaced > 0 ? " | thay thế " + replaced + " khẩu phần cũ" : "") + " | gửi " + tasks + " việc cho ăn (hôm nay + ngày mai)");
+                        + (replaced > 0 ? " | thay thế " + replaced + " khẩu phần cũ" : "") + " | gửi kho " + tasks + " phiếu cấp thức ăn (hôm nay + ngày mai)");
         return savedPlan.getPlanId();
     }
 
@@ -172,7 +173,7 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         // Việc cho ăn chưa làm theo khẩu phần cũ bị hủy, gửi lại theo khẩu phần mới
         feedTaskService.skipOpenTasks(plan, "khẩu phần được cập nhật");
         replaceOverlapping(plan);
-        feedTaskService.generateUpcoming(plan);
+        stockService.requestUpcoming(plan);
         auditTrail.record("UPDATE_NUTRITION_PLAN", "Nutrition_Plans", null,
                 "Khẩu phần #" + plan.getPlanId() + " ngựa " + plan.getHorse().getHorseName() + " " + plan.getStartDate() + " → " + plan.getEndDate());
         return toResponseDTO(plan);
@@ -223,6 +224,10 @@ public class NutritionPlanServiceImpl implements NutritionPlanService {
         if (!ACTIVE.equals(plan.getStatus()) || day.isBefore(plan.getStartDate()) || day.isAfter(plan.getEndDate())) {
             throw new IllegalArgumentException("Ngày " + day + " nằm ngoài thời gian áp dụng của khẩu phần (" + plan.getStartDate() + " → " + plan.getEndDate()
                     + ") hoặc khẩu phần không còn áp dụng.");
+        }
+        // Chưa có phiếu cấp thức ăn của ngày này thì gửi kho; việc cho ăn chỉ giao khi kho đã cấp
+        if (stockService.requestForDay(plan, day, true) > 0) {
+            return 0;
         }
         return feedTaskService.generateForPlan(plan, day, true);
     }

@@ -105,6 +105,15 @@ public class StockLedgerService {
         return applyChange(item, lot, txType, quantity, -quantity, refType, refId, note);
     }
 
+    /** Nhập lại kho phần đã cấp nhưng chưa dùng (RETURN), không gắn lô. */
+    public StockTransaction returnStock(Integer itemId, double quantity, String refType, Integer refId, String note) {
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("Số lượng nhập lại phải lớn hơn 0.");
+        }
+        InventoryItem item = lockItem(itemId);
+        return applyChange(item, null, "RETURN", quantity, quantity, refType, refId, note);
+    }
+
     /** Điều chỉnh tồn kho: delta dương để tăng, âm để giảm. */
     public StockTransaction adjust(Integer itemId, double delta, String lotNo,
                                    String refType, Integer refId, String note) {

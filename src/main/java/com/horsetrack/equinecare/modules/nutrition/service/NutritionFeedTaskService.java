@@ -48,6 +48,8 @@ public class NutritionFeedTaskService {
     private final NutritionPlanRepository planRepository;
     private final StockLedgerService stockLedger;
     private final EntityManager entityManager;
+    private final NutritionRequisitions requisitions;
+    private final com.horsetrack.equinecare.modules.care.service.HorseScheduleGuard scheduleGuard;
 
     @Value("${app.nutrition.morning-time:07:00}")
     private String morningTime;
@@ -98,6 +100,10 @@ public class NutritionFeedTaskService {
         if (!"ACTIVE".equals(plan.getStatus()) || date.isBefore(plan.getStartDate()) || date.isAfter(plan.getEndDate())) {
             return 0;
         }
+        // Kho chưa cấp thức ăn của ngày này thì chưa giao việc cho ăn (NutritionStockService.issueDay giao ngay khi kho cấp)
+        if (!requisitions.isDayIssued(plan.getPlanId(), date)) {
+            return 0;
+        }
         Horse horse = plan.getHorse();
         if (horse.getStall() == null) {
             return 0;
@@ -129,6 +135,9 @@ public class NutritionFeedTaskService {
                     .map(d -> (d.getInventoryItem() != null ? d.getInventoryItem().getItemName() : "Thức ăn") + ": " + fmt(d.getQuantity())
                             + (d.getInventoryItem() != null && d.getInventoryItem().getUnit() != null ? " " + d.getInventoryItem().getUnit() : ""))
                     .collect(Collectors.joining("\n"));
+            // Buổi tập đã xếp trước trùng giờ bữa ăn: dời việc cho ăn sang ngay sau buổi tập
+            LocalTime at = scheduleGuard.firstFreeCareTime(horse.getHorseId(), date, time);
+            String moved = at.equals(time) ? "" : " | Dời từ " + time + " sang " + at + " do trùng buổi tập";
             String title = "Cho ăn bữa " + MEAL_LABEL.get(meal) + " - " + horse.getHorseName()
                     + ("MEDICAL".equals(plan.getPlanType()) ? " (khẩu phần y tế)" : "");
             careTaskRepository.save(CareTask.builder()
@@ -138,11 +147,11 @@ public class NutritionFeedTaskService {
                     .taskType("FEED")
                     .title(title.length() > 150 ? title.substring(0, 150) : title)
                     .taskDate(date)
-                    .scheduledTime(time)
+                    .scheduledTime(at)
                     .instructions(instructions)
                     .dietNote(truncate(plan.getSpecialInstructions(), 255))
                     .isMedicalDiet("MEDICAL".equals(plan.getPlanType()))
-                    .notes(mark + " Khẩu phần #" + plan.getPlanId())
+                    .notes(mark + " Khẩu phần #" + plan.getPlanId() + moved)
                     .status("TODO")
                     .createdAt(LocalDateTime.now())
                     .build());
@@ -170,6 +179,8 @@ public class NutritionFeedTaskService {
     /** Hủy việc cho ăn chưa làm của khẩu phần từ ngày fromDate trở đi */
     @Transactional
     public int skipOpenTasks(NutritionPlan plan, String reason, LocalDate fromDate) {
+        // Báo kho: hủy phiếu cấp thức ăn từ ngày này, phiếu đã cấp thì nhập lại phần chưa dùng
+        requisitions.cancelForPlan(plan, reason, fromDate);
         int n = 0;
         LocalDate from = fromDate.isBefore(LocalDate.now()) ? LocalDate.now() : fromDate;
         for (CareTask t : careTaskRepository.findByNotesStartingWithAndStatusAndTaskDateGreaterThanEqual("KP-" + plan.getPlanId() + "-", "TODO", from)) {
@@ -215,10 +226,14 @@ public class NutritionFeedTaskService {
             }
         }
         List<String> problems = new ArrayList<>();
+        // Kho đã cấp thức ăn của ngày qua phiếu cấp: chỉ ghi chi phí vật tư, không trừ kho lần nữa
+        boolean issuedByWarehouse = requisitions.isDayIssued(plan.getPlanId(), task.getTaskDate());
         for (Map.Entry<Integer, double[]> e : perItem.entrySet()) {
             double qty = Math.round(e.getValue()[0] * 100.0) / 100.0;
             try {
-                stockLedger.issue(e.getKey(), qty, null, "ISSUE", "TASK", task.getTaskId(), "Cho ăn " + task.getTaskCode() + " - " + task.getHorse().getHorseName());
+                if (!issuedByWarehouse) {
+                    stockLedger.issue(e.getKey(), qty, null, "ISSUE", "TASK", task.getTaskId(), "Cho ăn " + task.getTaskCode() + " - " + task.getHorse().getHorseName());
+                }
                 // Chi phí vật tư chăm sóc, dùng cho hóa đơn tháng (DAILY_CARE)
                 entityManager.createNativeQuery("INSERT INTO Task_Material_Usage (task_id, item_id, quantity_used, unit_price_at_use) VALUES (?1, ?2, ?3, ?4)")
                         .setParameter(1, task.getTaskId()).setParameter(2, e.getKey()).setParameter(3, qty).setParameter(4, prices.get(e.getKey()))

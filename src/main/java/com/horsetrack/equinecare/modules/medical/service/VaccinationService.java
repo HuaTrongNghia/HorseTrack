@@ -99,7 +99,7 @@ public class VaccinationService {
         if (request.getItemId() == null) {
             throw new IllegalArgumentException("Phải chọn thuốc / vaccine trong kho (itemId) để gửi yêu cầu cấp thuốc tới kho.");
         }
-        InventoryItem item = medicalItem(request.getItemId());
+        InventoryItem item = itemForKind(request.getItemId(), kind);
         double dose = request.getDosePerHorse() != null ? request.getDosePerHorse() : 1.0;
         List<Vaccination> created = new ArrayList<>();
         for (Integer horseId : new LinkedHashSet<>(request.getHorseIds())) {
@@ -207,7 +207,7 @@ public class VaccinationService {
                     + " (" + last.get().getStatus() + "), không gửi lại.");
         }
         if (itemId != null) {
-            v.setItem(medicalItem(itemId));
+            v.setItem(itemForKind(itemId, v.getKind()));
             vaccinationRepository.save(v);
         }
         if (v.getItem() == null) {
@@ -264,6 +264,44 @@ public class VaccinationService {
                     + (STOCK_DEAD.contains(req.getStatus()) ? " Gửi lại yêu cầu cấp thuốc." : " Chờ kho cấp rồi mới tiêm.");
         }
         return null;
+    }
+
+    /** Tiêm phòng chỉ nhận vaccine (nhóm Vaccine); tẩy giun chỉ nhận thuốc tẩy giun (nhóm Thuốc, phân nhóm Kháng ký sinh trùng) */
+    public static boolean matchesKind(InventoryItem item, String kind) {
+        String code = ItemCategories.code(item.getCategory());
+        if ("DEWORM".equals(kind)) {
+            return "MEDICINE".equals(code) && isDewormer(item);
+        }
+        return "VACCINE".equals(code);
+    }
+
+    private static boolean isDewormer(InventoryItem item) {
+        String group = item.getItemGroup() == null ? "" : item.getItemGroup().trim().toLowerCase();
+        return group.contains("ký sinh") || group.contains("tẩy giun") || group.contains("antiparasit") || group.contains("dewormer");
+    }
+
+    private InventoryItem itemForKind(Integer itemId, String kind) {
+        InventoryItem item = medicalItem(itemId);
+        if (!matchesKind(item, kind)) {
+            throw new IllegalArgumentException("DEWORM".equals(kind)
+                    ? "'" + item.getItemName() + "' không phải thuốc tẩy giun. Lịch tẩy giun chỉ chọn thuốc nhóm Kháng ký sinh trùng (GET /api/v1/vaccinations/items?kind=DEWORM)."
+                    : "'" + item.getItemName() + "' không phải vaccine. Lịch tiêm phòng chỉ chọn vật tư nhóm Vaccine (GET /api/v1/vaccinations/items?kind=VACCINE).");
+        }
+        return item;
+    }
+
+    /** Danh sách thuốc chọn được cho lịch: VACCINE = các loại vaccine, DEWORM = thuốc tẩy giun; kèm tồn khả dụng */
+    @Transactional(readOnly = true)
+    public List<com.horsetrack.equinecare.modules.inventory.dto.InventoryItemDTO> itemsForKind(String kind) {
+        String k = StringUtils.hasText(kind) ? kind.trim().toUpperCase() : "VACCINE";
+        if (!Set.of("VACCINE", "DEWORM").contains(k)) {
+            throw new IllegalArgumentException("kind chỉ nhận VACCINE hoặc DEWORM.");
+        }
+        return itemRepository.findAll().stream()
+                .filter(i -> matchesKind(i, k))
+                .sorted((a, b) -> a.getItemName().compareToIgnoreCase(b.getItemName()))
+                .map(i -> com.horsetrack.equinecare.modules.inventory.service.InventoryMapper.toItemDTO(i, null))
+                .toList();
     }
 
     private InventoryItem medicalItem(Integer itemId) {

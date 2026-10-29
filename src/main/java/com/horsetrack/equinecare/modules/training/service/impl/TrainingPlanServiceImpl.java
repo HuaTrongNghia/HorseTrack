@@ -36,6 +36,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.training.service.SessionReadingView sessionReadingView;
     private final com.horsetrack.equinecare.modules.training.service.SessionVetLink sessionVetLink;
+    private final com.horsetrack.equinecare.modules.care.service.HorseScheduleGuard scheduleGuard;
 
     // Thời lượng mặc định một buổi tập (bảng chỉ lưu giờ bắt đầu), dùng để kiểm tra trùng giờ
     @org.springframework.beans.factory.annotation.Value("${app.training.session-duration-minutes:60}")
@@ -293,6 +294,11 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .trainingPlan(plan)
                 .assignedTo(assignee)
                 .build();
+
+        // Ngựa không vừa tập vừa được cho ăn / chăm sóc: việc chăm sóc và bữa ăn của thực đơn đã xếp trước được ưu tiên
+        if (horse != null) {
+            scheduleGuard.assertSessionSlotFree(horse.getHorseId(), horse.getHorseName(), request.getSessionDate());
+        }
 
         // F21-05 (BR34): một Groom không được có 2 buổi tập giao nhau về khung giờ
         LocalDateTime start = request.getSessionDate();

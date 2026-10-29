@@ -44,6 +44,7 @@ public class CareTaskServiceImpl implements CareTaskService {
     private final com.horsetrack.equinecare.modules.nutrition.service.NutritionFeedTaskService feedTaskService;
     private final com.horsetrack.equinecare.modules.notification.service.AppNotificationService appNotifications;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
+    private final com.horsetrack.equinecare.modules.care.service.HorseScheduleGuard scheduleGuard;
     private final com.horsetrack.equinecare.modules.nutrition.service.StallService stallService;
 
     // Việc chưa xong (còn có thể bị cảnh báo trễ)
@@ -184,6 +185,10 @@ public class CareTaskServiceImpl implements CareTaskService {
         if ("DONE".equals(task.getStatus())) {
             throw new IllegalArgumentException("Công việc này đã được đánh dấu hoàn thành trước đó");
         }
+        // Ngựa đang trong buổi tập thì chưa cho ăn / chăm sóc được
+        if (task.getHorse() != null) {
+            scheduleGuard.assertNotTrainingNow(task.getHorse().getHorseId(), task.getHorse().getHorseName());
+        }
         // Chưa tới giờ hẹn (trừ khung xác nhận sớm) thì chưa được hoàn thành, kể cả việc ngày mai đã gửi trước
         LocalDateTime from = completableFrom(task);
         if (from != null && LocalDateTime.now().isBefore(from)) {
@@ -251,6 +256,9 @@ public class CareTaskServiceImpl implements CareTaskService {
             throw new IllegalArgumentException("Groom " + groom.getFullName() + " phụ trách khu '" + (groomZone == null ? "chưa có" : groomZone)
                     + "', không phải khu '" + horseZone + "' của ngựa " + horse.getHorseName() + ".");
         }
+
+        // Ngựa không vừa tập vừa được chăm sóc: buổi tập đã xếp trước được ưu tiên
+        scheduleGuard.assertCareSlotFree(horse.getHorseId(), horse.getHorseName(), request.getTaskDate(), request.getScheduledTime());
 
         CareTask task = CareTask.builder()
                 .horse(horse)

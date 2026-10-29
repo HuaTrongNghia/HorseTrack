@@ -111,11 +111,11 @@ public class NutritionPlanController {
      */
     @PostMapping("/nutrition-plans/{planId}/feed-tasks")
     @PreAuthorize("hasAnyAuthority('Trainer', 'Veterinarian')")
-    @Operation(summary = "Gửi khẩu phần thành việc cho ăn cho Groom", description = "date (yyyy-MM-dd, mặc định hôm nay). Bữa đã có việc thì bỏ qua; hôm nay chỉ gửi các bữa chưa tới giờ.")
+    @Operation(summary = "Gửi khẩu phần thành việc cho ăn cho Groom", description = "date (yyyy-MM-dd, mặc định hôm nay). Chưa có phiếu cấp thức ăn của ngày đó thì gửi kho trước; việc cho ăn chỉ giao khi kho đã cấp (màn Thực đơn dinh dưỡng của kho). Bữa đã có việc thì bỏ qua; hôm nay chỉ gửi các bữa chưa tới giờ.")
     public ResponseEntity<ApiResponse<Integer>> sendFeedTasks(@PathVariable Integer planId,
                                                               @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate date) {
         int n = nutritionPlanService.sendFeedTasks(planId, date);
-        return ResponseEntity.ok(ApiResponse.ok(n > 0 ? "Đã gửi " + n + " việc cho ăn cho Groom" : "Không có bữa nào cần gửi thêm", n));
+        return ResponseEntity.ok(ApiResponse.ok(n > 0 ? "Đã gửi " + n + " việc cho ăn cho Groom" : "Không có bữa nào cần gửi thêm (hoặc đang chờ kho cấp thức ăn)", n));
     }
 
     /**

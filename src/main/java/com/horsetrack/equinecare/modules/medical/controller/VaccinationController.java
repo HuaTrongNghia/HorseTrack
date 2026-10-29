@@ -44,6 +44,14 @@ public class VaccinationController {
                 .body(ApiResponse.ok("Đã tạo lịch " + dto.getMedicineName().trim() + " cho " + created.size() + " ngựa.", created));
     }
 
+    // Thuốc chọn được khi lên lịch: Tiêm phòng → vaccine, Tẩy giun → thuốc tẩy giun
+    @GetMapping("/items")
+    @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Thuốc / vaccine theo loại lịch", description = "kind=VACCINE: các vật tư nhóm Vaccine. kind=DEWORM: thuốc tẩy giun (nhóm Thuốc, phân nhóm Kháng ký sinh trùng). Kèm tồn kho.")
+    public ResponseEntity<ApiResponse<List<com.horsetrack.equinecare.modules.inventory.dto.InventoryItemDTO>>> itemsForKind(@RequestParam(required = false) String kind) {
+        return ResponseEntity.ok(ApiResponse.ok("Lấy danh sách thuốc thành công", vaccinationService.itemsForKind(kind)));
+    }
+
     // Gửi lại yêu cầu cấp thuốc tới kho (lịch cũ chưa có yêu cầu, hoặc kho đã từ chối / hủy yêu cầu trước)
     @PostMapping("/{recordCode}/stock-request")
     @PreAuthorize("hasAuthority('Veterinarian')")

@@ -15,6 +15,9 @@ public interface MaterialRequisitionRepository extends JpaRepository<MaterialReq
     // Yêu cầu cấp thuốc gắn với lịch tiêm (lý do bắt đầu bằng "VC-0001:"), mới nhất trước
     java.util.Optional<MaterialRequisition> findFirstByReasonStartingWithOrderByRequisitionIdDesc(String prefix);
 
+    // Phiếu cấp thức ăn của thực đơn (lý do bắt đầu bằng "KP-planId-yyyyMMdd:")
+    List<MaterialRequisition> findByReasonStartingWithOrderByRequisitionIdAsc(String prefix);
+
     // Danh sách cho kho, mới nhất trước; tham số null thì bỏ qua
     @Query("SELECT r FROM MaterialRequisition r " +
             "WHERE (:status IS NULL OR r.status = :status) " +

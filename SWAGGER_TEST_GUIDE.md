@@ -618,7 +618,9 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 - `mealType`: `MORNING` (07:00), `NOON` (11:30), `EVENING` (17:00). `AFTERNOON` vẫn được nhận và lưu thành `NOON`. Giờ từng bữa chỉnh bằng `app.nutrition.*-time`.
 - **Mong đợi:** `201`, `data` là `planId`, `status = ACTIVE`, `planType` theo BR_03. Ghi Audit Log `CREATE_NUTRITION_PLAN`.
 - **Thay thế:** mỗi ngựa chỉ có một khẩu phần áp dụng tại một thời điểm. Khẩu phần mới giao thời gian với khẩu phần đang áp dụng thì khẩu phần cũ **kết thúc trước ngày khẩu phần mới bắt đầu** (hoặc bị hủy nếu chưa bắt đầu); việc cho ăn của khẩu phần cũ từ ngày đó bị hủy.
-- **Gửi cho nhân viên:** khi lập (và mỗi ngày lúc 00:05), mỗi bữa của khẩu phần thành một **việc cho ăn** (`FEED`) giao cho Groom phụ trách khu chuồng của ngựa, kèm định lượng từng món (`instructions`) và lưu ý đặc biệt (`dietNote`). Hôm nay chỉ gửi các bữa chưa tới giờ, **đồng thời gửi luôn các bữa của ngày mai** (lập khẩu phần buổi tối thì Groom vẫn thấy lịch ngày mai ngay). Áp dụng giống nhau cho khẩu phần thường của HLV và khẩu phần y tế của bác sĩ (việc có `medicalDiet = true`, tiêu đề "(khẩu phần y tế)"). Groom xem ở `GET /care-tasks/my-tasks` (9.1), ngày mai: `?date=yyyy-MM-dd`.
+- **Kho duyệt và cấp thức ăn trước (theo từng ngày):** lập / sửa thực đơn (HLV hoặc bác sĩ) → hệ thống tạo **phiếu cấp thức ăn** cho hôm nay (các bữa chưa tới giờ) và ngày mai, mỗi món một phiếu, số lượng = tổng các bữa trong ngày; kho nhận thông báo trên chuông (`NUTRITION_STOCK`). Hằng ngày 00:02 tạo tiếp phiếu cho hôm nay + ngày mai của mọi thực đơn đang áp dụng. Kho cấp ở 5.5.
+- **Gửi cho nhân viên:** chỉ khi kho đã cấp thức ăn của ngày đó, mỗi bữa thành một **việc cho ăn** (`FEED`) giao cho Groom phụ trách khu chuồng (kèm `instructions`, `dietNote`; khẩu phần y tế có `medicalDiet = true`). Kho cấp hôm nay thì chỉ giao các bữa chưa tới giờ. Groom hoàn thành việc cho ăn **không trừ kho lần nữa** (chỉ ghi chi phí vật tư cho hóa đơn tháng). Groom xem ở `GET /care-tasks/my-tasks` (9.1), ngày mai: `?date=yyyy-MM-dd`.
+- **Hủy / sửa / thay thế / kết thúc thực đơn** (kể cả khi ngựa bị khóa hoặc mở khóa): phiếu chưa cấp → `CANCELLED`; phiếu đã cấp → tự **nhập lại kho phần chưa dùng** (giao dịch `RETURN`, = đã cấp − đã dùng ở các việc cho ăn đã hoàn thành) rồi `CANCELLED`; kho nhận thông báo. Sửa thực đơn sinh phiếu mới theo khẩu phần mới.
 
 | Trường hợp | Kết quả |
 |---|---|
@@ -650,6 +652,12 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 **Khi Groom hoàn thành việc cho ăn** (`PUT /care-tasks/{id}/complete`): kho trừ đúng các món của bữa đó qua sổ cái (nhật ký kho `ISSUE`, nguồn `TASK`) và ghi chi phí vật tư (`Task_Material_Usage`, tính vào hóa đơn tháng dòng `DAILY_CARE`). Thiếu hàng không chặn việc hoàn thành; lý do ghi vào `notes` của việc.
 
 **Khi ngựa bị khóa / mở khóa (BR_03):** khóa (10.1, bệnh án chỉ định khóa, hoặc 3.6) → khẩu phần thường của HLV `ENDED` (khẩu phần chưa bắt đầu `CANCELLED`), việc cho ăn chưa làm bị hủy, bác sĩ thú y nhận email để lập khẩu phần y tế. Mở khóa (10.2) → khẩu phần y tế `ENDED`, HLV phụ trách nhận email để lập lại khẩu phần thường.
+
+### 5.5 Kho: Thực đơn dinh dưỡng — `/api/v1/inventory/nutrition-requests` (`Warehouse Manager`)
+
+- `GET /api/v1/inventory/nutrition-requests?tab=&date=`: `tab` = `pending` (chờ cấp phát, mặc định) / `issued` (đã cấp phát) / `cancelled` (đã hủy / thay đổi) / `all`; `date` = `yyyy-MM-dd`. Mỗi phần tử là **một thực đơn trong một ngày**: `planId`, `planType`, `horseName`, `stallCode`, `barnZone`, `date`, `createdByName`, `status` (`PENDING` / `ISSUED` / `CANCELLED`), `canIssue` (đủ hàng khả dụng), `issuedAt`, `issuedByName`, `lines[]` (`requisitionCode`, `itemName`, `unit`, `quantity`, `availableStock`, `issuedQuantity`, `status`, `note`).
+- `PUT /api/v1/inventory/nutrition-requests/{planId}/{date}/issue`: cấp mọi món chờ cấp của ngày đó (trừ kho), rồi giao việc cho ăn ngày đó cho Groom; HLV / bác sĩ lập thực đơn nhận thông báo. Lỗi: không có phiếu chờ cấp, ngày đã qua, không đủ hàng khả dụng → `400` (không món nào bị trừ).
+- Phiếu cấp thức ăn **không** hiện ở `GET /inventory/supply-requests` và không cấp / từ chối được qua các API yêu cầu vật tư chung (`400`).
 
 ### 5.4 Đề xuất thức ăn đặc biệt — `/api/v1/diet-requests`
 
@@ -751,6 +759,8 @@ Chỉ `Trainer`. Theo SRS: chọn khu chuồng → ngựa trong khu → **Groom 
   - Khu không có Groom nào → `200` với danh sách rỗng.
 
 ### 6.5 `POST /api/v1/training-plans/{planId}/sessions` — Phân công buổi tập
+
+> **Không trùng giờ giữa buổi tập và chăm sóc / cho ăn (lịch có trước được ưu tiên):** buổi tập chiếm `app.training.session-duration-minutes` (60 phút), việc chăm sóc / bữa ăn chiếm `CARE_TASK_DURATION_MINUTES` (30 phút). Buổi tập trùng việc chăm sóc đang mở của ngựa, hoặc trùng giờ bữa ăn (07:00 / 11:30 / 17:00) của thực đơn đang áp dụng → `400` "Ngựa ... có việc chăm sóc / bữa ăn ... trùng buổi tập ...".
 
 Chỉ `Trainer`.
 
@@ -928,6 +938,8 @@ Không cần body. `CONFIRMED` → `IN_PROGRESS`, ghi `startedAt`.
 Luồng: **Trainer giao việc** (9.0) → **Groom xem việc hôm nay** (9.1) → **Groom hoàn thành** (9.2).
 
 ### 9.0 `POST /api/v1/care-tasks` — Trainer giao việc cho Groom
+
+> **Không trùng giờ giữa buổi tập và chăm sóc / cho ăn (lịch có trước được ưu tiên):** buổi tập chiếm `app.training.session-duration-minutes` (60 phút), việc chăm sóc / bữa ăn chiếm `CARE_TASK_DURATION_MINUTES` (30 phút). Giao việc trùng buổi tập đã xếp của ngựa → `400` "Ngựa ... có buổi tập lúc ... hãy chọn giờ khác (sau HH:mm)". Việc cho ăn tự sinh từ thực đơn trùng buổi tập đã xếp trước thì tự **dời sang ngay sau buổi tập** (ghi chú "Dời từ ... sang ... do trùng buổi tập").
 > **Phạm vi Trainer:** Trainer gọi với ngựa không được Club Manager phân công cho mình (3.8) → `403`.
 
 Chỉ `Trainer` được gọi. Lấy `groomId` từ `GET /training-plans/assignable-staff?planId=...` (6.4): danh sách đó chỉ gồm Groom cùng khu chuồng với ngựa.
@@ -978,6 +990,8 @@ Chỉ `Trainer` được gọi. Lấy `groomId` từ `GET /training-plans/assign
 - **Cách test nhanh:** giao việc (9.0) với `taskDate` là hôm nay và `scheduledTime` sớm hơn hiện tại ít nhất 45 phút, chờ tối đa 5 phút rồi gọi API này.
 
 ### 9.2 `PUT /api/v1/care-tasks/{taskId}/complete` (`Groom`)
+
+> Ngựa đang trong buổi tập (`IN_PROGRESS` / tạm dừng chờ HLV) → `400` "Ngựa ... đang trong buổi tập ... Chờ buổi tập kết thúc rồi mới cho ăn / chăm sóc."
 
 - Hoàn thành xong, **HLV phụ trách ngựa nhận email** "Đã hoàn thành: ..." (giờ hoàn thành theo giờ Việt Nam; việc cho ăn tự sinh từ khẩu phần không gửi email để tránh quá nhiều thư), nhật ký `COMPLETE_CARE_TASK`.
 - **`GET /api/v1/care-tasks/assigned?date=&status=`** (`Trainer`, `Club Manager`): HLV xem việc chăm sóc của ngựa mình phụ trách (Club Manager: mọi ngựa) trong ngày `date` (mặc định hôm nay), có `status` và `completedAt`; lọc `status` = `TODO` / `IN_PROGRESS` / `DONE` / `SKIPPED`.
@@ -1755,13 +1769,14 @@ Danh sách tóm tắt cho mọi vai trò đã đăng nhập, đọc từ `Treatm
 
 - **`GET /api/v1/vaccinations?tab=&horseId=&kind=`** (Veterinarian, Club Manager, Trainer, Groom, Horse Owner): `tab` = `due` (quá hạn hoặc đến hạn trong 7 ngày), `upcoming` (sau 7 ngày), `done`, bỏ trống = tất cả; `kind` = `VACCINE` / `DEWORM`. **Lọc theo quyền xem ngựa:** bác sĩ / quản lý xem tất cả, HLV ngựa được phân công, Groom ngựa trong khu phụ trách, chủ ngựa ngựa của mình. Kho → `403`.
   - Mỗi dòng: `id`, `recordCode` (`VC-0001`), `horseId`, `horseName`, `kind`, `typeName`, `category`, `dueDate`, `expectedDate` (dd/MM/yyyy), `countdown` ("còn 3 ngày" / "hôm nay" / "quá hạn 2 ngày"), `cycleMonths`, `statusCode` (`OVERDUE`, `DUE_SOON`, `SCHEDULED`, `POSTPONED`, `DONE`, `SKIPPED`), `status` (nhãn tiếng Việt), `doneAt`, `doneByName`, `lotNo`, `itemId`, `itemName`, `note`, `requisitionCode` / `requisitionStatus` / `requisitionRejectReason` (yêu cầu cấp thuốc gửi kho), `canExecute`, `executeBlockedReason`.
+- **`GET /api/v1/vaccinations/items?kind=VACCINE|DEWORM`** (`Veterinarian`): thuốc chọn được khi lên lịch, kèm tồn kho. `VACCINE` → vật tư nhóm **Vaccine**; `DEWORM` → thuốc **tẩy giun** (nhóm Thuốc, phân nhóm *Kháng ký sinh trùng*: Ivermectin, Moxidectin + Praziquantel, Pyrantel, Fenbendazole). `kind` khác → `400`.
 - **`POST /api/v1/vaccinations/schedule`** (`Veterinarian`):
 
   ```json
   { "horseIds": [21], "kind": "VACCINE", "medicineName": "Vaccine cúm ngựa", "scheduledDate": "2026-11-01", "cycleMonths": 12, "itemId": 3, "dosePerHorse": 1, "notes": "Mũi nhắc lại" }
   ```
 
-  → `201`, `data` là các mũi vừa tạo. `scheduledDate` nhận `yyyy-MM-dd` hoặc `dd/MM/yyyy`. Lỗi: `horseIds` rỗng, ngày ở quá khứ, chu kỳ vaccine ngoài 1–24 / tẩy giun ngoài 3–6, ngựa chưa duyệt, ngựa đã có lịch cùng tên chưa thực hiện, thiếu `itemId` hoặc `itemId` không phải thuốc / vaccine → `400`; ngựa không tồn tại → `404`; role khác bác sĩ → `403`.
+  → `201`, `data` là các mũi vừa tạo. `scheduledDate` nhận `yyyy-MM-dd` hoặc `dd/MM/yyyy`. Lỗi: `horseIds` rỗng, ngày ở quá khứ, chu kỳ vaccine ngoài 1–24 / tẩy giun ngoài 3–6, ngựa chưa duyệt, ngựa đã có lịch cùng tên chưa thực hiện, thiếu `itemId`, hoặc **`itemId` không đúng loại lịch** (Tiêm phòng chọn thuốc không phải vaccine, Tẩy giun chọn thuốc không phải thuốc tẩy giun) → `400`; ngựa không tồn tại → `404`; role khác bác sĩ → `403`.
   - **Gửi kho:** mỗi ngựa sinh 1 yêu cầu cấp thuốc `SUBMITTED` (`Material_Requisitions`, số lượng `dosePerHorse` mặc định 1, cần trước ngày dự kiến, lý do bắt đầu bằng mã lịch `VC-0001:`). Kho xử lý ở `GET /api/v1/inventory/supply-requests` → `PUT /inventory/supply-requests/{id}/issue` (cấp, trừ kho) / `wait-restock` / `reject`.
 - **`POST /api/v1/vaccinations/{recordCode}/stock-request?itemId=&dose=`** (`Veterinarian`): gửi lại yêu cầu cấp thuốc khi lịch chưa có yêu cầu (lịch tạo trước bản sửa) hoặc yêu cầu trước bị kho từ chối / hủy. Lịch chưa gắn thuốc thì bắt buộc `itemId`. Đang có yêu cầu còn hiệu lực → `400`.
 - **`POST /api/v1/vaccinations/{recordCode}/execute`** (`Veterinarian`, mã `VC-0001` hoặc ID), body tùy chọn `{ "doneAt": "2026-10-25", "lotNo": "LOT-01", "note": "..." }` (`doneAt` bỏ trống = hôm nay): mũi chuyển `DONE`, ghi người tiêm. **Có `cycleMonths` thì tự tạo mũi nhắc lại** ngày = ngày tiêm + `cycleMonths` tháng. `data` = [mũi vừa tiêm, mũi nhắc lại]. Lỗi: đã ghi nhận → `400`; **chưa tới ngày dự kiến (lịch tương lai) → `400`**; **kho chưa cấp thuốc (yêu cầu chưa `ISSUED`, hoặc chưa có yêu cầu) → `400`**; `doneAt` sau hôm nay hoặc trước ngày dự kiến → `400`; mã không tồn tại → `404`. Mũi nhắc lại tự tạo kèm yêu cầu cấp thuốc mới.

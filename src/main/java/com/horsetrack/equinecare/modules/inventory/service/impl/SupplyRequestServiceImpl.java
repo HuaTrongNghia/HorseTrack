@@ -134,7 +134,10 @@ public class SupplyRequestServiceImpl implements SupplyRequestService {
     public List<SupplyRequestDTO> getRequests(String status, String barnZone) {
         String st = StringUtils.hasText(status) ? status.trim().toUpperCase() : null;
         String zone = StringUtils.hasText(barnZone) ? barnZone.trim() : null;
-        return requisitionRepository.search(st, zone).stream().map(this::toDTO).collect(Collectors.toList());
+        // Phiếu cấp thức ăn theo thực đơn có màn riêng (GET /inventory/nutrition-requests)
+        return requisitionRepository.search(st, zone).stream()
+                .filter(r -> !com.horsetrack.equinecare.modules.nutrition.service.NutritionRequisitions.isNutrition(r))
+                .map(this::toDTO).collect(Collectors.toList());
     }
 
     @Override
@@ -201,6 +204,9 @@ public class SupplyRequestServiceImpl implements SupplyRequestService {
     }
 
     private void requireOpen(MaterialRequisition req, String action) {
+        if (com.horsetrack.equinecare.modules.nutrition.service.NutritionRequisitions.isNutrition(req)) {
+            throw new IllegalArgumentException("Yêu cầu " + req.getRequisitionCode() + " là phiếu cấp thức ăn theo thực đơn; xử lý ở màn Thực đơn dinh dưỡng (PUT /api/v1/inventory/nutrition-requests/{planId}/{date}/issue).");
+        }
         if (!OPEN_STATUSES.contains(req.getStatus())) {
             throw new IllegalArgumentException("Không thể " + action + " yêu cầu " + req.getRequisitionCode()
                     + " vì đang ở trạng thái " + req.getStatus() + ".");
