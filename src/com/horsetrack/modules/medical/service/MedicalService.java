@@ -67,7 +67,7 @@ public class MedicalService {
 
         horse.setIsLocked(true);
 
-        // Chỉ Bác sĩ thú y khóa huấn luyện (MedicalController), kết luận ngựa chấn thương
+        
         horse.setHealthStatus("INJURED");
 
         horseRepository.save(horse);
@@ -82,7 +82,7 @@ public class MedicalService {
                 SecurityContextHolder.getContext().getAuthentication().getName(), horse.getHealthStatus(), dto.getReason());
     }
 
-    // 2. Hàm mở khóa y tế (Hồi phục)
+    
     @Transactional
     public void releaseVetLock(Integer horseId) throws Exception {
         Horse horse = horseRepository.findById(horseId)
@@ -94,7 +94,7 @@ public class MedicalService {
 
         horse.setIsLocked(false);
 
-        // Đặt lại health_status về trạng thái khỏe mạnh hợp lệ của DB (Ví dụ: "Healthy" hoặc "Khỏe mạnh")
+       
         horse.setHealthStatus("HEALTHY");
 
         horseRepository.save(horse);
