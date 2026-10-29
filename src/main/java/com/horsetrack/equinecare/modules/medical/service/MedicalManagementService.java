@@ -533,6 +533,17 @@ public class MedicalManagementService {
         if (recordId != null && !medicalRecordRepository.existsById(recordId)) {
             throw new ResourceNotFoundException("Không tìm thấy bệnh án với ID: " + recordId);
         }
+        // Mỗi ca khám chỉ có một phác đồ (đổi thuốc / liều thì tạo phiên bản mới). Ngựa có ca khám mới (VD: Groom báo sự cố)
+        // thì được lập phác đồ mới cho ca đó, kể cả khi phác đồ của ca cũ còn đang điều trị.
+        if (previous == null && caseId != null) {
+            protocolRepository.findByCaseId(caseId).stream()
+                    .filter(p -> !"CANCELLED".equals(p.getState()) && !"SUPERSEDED".equals(p.getState()))
+                    .findFirst()
+                    .ifPresent(p -> {
+                        throw new IllegalArgumentException("Ca khám #" + caseId + " đã có phác đồ " + p.getProtocolCode() + " (" + p.getState()
+                                + "). Mỗi ca khám chỉ lập một phác đồ: muốn đổi thuốc hãy tạo phiên bản mới, bệnh mới thì mở ca khám mới.");
+                    });
+        }
 
         TreatmentProtocol protocol = TreatmentProtocol.builder()
                 .horse(horse)

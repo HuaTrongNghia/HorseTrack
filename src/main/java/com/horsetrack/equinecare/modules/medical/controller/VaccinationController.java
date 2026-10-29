@@ -37,17 +37,29 @@ public class VaccinationController {
     // Bác sĩ tạo lịch tiêm / tẩy giun cho nhiều ngựa
     @PostMapping("/schedule")
     @PreAuthorize("hasAuthority('Veterinarian')")
-    @Operation(summary = "Tạo lịch tiêm cho nhiều ngựa", description = "Bác sĩ lập lịch tiêm hoặc tẩy giun cùng một loại cho danh sách ngựa.")
+    @Operation(summary = "Tạo lịch tiêm cho nhiều ngựa", description = "Bác sĩ lập lịch tiêm hoặc tẩy giun cùng một loại cho danh sách ngựa. itemId (thuốc / vaccine trong kho) bắt buộc: mỗi ngựa sinh một yêu cầu cấp thuốc gửi kho (dosePerHorse, mặc định 1).")
     public ResponseEntity<ApiResponse<List<VaccinationRecordDTO>>> createMassSchedule(@Valid @RequestBody CreateScheduleRequestDTO dto) {
         List<VaccinationRecordDTO> created = vaccinationService.schedule(dto);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Đã tạo lịch " + dto.getMedicineName().trim() + " cho " + created.size() + " ngựa.", created));
     }
 
+    // Gửi lại yêu cầu cấp thuốc tới kho (lịch cũ chưa có yêu cầu, hoặc kho đã từ chối / hủy yêu cầu trước)
+    @PostMapping("/{recordCode}/stock-request")
+    @PreAuthorize("hasAuthority('Veterinarian')")
+    @Operation(summary = "Gửi lại yêu cầu cấp thuốc tới kho", description = "Dùng khi lịch chưa có yêu cầu cấp thuốc hoặc yêu cầu trước bị kho từ chối / hủy. "
+            + "itemId bắt buộc nếu lịch chưa gắn thuốc; dose mặc định bằng liều lần trước (hoặc 1).")
+    public ResponseEntity<ApiResponse<VaccinationRecordDTO>> resendStockRequest(@PathVariable String recordCode,
+                                                                                @RequestParam(required = false) Integer itemId,
+                                                                                @RequestParam(required = false) Double dose) {
+        VaccinationRecordDTO dto = vaccinationService.resendStockRequest(recordCode, itemId, dose);
+        return ResponseEntity.ok(ApiResponse.ok("Đã gửi yêu cầu cấp thuốc " + dto.getRequisitionCode() + " tới kho.", dto));
+    }
+
     // Ghi nhận đã tiêm (mã VC-0001 hoặc ID); có chu kỳ thì tự tạo mũi nhắc lại
     @PostMapping("/{recordCode}/execute")
     @PreAuthorize("hasAuthority('Veterinarian')")
-    @Operation(summary = "Ghi nhận đã tiêm", description = "recordCode là mã VC-0001 hoặc ID. Có chu kỳ thì hệ thống tự tạo mũi nhắc lại.")
+    @Operation(summary = "Ghi nhận đã tiêm", description = "recordCode là mã VC-0001 hoặc ID. Chỉ khi đã tới ngày dự kiến và kho đã cấp thuốc (yêu cầu ISSUED). Có chu kỳ thì hệ thống tự tạo mũi nhắc lại kèm yêu cầu cấp thuốc mới.")
     public ResponseEntity<ApiResponse<List<VaccinationRecordDTO>>> executeVaccination(@PathVariable String recordCode,
                                                                                       @Valid @RequestBody(required = false) VaccinationExecuteDTO dto) {
         List<VaccinationRecordDTO> result = vaccinationService.execute(recordCode, dto);

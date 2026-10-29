@@ -1165,6 +1165,7 @@ Club Manager được **xem** danh mục thuốc và phác đồ (12.1, 12.3) nh
 
 - **Mong đợi:** `201`. `protocolCode` do DB tự sinh dạng `PD-0001`, `versionNo = 1`, `state = "WAITING_STOCK_CHECK"`, có `totalCost` = tổng (số lượng × đơn giá). **Ghi lại `protocolId`**.
 - **Cấp cứu (BR_17):** thêm `"emergency": true` (nhận cả `isEmergency`) và bắt buộc có `caseId` → ca khám chuyển `severity = CRITICAL` (ghi Audit `MARK_EMERGENCY`), phác đồ trả `emergency = true`: kho cấp thuốc ngay, cấp xong không chuyển `ON_HOLD_PAYMENT` mà vào điều trị, hóa đơn giai đoạn vẫn được lập (12F.8). `emergency: true` mà không có `caseId` → `400`. Bỏ chọn không hạ mức ca khám. Cũng áp dụng cho 12.6 (phiên bản mới).
+- **Mỗi ca khám chỉ có 1 phác đồ:** `caseId` đã có phác đồ chưa hủy / chưa bị thay thế → `400` "Ca khám #... đã có phác đồ PD-...". Đổi thuốc / liều thì dùng 12.6 (phiên bản mới). Ngựa có **ca khám mới** (VD: Groom báo sự cố, `POST /medical/cases`) thì lập được phác đồ mới cho ca đó, kể cả khi phác đồ của ca cũ còn đang điều trị.
 - **Test lỗi:**
   - Kê vật tư không phải thuốc (ví dụ nhóm `FEED`) → `400`.
   - Trùng `itemId` trong cùng một giai đoạn → `400`.
@@ -1687,6 +1688,7 @@ Báo cáo tài chính từ dữ liệu thật; tiền đã thu **chỉ tính gia
    - Khi đang tạm dừng: kho cấp thuốc (`PUT /inventory/protocols/{id}/dispense`) → `400` "...tạm dừng do chưa thanh toán giai đoạn tới hạn (BR_16)"; bác sĩ không ghi tiến trình được.
    - Bác sĩ vẫn được kết thúc phác đồ đã cấp thuốc (`complete`); phác đồ chưa cấp thuốc vẫn hủy hoặc tạo phiên bản mới được.
 3. Chủ ngựa trả hóa đơn giai đoạn qua VNPay (12F.6). Khi giao dịch được xác minh, **phác đồ tự tiếp tục**: `IN_TREATMENT` nếu đã cấp thuốc, ngược lại `VET_CONFIRMED`. Ghi Audit Log `PROTOCOL_PAYMENT_RESUME`, báo bác sĩ.
+- **Giai đoạn đang chờ thanh toán:** phác đồ `ON_HOLD_PAYMENT` trả thêm `awaitingPaymentPhaseNo`, `awaitingPaymentPhaseName`, `awaitingPaymentInvoiceCode` (giai đoạn sớm nhất còn hóa đơn mở). Mới cấp thuốc → giai đoạn 1; bác sĩ hoàn thành giai đoạn 1 của phác đồ nhiều giai đoạn → giai đoạn 2 (hóa đơn `GD-xxxxxx-02`). FE dùng các trường này thay vì ghi cố định "giai đoạn 1".
 4. **BR_17 – ca cấp cứu:** phác đồ có `caseId` trỏ tới ca khám `severity = CRITICAL` vẫn được lập hóa đơn nhưng **không bị tạm dừng** vì chưa thanh toán (`emergency = true`).
 5. Phác đồ bị hủy hoặc có phiên bản mới → hóa đơn giai đoạn chưa trả chuyển `CANCELLED`. Kết thúc sớm → hủy hóa đơn của các giai đoạn chưa bắt đầu.
 
@@ -1752,15 +1754,18 @@ Danh sách tóm tắt cho mọi vai trò đã đăng nhập, đọc từ `Treatm
 ### 15. Vaccinations — ĐÃ DÙNG DỮ LIỆU THẬT (bảng `Vaccinations`)
 
 - **`GET /api/v1/vaccinations?tab=&horseId=&kind=`** (Veterinarian, Club Manager, Trainer, Groom, Horse Owner): `tab` = `due` (quá hạn hoặc đến hạn trong 7 ngày), `upcoming` (sau 7 ngày), `done`, bỏ trống = tất cả; `kind` = `VACCINE` / `DEWORM`. **Lọc theo quyền xem ngựa:** bác sĩ / quản lý xem tất cả, HLV ngựa được phân công, Groom ngựa trong khu phụ trách, chủ ngựa ngựa của mình. Kho → `403`.
-  - Mỗi dòng: `id`, `recordCode` (`VC-0001`), `horseId`, `horseName`, `kind`, `typeName`, `category`, `dueDate`, `expectedDate` (dd/MM/yyyy), `countdown` ("còn 3 ngày" / "hôm nay" / "quá hạn 2 ngày"), `cycleMonths`, `statusCode` (`OVERDUE`, `DUE_SOON`, `SCHEDULED`, `POSTPONED`, `DONE`, `SKIPPED`), `status` (nhãn tiếng Việt), `doneAt`, `doneByName`, `lotNo`, `itemId`, `itemName`, `note`.
+  - Mỗi dòng: `id`, `recordCode` (`VC-0001`), `horseId`, `horseName`, `kind`, `typeName`, `category`, `dueDate`, `expectedDate` (dd/MM/yyyy), `countdown` ("còn 3 ngày" / "hôm nay" / "quá hạn 2 ngày"), `cycleMonths`, `statusCode` (`OVERDUE`, `DUE_SOON`, `SCHEDULED`, `POSTPONED`, `DONE`, `SKIPPED`), `status` (nhãn tiếng Việt), `doneAt`, `doneByName`, `lotNo`, `itemId`, `itemName`, `note`, `requisitionCode` / `requisitionStatus` / `requisitionRejectReason` (yêu cầu cấp thuốc gửi kho), `canExecute`, `executeBlockedReason`.
 - **`POST /api/v1/vaccinations/schedule`** (`Veterinarian`):
 
   ```json
-  { "horseIds": [21], "kind": "VACCINE", "medicineName": "Vaccine cúm ngựa", "scheduledDate": "2026-11-01", "cycleMonths": 12, "itemId": null, "notes": "Mũi nhắc lại" }
+  { "horseIds": [21], "kind": "VACCINE", "medicineName": "Vaccine cúm ngựa", "scheduledDate": "2026-11-01", "cycleMonths": 12, "itemId": 3, "dosePerHorse": 1, "notes": "Mũi nhắc lại" }
   ```
 
-  → `201`, `data` là các mũi vừa tạo. `scheduledDate` nhận `yyyy-MM-dd` hoặc `dd/MM/yyyy`. Lỗi: `horseIds` rỗng, ngày ở quá khứ, chu kỳ vaccine ngoài 1–24 / tẩy giun ngoài 3–6, ngựa chưa duyệt, ngựa đã có lịch cùng tên chưa thực hiện, `itemId` không phải thuốc / vaccine → `400`; ngựa không tồn tại → `404`; role khác bác sĩ → `403`.
-- **`POST /api/v1/vaccinations/{recordCode}/execute`** (`Veterinarian`, mã `VC-0001` hoặc ID), body tùy chọn `{ "doneAt": "2026-10-25", "lotNo": "LOT-01", "note": "..." }` (`doneAt` bỏ trống = hôm nay): mũi chuyển `DONE`, ghi người tiêm. **Có `cycleMonths` thì tự tạo mũi nhắc lại** ngày = ngày tiêm + `cycleMonths` tháng. `data` = [mũi vừa tiêm, mũi nhắc lại]. Lỗi: đã ghi nhận → `400`; `doneAt` sau hôm nay → `400`; mã không tồn tại → `404`.
+  → `201`, `data` là các mũi vừa tạo. `scheduledDate` nhận `yyyy-MM-dd` hoặc `dd/MM/yyyy`. Lỗi: `horseIds` rỗng, ngày ở quá khứ, chu kỳ vaccine ngoài 1–24 / tẩy giun ngoài 3–6, ngựa chưa duyệt, ngựa đã có lịch cùng tên chưa thực hiện, thiếu `itemId` hoặc `itemId` không phải thuốc / vaccine → `400`; ngựa không tồn tại → `404`; role khác bác sĩ → `403`.
+  - **Gửi kho:** mỗi ngựa sinh 1 yêu cầu cấp thuốc `SUBMITTED` (`Material_Requisitions`, số lượng `dosePerHorse` mặc định 1, cần trước ngày dự kiến, lý do bắt đầu bằng mã lịch `VC-0001:`). Kho xử lý ở `GET /api/v1/inventory/supply-requests` → `PUT /inventory/supply-requests/{id}/issue` (cấp, trừ kho) / `wait-restock` / `reject`.
+- **`POST /api/v1/vaccinations/{recordCode}/stock-request?itemId=&dose=`** (`Veterinarian`): gửi lại yêu cầu cấp thuốc khi lịch chưa có yêu cầu (lịch tạo trước bản sửa) hoặc yêu cầu trước bị kho từ chối / hủy. Lịch chưa gắn thuốc thì bắt buộc `itemId`. Đang có yêu cầu còn hiệu lực → `400`.
+- **`POST /api/v1/vaccinations/{recordCode}/execute`** (`Veterinarian`, mã `VC-0001` hoặc ID), body tùy chọn `{ "doneAt": "2026-10-25", "lotNo": "LOT-01", "note": "..." }` (`doneAt` bỏ trống = hôm nay): mũi chuyển `DONE`, ghi người tiêm. **Có `cycleMonths` thì tự tạo mũi nhắc lại** ngày = ngày tiêm + `cycleMonths` tháng. `data` = [mũi vừa tiêm, mũi nhắc lại]. Lỗi: đã ghi nhận → `400`; **chưa tới ngày dự kiến (lịch tương lai) → `400`**; **kho chưa cấp thuốc (yêu cầu chưa `ISSUED`, hoặc chưa có yêu cầu) → `400`**; `doneAt` sau hôm nay hoặc trước ngày dự kiến → `400`; mã không tồn tại → `404`. Mũi nhắc lại tự tạo kèm yêu cầu cấp thuốc mới.
+- **Email nhắc lịch (hằng ngày 07:00, `VACCINATION_REMINDER_CRON`):** lịch `SCHEDULED` có ngày dự kiến là hôm nay → mỗi bác sĩ thú y đang hoạt động nhận 1 email tổng hợp "[HorseTrack] Hôm nay (dd/MM/yyyy) bạn có lịch tiêm phòng / tẩy giun - N ngựa" kèm bảng mã lịch, ngựa, chuồng, loại, vaccine. Ghi `Email_Logs` mục đích `VACCINATION_REMINDER`.
 
 ---
 

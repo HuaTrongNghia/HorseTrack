@@ -33,4 +33,9 @@ public class VaccinationRecordDTO {
     private Integer itemId;
     private String itemName;
     private String note;
+    private String requisitionCode;          // Yêu cầu cấp thuốc gửi kho (RQ-...)
+    private String requisitionStatus;        // SUBMITTED, CHECKING_STOCK, WAITING_RESTOCK, ISSUED, CLOSED, REJECTED, CANCELLED
+    private String requisitionRejectReason;
+    private Boolean canExecute;              // đã tới ngày dự kiến và kho đã cấp thuốc
+    private String executeBlockedReason;     // lý do chưa xác nhận tiêm được
 }

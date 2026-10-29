@@ -46,6 +46,13 @@ public class VaccinationService {
     private final UserRepository userRepository;
     private final GroomProfileRepository groomProfileRepository;
     private final AuditTrail auditTrail;
+    private final com.horsetrack.equinecare.modules.inventory.repository.MaterialRequisitionRepository requisitionRepository;
+    private final jakarta.persistence.EntityManager entityManager;
+
+    // Kho đã cấp thuốc cho lịch tiêm
+    private static final List<String> STOCK_ISSUED = List.of("ISSUED", "CLOSED");
+    // Yêu cầu không còn hiệu lực: được gửi lại
+    private static final List<String> STOCK_DEAD = List.of("REJECTED", "CANCELLED");
 
     /**
      * tab: due (quá hạn hoặc đến hạn trong 7 ngày), upcoming (sau 7 ngày), done (đã thực hiện), bỏ trống = tất cả.
@@ -70,7 +77,7 @@ public class VaccinationService {
                     case "all" -> true;
                     default -> throw new IllegalArgumentException("tab chỉ nhận due, upcoming, done hoặc bỏ trống.");
                 })
-                .map(VaccinationService::toDto)
+                .map(this::dto)
                 .toList();
     }
 
@@ -89,14 +96,11 @@ public class VaccinationService {
                 throw new IllegalArgumentException(("DEWORM".equals(kind) ? "Chu kỳ tẩy giun" : "Chu kỳ tiêm nhắc") + " từ " + min + " đến " + max + " tháng.");
             }
         }
-        InventoryItem item = null;
-        if (request.getItemId() != null) {
-            item = itemRepository.findById(request.getItemId())
-                    .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy vật tư với ID: " + request.getItemId()));
-            if (!ItemCategories.isMedical(item.getCategory())) {
-                throw new IllegalArgumentException("'" + item.getItemName() + "' (nhóm " + item.getCategory() + ") không phải thuốc / vaccine.");
-            }
+        if (request.getItemId() == null) {
+            throw new IllegalArgumentException("Phải chọn thuốc / vaccine trong kho (itemId) để gửi yêu cầu cấp thuốc tới kho.");
         }
+        InventoryItem item = medicalItem(request.getItemId());
+        double dose = request.getDosePerHorse() != null ? request.getDosePerHorse() : 1.0;
         List<Vaccination> created = new ArrayList<>();
         for (Integer horseId : new LinkedHashSet<>(request.getHorseIds())) {
             Horse horse = horseRepository.findById(horseId)
@@ -118,10 +122,16 @@ public class VaccinationService {
                     .note(StringUtils.hasText(request.getNotes()) ? request.getNotes().trim() : null)
                     .build()));
         }
+        User vet = currentUser();
+        List<String> rqs = new ArrayList<>();
+        for (Vaccination v : created) {
+            rqs.add(requestStock(v, item, dose, vet).getRequisitionCode());
+        }
         auditTrail.record("DEWORM".equals(kind) ? "SCHEDULE_DEWORM" : "SCHEDULE_VACCINE", "Vaccinations", null,
                 name + " | " + due.format(VN_DATE) + (cycle != null ? " | chu kỳ " + cycle + " tháng" : "") + " | "
-                        + created.stream().map(v -> v.getVaccinationCode() + " " + v.getHorse().getHorseName()).reduce((a, b) -> a + ", " + b).orElse(""));
-        return created.stream().map(VaccinationService::toDto).toList();
+                        + created.stream().map(v -> v.getVaccinationCode() + " " + v.getHorse().getHorseName()).reduce((a, b) -> a + ", " + b).orElse("")
+                        + " | gửi kho " + String.join(", ", rqs));
+        return created.stream().map(this::dto).toList();
     }
 
     /** Ghi nhận đã tiêm; có chu kỳ thì tạo mũi nhắc lại = ngày tiêm + cycleMonths. Trả về [mũi vừa tiêm, mũi nhắc lại?] */
@@ -132,9 +142,16 @@ public class VaccinationService {
             throw new IllegalArgumentException("Mũi " + v.getVaccinationCode() + " đã " + (Vaccination.DONE.equals(v.getStatus()) ? "được ghi nhận" : "bỏ qua") + ".");
         }
         LocalDate today = LocalDate.now();
+        String blocked = executeBlockedReason(v, latestRequisition(v).orElse(null), today);
+        if (blocked != null) {
+            throw new IllegalArgumentException(blocked);
+        }
         LocalDate doneDay = request != null && StringUtils.hasText(request.getDoneAt()) ? parseDate(request.getDoneAt(), "Ngày thực hiện") : today;
         if (doneDay.isAfter(today)) {
             throw new IllegalArgumentException("Ngày thực hiện không được sau hôm nay.");
+        }
+        if (doneDay.isBefore(v.getDueDate())) {
+            throw new IllegalArgumentException("Ngày thực hiện không được trước ngày dự kiến " + v.getDueDate().format(VN_DATE) + ".");
         }
         User vet = currentUser();
         v.setStatus(Vaccination.DONE);
@@ -148,7 +165,7 @@ public class VaccinationService {
         }
         vaccinationRepository.save(v);
 
-        List<VaccinationRecordDTO> result = new ArrayList<>(List.of(toDto(v)));
+        List<VaccinationRecordDTO> result = new ArrayList<>(List.of(dto(v)));
         Vaccination next = null;
         if (v.getCycleMonths() != null) {
             next = vaccinationRepository.saveAndFlush(Vaccination.builder()
@@ -161,12 +178,120 @@ public class VaccinationService {
                     .status(Vaccination.SCHEDULED)
                     .note("Nhắc lại sau " + v.getCycleMonths() + " tháng (từ " + v.getVaccinationCode() + ")")
                     .build());
-            result.add(toDto(next));
+            // Mũi nhắc lại cũng phải chờ kho cấp thuốc
+            if (next.getItem() != null) {
+                double dose = latestRequisition(v).map(r -> r.getQuantity()).orElse(1.0);
+                requestStock(next, next.getItem(), dose, vet);
+            }
+            result.add(dto(next));
         }
         auditTrail.record("RECORD_VACCINATION", "Vaccinations", "status=SCHEDULED",
                 "status=DONE | " + v.getVaccinationCode() + " | ngựa " + v.getHorse().getHorseName() + " | " + v.getVaccineName()
                         + (next != null ? " | nhắc lại " + next.getVaccinationCode() + " ngày " + next.getDueDate().format(VN_DATE) : ""));
         return result;
+    }
+
+    /**
+     * Gửi lại yêu cầu cấp thuốc cho lịch tiêm (lịch cũ chưa có yêu cầu, hoặc yêu cầu trước bị kho từ chối / hủy).
+     * Lịch chưa gắn thuốc thì phải gửi itemId.
+     */
+    @Transactional
+    public VaccinationRecordDTO resendStockRequest(String codeOrId, Integer itemId, Double dose) {
+        Vaccination v = find(codeOrId);
+        if (!OPEN.contains(v.getStatus())) {
+            throw new IllegalArgumentException("Lịch " + v.getVaccinationCode() + " đã " + (Vaccination.DONE.equals(v.getStatus()) ? "thực hiện" : "bỏ qua") + ".");
+        }
+        var last = latestRequisition(v);
+        if (last.isPresent() && !STOCK_DEAD.contains(last.get().getStatus())) {
+            throw new IllegalArgumentException("Lịch " + v.getVaccinationCode() + " đã có yêu cầu cấp thuốc " + last.get().getRequisitionCode()
+                    + " (" + last.get().getStatus() + "), không gửi lại.");
+        }
+        if (itemId != null) {
+            v.setItem(medicalItem(itemId));
+            vaccinationRepository.save(v);
+        }
+        if (v.getItem() == null) {
+            throw new IllegalArgumentException("Lịch " + v.getVaccinationCode() + " chưa gắn thuốc / vaccine trong kho: gửi itemId.");
+        }
+        double qty = dose != null && dose > 0 ? dose : last.map(r -> r.getQuantity()).orElse(1.0);
+        var req = requestStock(v, v.getItem(), qty, currentUser());
+        auditTrail.record("VACCINATION_STOCK_REQUEST", "Material_Requisitions", null,
+                req.getRequisitionCode() + " | " + v.getVaccinationCode() + " | ngựa " + v.getHorse().getHorseName() + " | " + v.getItem().getItemName());
+        return dto(v);
+    }
+
+    // Yêu cầu cấp thuốc tới kho cho một lịch tiêm; lý do bắt đầu bằng "VC-0001:" để tra lại
+    private com.horsetrack.equinecare.modules.inventory.entity.MaterialRequisition requestStock(Vaccination v, InventoryItem item, double qty, User vet) {
+        String reason = marker(v) + " " + ("DEWORM".equals(v.getKind()) ? "Tẩy giun" : "Tiêm phòng") + " " + v.getVaccineName()
+                + " cho ngựa " + v.getHorse().getHorseName() + " ngày " + v.getDueDate().format(VN_DATE);
+        var saved = requisitionRepository.saveAndFlush(com.horsetrack.equinecare.modules.inventory.entity.MaterialRequisition.builder()
+                .requestedBy(vet)
+                .barnZone(v.getHorse().getStall() != null ? v.getHorse().getStall().getBarnZone() : null)
+                .item(item)
+                .quantity(Math.round(qty * 100.0) / 100.0)
+                .reason(reason.length() > 500 ? reason.substring(0, 500) : reason)
+                .requestedAt(LocalDateTime.now())
+                .neededBy(v.getDueDate())
+                .status("SUBMITTED")
+                .build());
+        entityManager.refresh(saved);   // đọc requisition_code do DB sinh
+        return saved;
+    }
+
+    private Optional<com.horsetrack.equinecare.modules.inventory.entity.MaterialRequisition> latestRequisition(Vaccination v) {
+        return v.getVaccinationCode() == null ? Optional.empty()
+                : requisitionRepository.findFirstByReasonStartingWithOrderByRequisitionIdDesc(marker(v));
+    }
+
+    private static String marker(Vaccination v) {
+        return v.getVaccinationCode() + ":";   // không dùng [ ] vì là ký tự đặc biệt của LIKE
+    }
+
+    // Lý do chưa xác nhận tiêm được; null = được tiêm
+    private static String executeBlockedReason(Vaccination v, com.horsetrack.equinecare.modules.inventory.entity.MaterialRequisition req, LocalDate today) {
+        if (!OPEN.contains(v.getStatus())) {
+            return null;
+        }
+        if (v.getDueDate().isAfter(today)) {
+            return "Chưa tới ngày dự kiến " + v.getDueDate().format(VN_DATE) + ": không xác nhận được lịch " + v.getVaccinationCode() + " trong tương lai.";
+        }
+        if (req == null) {
+            return "Lịch " + v.getVaccinationCode() + " chưa có yêu cầu cấp thuốc tới kho. Gửi yêu cầu (POST /api/v1/vaccinations/" + v.getVaccinationCode() + "/stock-request) và chờ kho cấp.";
+        }
+        if (!STOCK_ISSUED.contains(req.getStatus())) {
+            return "Kho chưa cấp thuốc cho lịch " + v.getVaccinationCode() + " (yêu cầu " + req.getRequisitionCode() + " đang " + req.getStatus()
+                    + (req.getRejectReason() != null ? ": " + req.getRejectReason() : "") + ")."
+                    + (STOCK_DEAD.contains(req.getStatus()) ? " Gửi lại yêu cầu cấp thuốc." : " Chờ kho cấp rồi mới tiêm.");
+        }
+        return null;
+    }
+
+    private InventoryItem medicalItem(Integer itemId) {
+        InventoryItem item = itemRepository.findById(itemId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy vật tư với ID: " + itemId));
+        if (!ItemCategories.isMedical(item.getCategory())) {
+            throw new IllegalArgumentException("'" + item.getItemName() + "' (nhóm " + item.getCategory() + ") không phải thuốc / vaccine.");
+        }
+        return item;
+    }
+
+    // DTO kèm trạng thái yêu cầu cấp thuốc và quyền xác nhận tiêm
+    private VaccinationRecordDTO dto(Vaccination v) {
+        VaccinationRecordDTO d = toDto(v);
+        var req = latestRequisition(v).orElse(null);
+        if (req != null) {
+            d.setRequisitionCode(req.getRequisitionCode());
+            d.setRequisitionStatus(req.getStatus());
+            d.setRequisitionRejectReason(req.getRejectReason());
+        }
+        if (OPEN.contains(v.getStatus())) {
+            String blocked = executeBlockedReason(v, req, LocalDate.now());
+            d.setCanExecute(blocked == null);
+            d.setExecuteBlockedReason(blocked);
+        } else {
+            d.setCanExecute(false);
+        }
+        return d;
     }
 
     // ---------- hỗ trợ ----------

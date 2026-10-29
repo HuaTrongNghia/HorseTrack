@@ -35,8 +35,13 @@ public class CreateScheduleRequestDTO {
     // Chu kỳ nhắc lại (tháng): vaccine 1-24, tẩy giun 3-6; bỏ trống = không nhắc lại
     private Integer cycleMonths;
 
-    // Vật tư trong kho (tùy chọn): phải thuộc nhóm Thuốc / Vaccine
+    // Thuốc / vaccine trong kho (bắt buộc): lên lịch xong hệ thống gửi yêu cầu cấp thuốc tới kho, kho cấp rồi mới được tiêm
+    @jakarta.validation.constraints.NotNull(message = "Phải chọn thuốc / vaccine trong kho (itemId) để gửi yêu cầu cấp thuốc tới kho")
     private Integer itemId;
+
+    // Liều mỗi ngựa (theo đơn vị của vật tư), mặc định 1
+    @jakarta.validation.constraints.DecimalMin(value = "0.01", message = "Liều mỗi ngựa (dosePerHorse) phải lớn hơn 0")
+    private Double dosePerHorse;
 
     @Size(max = 500, message = "Ghi chú tối đa 500 ký tự")
     private String notes;
