@@ -39,6 +39,15 @@ public class TrainingPlanController {
         return ResponseEntity.ok(ApiResponse.ok("Fetched dashboard stats successfully", stats));
     }
 
+    @GetMapping("/manager-today")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @Operation(summary = "Tổng quan phiên tập hôm nay cho Quản lý CLB",
+            description = "Số ngựa đang quản lý, ngựa mới trong tháng và danh sách phiên tập hôm nay — một lần gọi thay vì tải từng giáo án.")
+    public ResponseEntity<ApiResponse<com.horsetrack.equinecare.modules.training.dto.ManagerTodayOverviewDTO>> getManagerToday() {
+        return ResponseEntity.ok(ApiResponse.ok("Lấy tổng quan phiên tập hôm nay thành công",
+                trainingPlanService.getManagerTodayOverview()));
+    }
+
     @GetMapping
     @PreAuthorize("hasAnyAuthority('Club Manager', 'Trainer', 'Groom', 'Veterinarian')")
     @Operation(summary = "Danh sách giáo án", description = "Lọc theo status. Phân trang page, size. HLV chỉ thấy ngựa được phân công.")

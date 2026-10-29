@@ -37,6 +37,16 @@ public interface HorseRepository extends JpaRepository<Horse, Integer> {
 
     long countByHealthStatus(String healthStatus);
 
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(h) FROM Horse h WHERE h.latestRegistrationStatus = 'APPROVED' "
+            + "OR (h.latestRegistrationStatus IS NULL AND h.stall IS NOT NULL)")
+    long countManaged();
+
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(h) FROM Horse h WHERE (h.latestRegistrationStatus = 'APPROVED' "
+            + "OR (h.latestRegistrationStatus IS NULL AND h.stall IS NOT NULL)) "
+            + "AND h.createdAt >= :from AND h.createdAt < :to")
+    long countManagedCreatedBetween(@org.springframework.data.repository.query.Param("from") java.time.LocalDateTime from,
+                                    @org.springframework.data.repository.query.Param("to") java.time.LocalDateTime to);
+
     @org.springframework.data.jpa.repository.Query("SELECT h FROM Horse h WHERE h.isLocked = false AND h.stall IS NOT NULL AND h.horseId NOT IN (SELECT tp.horse.horseId FROM TrainingPlan tp WHERE tp.status IN ('PENDING', 'ACTIVE', 'PAUSED'))")
     List<Horse> findAvailableHorses();
 

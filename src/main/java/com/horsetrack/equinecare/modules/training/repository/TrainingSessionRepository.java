@@ -14,6 +14,11 @@ public interface TrainingSessionRepository extends JpaRepository<TrainingSession
     long countByTrainingPlan_Horse_AssignedTrainer_UserIdAndSessionDateBetween(Integer trainerId, LocalDateTime startOfDay, LocalDateTime endOfDay);
     
     List<TrainingSession> findByAssignedTo_UserIdAndSessionDateBetweenOrderBySessionDateAsc(Integer assignedToId, LocalDateTime startDate, LocalDateTime endDate);
+
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM TrainingSession s JOIN FETCH s.trainingPlan p JOIN FETCH p.horse h " +
+            "LEFT JOIN FETCH h.assignedTrainer WHERE s.sessionDate >= :from AND s.sessionDate < :to ORDER BY s.sessionDate ASC, s.sessionId ASC")
+    List<TrainingSession> findTodayWithPlanHorse(@org.springframework.data.repository.query.Param("from") LocalDateTime from,
+                                                 @org.springframework.data.repository.query.Param("to") LocalDateTime to);
     
     long countByTrainingPlan_PlanIdAndStatus(Integer planId, String status);
 

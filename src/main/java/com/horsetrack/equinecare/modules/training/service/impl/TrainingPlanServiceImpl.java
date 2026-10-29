@@ -83,6 +83,37 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public ManagerTodayOverviewDTO getManagerTodayOverview() {
+        LocalDate today = LocalDate.now();
+        LocalDateTime dayStart = today.atStartOfDay();
+        LocalDateTime dayEnd = dayStart.plusDays(1);
+        LocalDateTime monthStart = today.withDayOfMonth(1).atStartOfDay();
+        LocalDateTime monthEnd = monthStart.plusMonths(1);
+        List<ManagerTodaySessionDTO> sessions = trainingSessionRepository.findTodayWithPlanHorse(dayStart, dayEnd).stream()
+                .map(s -> {
+                    Horse horse = s.getTrainingPlan().getHorse();
+                    User trainer = horse.getAssignedTrainer();
+                    return ManagerTodaySessionDTO.builder()
+                            .sessionId(s.getSessionId())
+                            .sessionDate(s.getSessionDate())
+                            .horseName(horse.getHorseName())
+                            .planName(s.getTrainingPlan().getPlanName())
+                            .activityType(s.getActivityType())
+                            .trainerName(trainer != null ? trainer.getFullName() : null)
+                            .status(s.getStatus())
+                            .notes(s.getNotes())
+                            .build();
+                })
+                .collect(Collectors.toList());
+        return ManagerTodayOverviewDTO.builder()
+                .horseCount((int) horseRepository.countManaged())
+                .newHorsesThisMonth((int) horseRepository.countManagedCreatedBetween(monthStart, monthEnd))
+                .sessions(sessions)
+                .build();
+    }
+
+    @Override
     public Page<TrainingPlanSummaryDTO> getTrainingPlans(String status, Pageable pageable) {
         Page<TrainingPlan> plansPage;
         boolean byStatus = status != null && !status.trim().isEmpty();
@@ -118,6 +149,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                     .status(plan.getStatus())
                     .progress(progress)
                     .type(plan.getPlanType())
+                    .goal(plan.getGoal())
                     .phases(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.toDtos(plan))
                     .build();
         });

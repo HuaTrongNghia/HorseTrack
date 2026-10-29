@@ -1,13 +1,16 @@
 package com.horsetrack.equinecare.modules.inventory.service;
 
+import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.inventory.dto.InventoryItemDTO;
 import com.horsetrack.equinecare.modules.inventory.dto.InventoryLotDTO;
 import com.horsetrack.equinecare.modules.inventory.dto.StockTransactionDTO;
 import com.horsetrack.equinecare.modules.inventory.entity.InventoryItem;
 import com.horsetrack.equinecare.modules.inventory.entity.InventoryLot;
 import com.horsetrack.equinecare.modules.inventory.entity.StockTransaction;
+import jakarta.persistence.EntityNotFoundException;
 
 import java.util.List;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /** Chuyển entity kho sang DTO, dùng chung cho các service của module kho. */
@@ -53,23 +56,36 @@ public final class InventoryMapper {
     }
 
     public static StockTransactionDTO toTransactionDTO(StockTransaction tx) {
+        InventoryItem item = linked(() -> tx.getItem(), InventoryItem::getItemId);
+        InventoryLot lot = linked(() -> tx.getLot(), InventoryLot::getLotNo);
+        User user = linked(() -> tx.getPerformedBy(), User::getUserId);
         return StockTransactionDTO.builder()
                 .transactionId(tx.getTransactionId())
                 .txCode(tx.getTxCode())
                 .txType(tx.getTxType())
-                .itemId(tx.getItem().getItemId())
-                .itemCode(tx.getItem().getItemCode())
-                .itemName(tx.getItem().getItemName())
-                .lotNo(tx.getLot() != null ? tx.getLot().getLotNo() : null)
+                .itemId(item != null ? item.getItemId() : null)
+                .itemCode(item != null ? item.getItemCode() : null)
+                .itemName(item != null ? item.getItemName() : null)
+                .lotNo(lot != null ? lot.getLotNo() : null)
                 .quantity(tx.getQuantity())
                 .balanceAfter(tx.getBalanceAfter())
                 .refType(tx.getRefType())
                 .refId(tx.getRefId())
-                .performedById(tx.getPerformedBy() != null ? tx.getPerformedBy().getUserId() : null)
-                .performedByName(tx.getPerformedBy() != null ? tx.getPerformedBy().getFullName() : null)
+                .performedById(user != null ? user.getUserId() : null)
+                .performedByName(user != null ? user.getFullName() : null)
                 .performedAt(tx.getPerformedAt())
                 .note(tx.getNote())
                 .build();
+    }
+
+    private static <T> T linked(Supplier<T> load, java.util.function.Function<T, ?> touch) {
+        try {
+            T value = load.get();
+            if (value != null) touch.apply(value);
+            return value;
+        } catch (EntityNotFoundException ex) {
+            return null;
+        }
     }
 
     /** Câu cảnh báo BR_08 khi khả dụng thấp hơn mức an toàn; null nếu vẫn an toàn. */

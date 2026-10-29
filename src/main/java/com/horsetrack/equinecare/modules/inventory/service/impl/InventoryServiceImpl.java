@@ -14,6 +14,7 @@ import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -145,10 +146,18 @@ public class InventoryServiceImpl implements InventoryService {
         if (fromDate != null && toDate != null && toDate.isBefore(fromDate)) {
             throw new IllegalArgumentException("toDate không được nhỏ hơn fromDate.");
         }
-        String type = StringUtils.hasText(txType) ? txType.trim().toUpperCase() : null;
-        LocalDateTime from = fromDate != null ? fromDate.atStartOfDay() : null;
-        LocalDateTime to = toDate != null ? toDate.plusDays(1).atStartOfDay() : null;
-        return transactionRepository.search(itemId, type, from, to, PageRequest.of(page, size))
+        int safePage = Math.max(page, 0);
+        int safeSize = Math.min(Math.max(size, 1), 500);
+        Sort newest = Sort.by(Sort.Order.desc("performedAt"), Sort.Order.desc("transactionId"));
+        if (itemId == null && !StringUtils.hasText(txType) && fromDate == null && toDate == null) {
+            return transactionRepository.findAll(PageRequest.of(safePage, safeSize, newest))
+                    .map(InventoryMapper::toTransactionDTO);
+        }
+        Integer item = itemId != null ? itemId : -1;
+        String type = StringUtils.hasText(txType) ? txType.trim().toUpperCase() : "";
+        LocalDateTime from = fromDate != null ? fromDate.atStartOfDay() : LocalDateTime.of(1970, 1, 1, 0, 0);
+        LocalDateTime to = toDate != null ? toDate.plusDays(1).atStartOfDay() : LocalDateTime.of(9999, 1, 1, 0, 0);
+        return transactionRepository.search(item, type, from, to, PageRequest.of(safePage, safeSize))
                 .map(InventoryMapper::toTransactionDTO);
     }
 

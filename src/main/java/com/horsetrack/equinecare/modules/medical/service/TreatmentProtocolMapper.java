@@ -112,7 +112,7 @@ public class TreatmentProtocolMapper {
     }
 
     public List<TreatmentProtocolDTO> toSummaryList(List<TreatmentProtocol> protocols) {
-        return protocols.stream().map(p -> toDTO(p, false)).collect(Collectors.toList());
+        return protocols.stream().map(p -> toDTO(p, true)).collect(Collectors.toList());
     }
 
     private static TreatmentProtocolDTO.StockAnswer toStockAnswer(StockHold h) {

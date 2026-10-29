@@ -40,7 +40,7 @@ public class StockCountServiceImpl implements StockCountService {
     @Transactional(readOnly = true)
     public List<StockCountDTO> getCounts() {
         return countRepository.findAllByOrderByCountMonthDesc().stream()
-                .map(c -> toDTO(c, false))
+                .map(c -> toDTO(c, true))
                 .collect(Collectors.toList());
     }
 
