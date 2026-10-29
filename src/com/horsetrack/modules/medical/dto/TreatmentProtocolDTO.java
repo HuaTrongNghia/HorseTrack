@@ -43,7 +43,7 @@ public class TreatmentProtocolDTO {
     private LocalDateTime confirmedAt;
     private LocalDateTime closedAt;
     private BigDecimal totalCost;
-    private Boolean emergency;            // Ca cấp cứu (CRITICAL): không bị tạm dừng vì chưa thanh toán (BR_17)
+    private Boolean emergency;            // Cấp cứu (ngựa EMERGENCY hoặc ca CRITICAL): không chờ thanh toán mới cấp phát (BR_17)
     private Boolean pendingSupplement;    // Đang điều trị và có thuốc bổ sung chờ kho cấp
     private List<Phase> phases;           // Chỉ có ở API chi tiết
     private List<StockAnswer> stockAnswer; // Kết quả kiểm kho của kho (chỉ có ở API chi tiết)
@@ -60,7 +60,7 @@ public class TreatmentProtocolDTO {
         private LocalDate startDate;
         private Integer durationDays;
         private String goal;
-        // Hóa đơn của giai đoạn (BR_16): phải thanh toán trước ngày bắt đầu
+        // Hóa đơn của giai đoạn. Giai đoạn sau chỉ thanh toán được khi giai đoạn trước đã hoàn thành lâm sàng.
         private Integer invoiceId;
         private String invoiceCode;
         private String invoiceStatus;
