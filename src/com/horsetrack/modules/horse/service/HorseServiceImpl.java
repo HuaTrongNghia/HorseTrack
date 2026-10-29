@@ -625,7 +625,7 @@ public class HorseServiceImpl implements HorseService {
         horseRepository.save(horse);
     }
 
-    // Chiều cao theo cm; FE cũ gửi heightHands thì đổi sang cm
+    
     private static BigDecimal heightCm(BigDecimal cm, BigDecimal hands) {
         if (cm != null) {
             return cm.setScale(1, java.math.RoundingMode.HALF_UP);
