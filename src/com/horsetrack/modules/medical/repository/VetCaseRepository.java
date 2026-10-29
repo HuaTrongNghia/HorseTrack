@@ -22,6 +22,9 @@ public interface VetCaseRepository extends JpaRepository<VetCase, Integer> {
 
     Optional<VetCase> findByCaseCode(String caseCode);
 
+    // Ca khám còn mở của ngựa theo nguồn (ví dụ SESSION_STOP: dừng buổi tập vì vượt ngưỡng)
+    Optional<VetCase> findFirstByHorse_HorseIdAndSourceAndStatusNotInOrderByCaseIdDesc(Integer horseId, String source, Collection<String> statuses);
+
     @Query("SELECT c FROM VetCase c WHERE c.source = 'SESSION_STOP' AND c.trainingDayId IN :ids ORDER BY c.caseId DESC")
     List<VetCase> findSessionStops(@Param("ids") Collection<Integer> ids);
 }
