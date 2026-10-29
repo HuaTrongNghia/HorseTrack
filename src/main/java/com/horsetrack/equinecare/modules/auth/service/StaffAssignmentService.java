@@ -10,15 +10,12 @@ import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.care.repository.CareTaskRepository;
 import com.horsetrack.equinecare.modules.horse.repository.StallRepository;
 import com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter;
-import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.training.repository.TrainingSessionRepository;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
-import org.springframework.web.util.HtmlUtils;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -30,7 +27,6 @@ import java.util.Objects;
  * Groom chỉ nhận buổi tập và việc chăm sóc của ngựa trong khu mình (F21-04, F4-03), nên không cho đổi hoặc bỏ khu
  * khi Groom còn việc chưa xong ở khu hiện tại.
  */
-@Slf4j
 @Service
 @RequiredArgsConstructor
 public class StaffAssignmentService {
@@ -44,7 +40,6 @@ public class StaffAssignmentService {
     private final CareTaskRepository careTaskRepository;
     private final TrainingSessionRepository sessionRepository;
     private final AuditTrail auditTrail;
-    private final EmailService emailService;
     private final AssignmentRequestWriter assignmentRequests;
 
     @Transactional(readOnly = true)
@@ -75,18 +70,7 @@ public class StaffAssignmentService {
         groomProfileRepository.save(profile);
         auditTrail.record(newZone == null ? "UNASSIGN_GROOM_ZONE" : "ASSIGN_GROOM_ZONE", "Groom_Profiles",
                 "assigned_barn_zone=" + oldZone, "assigned_barn_zone=" + newZone + " | Groom " + groom.getFullName() + " (user_id=" + userId + ")");
-        if (StringUtils.hasText(groom.getEmail())) {
-            try {
-                emailService.sendAsync("GROOM_ZONE", groom.getEmail(), "[HorseTrack] Khu chăm sóc đã có hiệu lực",
-                        "<p>Xin chào <b>" + HtmlUtils.htmlEscape(groom.getFullName()) + "</b>,</p>"
-                                + (newZone == null
-                                ? "<p>Bạn đã xác nhận bỏ khu chăm sóc" + (oldZone != null ? " (" + HtmlUtils.htmlEscape(oldZone) + ")" : "") + ".</p>"
-                                : "<p>Bạn đã xác nhận phụ trách <b>" + HtmlUtils.htmlEscape(newZone) + "</b>"
-                                        + (oldZone != null ? " (trước đây: " + HtmlUtils.htmlEscape(oldZone) + ")" : "") + ".</p>"));
-            } catch (Exception ex) {
-                log.warn("Không gửi được email đổi khu cho {}: {}", groom.getEmail(), ex.getMessage());
-            }
-        }
+        // Không gửi mail/chuông "đã hiệu lực" — Mã phu vừa tự xác nhận trên app.
         return toDTO(groom, newZone);
     }
 

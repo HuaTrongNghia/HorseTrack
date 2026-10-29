@@ -3,6 +3,7 @@ package com.horsetrack.equinecare.modules.nutrition.service;
 import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.nutrition.entity.NutritionPlan;
 import com.horsetrack.equinecare.modules.nutrition.repository.NutritionPlanRepository;
@@ -31,6 +32,7 @@ public class NutritionLockHandler {
     private final NutritionFeedTaskService feedTaskService;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
 
     @Transactional
     public int onHorseLocked(Horse horse) {
@@ -83,7 +85,14 @@ public class NutritionLockHandler {
     }
 
     private void notify(User user, String subject, String body) {
-        if (user == null || !StringUtils.hasText(user.getEmail())) {
+        if (user == null) {
+            return;
+        }
+        String title = subject != null && subject.startsWith("[HorseTrack] ") ? subject.substring(13) : subject;
+        String plain = body.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+        String link = user.getRoleName() != null && user.getRoleName().contains("Veterinarian") ? "/vet" : "/trainer";
+        appNotifications.push(user, "NUTRITION", title, plain, link);
+        if (!StringUtils.hasText(user.getEmail())) {
             return;
         }
         try {

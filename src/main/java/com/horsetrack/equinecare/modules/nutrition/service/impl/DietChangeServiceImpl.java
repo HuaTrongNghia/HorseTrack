@@ -43,6 +43,7 @@ public class DietChangeServiceImpl implements DietChangeService {
     private final com.horsetrack.equinecare.modules.nutrition.service.NutritionFeedTaskService feedTaskService;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
+    private final com.horsetrack.equinecare.modules.notification.service.AppNotificationService appNotifications;
 
     private User currentUserOrNull() {
         try {
@@ -210,16 +211,21 @@ public class DietChangeServiceImpl implements DietChangeService {
                 ? userRepository.findByRoleNameInAndIsActiveTrue(List.of(com.horsetrack.equinecare.modules.nutrition.service.NutritionScope.ROLE_VET))
                 : (horse.getAssignedTrainer() != null ? List.of(horse.getAssignedTrainer()) : List.<User>of());
         String esc = org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName());
+        String link = locked(horse) ? "/vet" : "/trainer";
+        String title = "Đề nghị điều chỉnh khẩu phần — ngựa " + horse.getHorseName();
+        String plain = r.getRequestedBy().getFullName() + " đề nghị: " + r.getRequestDetail()
+                + ". Lý do: " + r.getReason();
         for (User u : to) {
+            appNotifications.push(u, "DIET_REQUEST", title, plain, link);
             if (!StringUtils.hasText(u.getEmail())) {
                 continue;
             }
             try {
-                emailService.sendAsync("DIET_REQUEST", u.getEmail(), "[HorseTrack] Đề nghị điều chỉnh khẩu phần - ngựa " + horse.getHorseName(),
+                emailService.sendAsync("DIET_REQUEST", u.getEmail(), "[HorseTrack] " + title,
                         "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(u.getFullName()) + "</b>,</p>"
                                 + "<p><b>" + org.springframework.web.util.HtmlUtils.htmlEscape(r.getRequestedBy().getFullName()) + "</b> đề nghị điều chỉnh khẩu phần cho ngựa <b>" + esc + "</b>: "
                                 + org.springframework.web.util.HtmlUtils.htmlEscape(r.getRequestDetail()) + ".</p><p>Lý do: " + org.springframework.web.util.HtmlUtils.htmlEscape(r.getReason()) + "</p>"
-                                + "<p>Vui lòng xét duyệt (PUT /api/v1/diet-requests/" + r.getRequestId() + "/decide).</p>");
+                                + "<p>Vui lòng xét duyệt trên HorseTrack.</p>");
             } catch (Exception ex) {
                 // Không làm hỏng việc gửi đề xuất nếu email lỗi
             }

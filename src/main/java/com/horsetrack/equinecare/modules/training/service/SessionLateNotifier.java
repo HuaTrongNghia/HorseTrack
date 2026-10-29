@@ -2,6 +2,7 @@ package com.horsetrack.equinecare.modules.training.service;
 
 import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.training.entity.TrainingPlan;
 import com.horsetrack.equinecare.modules.training.entity.TrainingSession;
@@ -30,6 +31,7 @@ public class SessionLateNotifier {
     private final TrainingPlanRepository planRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
 
     @Transactional
     public int notify(LocalDate today) {
@@ -62,24 +64,26 @@ public class SessionLateNotifier {
     private void mail(TrainingPlan plan, TrainingSession session) {
         String horse = plan.getHorse().getHorseName();
         String when = String.valueOf(session.getSessionDate());
+        String plain = "Buổi tập " + session.getActivityType() + " của ngựa " + horse + " (giáo án " + plan.getPlanName()
+                + ") lúc " + when + " đã qua mà nhân viên chưa xác nhận và chưa bắt đầu.";
         String body = "<p>Buổi tập <b>" + HtmlUtils.htmlEscape(session.getActivityType()) + "</b> của ngựa <b>"
                 + HtmlUtils.htmlEscape(horse) + "</b> (giáo án " + HtmlUtils.htmlEscape(plan.getPlanName())
                 + ") lúc " + HtmlUtils.htmlEscape(when) + " đã qua mà nhân viên chưa xác nhận và chưa bắt đầu.</p>"
                 + "<p>Chủ ngựa thấy ghi chú trễ trên hồ sơ giáo án.</p>";
-        List<User> managers = userRepository.findByRoleNameInAndIsActiveTrue(List.of("Club Manager"));
-        if (plan.getHorse().getOwner() != null) {
-            managers = new java.util.ArrayList<>(managers);
-            managers.add(plan.getHorse().getOwner());
-        }
-        for (User user : managers) {
-            if (user.getEmail() == null || user.getEmail().isBlank()) {
-                continue;
-            }
+        String title = "Buổi tập trễ — " + horse;
+        // QLCLB: mail + chuông. Chủ ngựa: chỉ chuông (tránh spam mail).
+        for (User manager : userRepository.findByRoleNameInAndIsActiveTrue(List.of("Club Manager"))) {
+            appNotifications.push(manager, "SESSION_LATE", title, plain, "/manager");
+            if (!StringUtils.hasText(manager.getEmail())) continue;
             try {
-                emailService.send("SESSION_LATE", user.getEmail(), "[HorseTrack] Buổi tập trễ — " + horse, body);
+                emailService.send("SESSION_LATE", manager.getEmail(), "[HorseTrack] " + title, body);
             } catch (RuntimeException ex) {
-                log.warn("Không gửi được email buổi tập trễ tới {}: {}", user.getEmail(), ex.getMessage());
+                log.warn("Không gửi được email buổi tập trễ tới {}: {}", manager.getEmail(), ex.getMessage());
             }
+        }
+        User owner = plan.getHorse().getOwner();
+        if (owner != null) {
+            appNotifications.push(owner, "SESSION_LATE", title, plain, "/owner");
         }
     }
 }

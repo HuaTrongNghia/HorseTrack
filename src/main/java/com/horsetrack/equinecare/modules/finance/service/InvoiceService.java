@@ -14,6 +14,7 @@ import com.horsetrack.equinecare.modules.finance.repository.InvoiceRepository;
 import com.horsetrack.equinecare.modules.finance.repository.PaymentTransactionRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Stall;
 import com.horsetrack.equinecare.modules.horse.repository.StallRepository;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -61,6 +62,7 @@ public class InvoiceService {
     private final BillingPolicy billingPolicy;
     private final AuditTrail auditTrail;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
 
     // ==========================================
     // CHỦ NGỰA
@@ -332,7 +334,15 @@ public class InvoiceService {
     }
 
     void notify(User user, String subject, String body) {
-        if (user == null || !StringUtils.hasText(user.getEmail())) {
+        if (user == null) {
+            return;
+        }
+        String title = subject != null && subject.startsWith("[HorseTrack] ") ? subject.substring(13) : subject;
+        String plain = body == null ? title : body.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+        String role = user.getRoleName() == null ? "" : user.getRoleName();
+        String link = role.contains("Veterinarian") ? "/vet" : "/owner";
+        appNotifications.push(user, "BILLING", title, plain, link);
+        if (!StringUtils.hasText(user.getEmail())) {
             return;
         }
         try {

@@ -7,6 +7,7 @@ import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
 import com.horsetrack.equinecare.modules.horse.repository.HorseRepository;
 import com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.tournament.dto.*;
 import com.horsetrack.equinecare.modules.tournament.entity.CompetitionEntry;
@@ -53,6 +54,7 @@ public class RaceProposalService {
     private final UserRepository userRepository;
     private final HorseAccessGuard horseAccessGuard;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
     private final AuditTrail auditTrail;
 
     // ---------- Giải đấu ----------
@@ -347,7 +349,14 @@ public class RaceProposalService {
     }
 
     private void notify(User to, String subject, String html) {
-        if (to == null || !StringUtils.hasText(to.getEmail())) {
+        if (to == null) {
+            return;
+        }
+        String title = subject != null && subject.startsWith("[HorseTrack] ") ? subject.substring(13) : subject;
+        String plain = html == null ? title : html.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+        String link = to.getRoleName() != null && to.getRoleName().contains("Owner") ? "/owner" : "/trainer";
+        appNotifications.push(to, "RACE_PROPOSAL", title, plain, link);
+        if (!StringUtils.hasText(to.getEmail())) {
             return;
         }
         try {

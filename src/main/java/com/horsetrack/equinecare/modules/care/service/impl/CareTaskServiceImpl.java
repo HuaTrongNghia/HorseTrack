@@ -42,7 +42,7 @@ public class CareTaskServiceImpl implements CareTaskService {
     private final GroomProfileRepository groomProfileRepository;
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.nutrition.service.NutritionFeedTaskService feedTaskService;
-    private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
+    private final com.horsetrack.equinecare.modules.notification.service.AppNotificationService appNotifications;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.nutrition.service.StallService stallService;
 
@@ -75,25 +75,20 @@ public class CareTaskServiceImpl implements CareTaskService {
                 .orElseThrow(() -> new RuntimeException("Không tìm thấy người dùng"));
     }
 
-    // Báo HLV phụ trách ngựa khi Groom hoàn thành việc (việc cho ăn tự sinh từ khẩu phần thì không gửi, tránh quá nhiều email)
+    // Báo HLV phụ trách qua chuông (không mail — tránh spam). Việc ăn KP- bỏ qua.
     private void notifyTrainerDone(CareTask task, User groom) {
         Horse horse = task.getHorse();
         User trainer = horse != null ? horse.getAssignedTrainer() : null;
-        if (trainer == null || trainer.getEmail() == null || trainer.getEmail().isBlank()
-                || (task.getNotes() != null && task.getNotes().startsWith("KP-"))) {
+        if (trainer == null || (task.getNotes() != null && task.getNotes().startsWith("KP-"))) {
             return;
         }
         String when = task.getCompletedAt().format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"));
         String title = task.getTitle() != null ? task.getTitle() : task.getTaskType();
-        try {
-            emailService.sendAsync("CARE_TASK_DONE", trainer.getEmail(), "[HorseTrack] Đã hoàn thành: " + title + " - ngựa " + horse.getHorseName(),
-                    "<p>Xin chào <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(trainer.getFullName()) + "</b>,</p>"
-                            + "<p>Groom <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(groom.getFullName()) + "</b> đã hoàn thành việc <b>"
-                            + org.springframework.web.util.HtmlUtils.htmlEscape(title) + "</b> cho ngựa <b>" + org.springframework.web.util.HtmlUtils.htmlEscape(horse.getHorseName())
-                            + "</b> (lịch " + task.getScheduledTime() + " ngày " + task.getTaskDate() + ") lúc <b>" + when + "</b>.</p>");
-        } catch (Exception ex) {
-            // Không làm hỏng việc ghi nhận hoàn thành nếu gửi email lỗi
-        }
+        appNotifications.push(trainer, "CARE_TASK_DONE",
+                "Đã hoàn thành: " + title + " — " + horse.getHorseName(),
+                "Mã phu " + groom.getFullName() + " đã xong việc \"" + title + "\" cho ngựa " + horse.getHorseName()
+                        + " (lịch " + task.getScheduledTime() + " ngày " + task.getTaskDate() + ") lúc " + when + ".",
+                "/trainer");
     }
 
     // Thời điểm sớm nhất được xác nhận hoàn thành: giờ hẹn trừ khung xác nhận sớm; việc không có giờ hẹn thì từ đầu ngày của việc
@@ -274,6 +269,13 @@ public class CareTaskServiceImpl implements CareTaskService {
         CareTask saved = careTaskRepository.saveAndFlush(task);
         // Đọc lại từ DB để lấy task_code do DB tự sinh
         entityManager.refresh(saved);
+        String taskLabel = saved.getTitle() != null ? saved.getTitle() : saved.getTaskType();
+        appNotifications.push(groom, "CARE_TASK_ASSIGNED",
+                "Việc mới: " + taskLabel + " — " + horse.getHorseName(),
+                "Bạn được giao việc \"" + taskLabel + "\" cho ngựa " + horse.getHorseName()
+                        + " ngày " + saved.getTaskDate()
+                        + (saved.getScheduledTime() != null ? " lúc " + saved.getScheduledTime() : "") + ".",
+                "/groom");
         return mapToDTO(saved);
     }
 }

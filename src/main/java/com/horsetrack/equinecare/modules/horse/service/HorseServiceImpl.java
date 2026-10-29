@@ -49,7 +49,7 @@ public class HorseServiceImpl implements HorseService {
     private final com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler;
     private final HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository;
-    private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
+    private final com.horsetrack.equinecare.modules.notification.service.AppNotificationService appNotifications;
     private final com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests;
     private final com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService;
     private final RegistrationAttachmentService attachmentService;
@@ -61,7 +61,7 @@ public class HorseServiceImpl implements HorseService {
                             com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler,
                             HorseAccessGuard horseAccessGuard,
                             com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository,
-                            com.horsetrack.equinecare.modules.notification.service.EmailService emailService,
+                            com.horsetrack.equinecare.modules.notification.service.AppNotificationService appNotifications,
                             com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests,
                             com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService,
                             RegistrationAttachmentService attachmentService,
@@ -75,7 +75,7 @@ public class HorseServiceImpl implements HorseService {
         this.trainingLockHandler = trainingLockHandler;
         this.horseAccessGuard = horseAccessGuard;
         this.trainingPlanRepository = trainingPlanRepository;
-        this.emailService = emailService;
+        this.appNotifications = appNotifications;
         this.assignmentRequests = assignmentRequests;
         this.injuryService = injuryService;
         this.attachmentService = attachmentService;
@@ -221,9 +221,7 @@ public class HorseServiceImpl implements HorseService {
         horseRepository.save(horse);
         auditTrail.record("UNASSIGN_TRAINER", "Horses", "assigned_trainer_id=" + previous.getUserId(),
                 "assigned_trainer_id=null | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ")");
-        mailTrainer(previous, "[HorseTrack] Bạn không còn phụ trách ngựa " + horse.getHorseName(),
-                "<p>Xin chào <b>" + esc(previous.getFullName()) + "</b>,</p>"
-                        + "<p>Bạn đã xác nhận bỏ phân công ngựa <b>" + esc(horse.getHorseName()) + "</b>.</p>");
+        // Không mail — HLV vừa tự xác nhận bỏ trên app.
         return mapToResponseDTO(horse);
     }
 
@@ -259,15 +257,11 @@ public class HorseServiceImpl implements HorseService {
                 "assigned_trainer_id=" + trainer.getUserId() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId()
                         + ") | bàn giao " + handedOver + " giáo án");
 
-        String stall = horse.getStall() != null ? " (chuồng " + esc(horse.getStall().getStallCode()) + ")" : "";
-        mailTrainer(trainer, "[HorseTrack] Bạn đã nhận ngựa " + horse.getHorseName(),
-                "<p>Xin chào <b>" + esc(trainer.getFullName()) + "</b>,</p>"
-                        + "<p>Bạn đã xác nhận phụ trách ngựa <b>" + esc(horse.getHorseName()) + "</b>" + stall + ". Phân công có hiệu lực.</p>"
-                        + (handedOver > 0 ? "<p>Bạn tiếp nhận " + handedOver + " giáo án đang chạy của ngựa này.</p>" : ""));
+        // HLV mới vừa tự xác nhận → không spam mail/chuông. Chỉ báo HLV cũ qua chuông.
         if (previous != null) {
-            mailTrainer(previous, "[HorseTrack] Ngựa " + horse.getHorseName() + " đã chuyển sang HLV khác",
-                    "<p>Xin chào <b>" + esc(previous.getFullName()) + "</b>,</p>"
-                            + "<p>HLV <b>" + esc(trainer.getFullName()) + "</b> đã xác nhận nhận ngựa <b>" + esc(horse.getHorseName()) + "</b>. Bạn không còn phụ trách ngựa này.</p>");
+            notifyTrainerBell(previous, "Ngựa " + horse.getHorseName() + " đã chuyển sang HLV khác",
+                    "HLV " + trainer.getFullName() + " đã xác nhận nhận ngựa " + horse.getHorseName()
+                            + ". Bạn không còn phụ trách ngựa này.");
         }
         return mapToResponseDTO(horse);
     }
@@ -302,13 +296,8 @@ public class HorseServiceImpl implements HorseService {
         return new PreparedTrainer(horse, trainer, previous);
     }
 
-    private void mailTrainer(User user, String subject, String html) {
-        if (user == null || !StringUtils.hasText(user.getEmail())) return;
-        try {
-            emailService.sendAsync("TRAINER_ASSIGNMENT", user.getEmail(), subject, html);
-        } catch (Exception ignored) {
-            // Email chỉ là thông báo
-        }
+    private void notifyTrainerBell(User user, String title, String message) {
+        appNotifications.push(user, "TRAINER_ASSIGNMENT", title, message, "/trainer");
     }
 
     private static String esc(String value) {

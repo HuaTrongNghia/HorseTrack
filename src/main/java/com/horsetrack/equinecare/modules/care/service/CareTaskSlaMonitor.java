@@ -4,6 +4,7 @@ import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.care.entity.CareTask;
 import com.horsetrack.equinecare.modules.care.repository.CareTaskRepository;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -36,6 +37,7 @@ public class CareTaskSlaMonitor {
     private final CareTaskRepository careTaskRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
 
     @Value("${app.care.sla-minutes:45}")
     private long slaMinutes;
@@ -74,13 +76,16 @@ public class CareTaskSlaMonitor {
                 + " phút kể từ giờ hẹn:</p><ul>" + rows + "</ul>"
                 + "<p>Xem chi tiết tại GET /api/v1/care-tasks/overdue.</p>";
 
+        String title = late.size() + " việc chăm sóc trễ hạn";
+        String plain = "Có " + late.size() + " việc chăm sóc chưa hoàn thành sau " + slaMinutes + " phút kể từ giờ hẹn.";
         List<User> managers = userRepository.findByRoleNameInAndIsActiveTrue(List.of("Club Manager"));
         for (User m : managers) {
+            appNotifications.push(m, "CARE_TASK_OVERDUE", title, plain, "/manager");
             if (!StringUtils.hasText(m.getEmail())) {
                 continue;
             }
             try {
-                emailService.sendAsync("CARE_TASK_OVERDUE", m.getEmail(), "[HorseTrack] " + late.size() + " việc chăm sóc trễ hạn",
+                emailService.sendAsync("CARE_TASK_OVERDUE", m.getEmail(), "[HorseTrack] " + title,
                         "<p>Xin chào <b>" + esc(m.getFullName()) + "</b>,</p>" + body);
             } catch (Exception ex) {
                 log.warn("Không gửi được cảnh báo SLA tới {}: {}", m.getEmail(), ex.getMessage());

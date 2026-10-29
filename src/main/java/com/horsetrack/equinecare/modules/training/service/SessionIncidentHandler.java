@@ -1,6 +1,7 @@
 package com.horsetrack.equinecare.modules.training.service;
 
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.training.entity.TrainingPlan;
 import com.horsetrack.equinecare.modules.training.entity.TrainingSession;
@@ -31,6 +32,7 @@ public class SessionIncidentHandler {
     private final TrainingSessionRepository sessionRepository;
     private final TrainingPlanRepository planRepository;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
 
     /** Trả về số buổi tập đang chờ bác sĩ đã được kết thúc */
     @Transactional
@@ -90,9 +92,16 @@ public class SessionIncidentHandler {
     }
 
     private void notifyTrainer(TrainingPlan plan, Horse horse, String decision, int cancelled, boolean planClosed) {
-        if (plan.getHeadTrainer() == null || !StringUtils.hasText(plan.getHeadTrainer().getEmail())) {
+        if (plan.getHeadTrainer() == null) {
             return;
         }
+        String planLinePlain = planClosed
+                ? "Buổi tập bị dừng đã kết thúc; giáo án " + plan.getPlanName() + " chuyển " + plan.getStatus()
+                    + (cancelled > 0 ? " và " + cancelled + " buổi còn lại đã bị hủy" : "") + "."
+                : "Buổi tập bị dừng đã kết thúc. Giáo án " + plan.getPlanName() + " tiếp tục.";
+        String title = "Bác sĩ đã xử lý sự cố của ngựa " + horse.getHorseName();
+        appNotifications.push(plan.getHeadTrainer(), "TRAINING_INCIDENT", title, decision + ". " + planLinePlain, "/trainer");
+        if (!StringUtils.hasText(plan.getHeadTrainer().getEmail())) return;
         String planLine = planClosed
                 ? "Buổi tập bị dừng đã kết thúc; giáo án <b>" + HtmlUtils.htmlEscape(plan.getPlanName()) + "</b> chuyển <b>"
                     + plan.getStatus() + "</b>" + (cancelled > 0 ? " và " + cancelled + " buổi tập còn lại đã bị hủy" : "") + "."
@@ -102,7 +111,7 @@ public class SessionIncidentHandler {
                     + (Boolean.TRUE.equals(horse.getIsLocked()) ? " sau khi bác sĩ mở khóa huấn luyện." : ".")
                 : "Các buổi tập đã xếp của ngựa " + HtmlUtils.htmlEscape(horse.getHorseName()) + " vẫn được thực hiện.";
         try {
-            emailService.sendAsync("TRAINING_INCIDENT", plan.getHeadTrainer().getEmail(), "[HorseTrack] Bác sĩ đã xử lý sự cố của ngựa " + horse.getHorseName(),
+            emailService.sendAsync("TRAINING_INCIDENT", plan.getHeadTrainer().getEmail(), "[HorseTrack] " + title,
                     "<p>Xin chào <b>" + HtmlUtils.htmlEscape(plan.getHeadTrainer().getFullName()) + "</b>,</p>"
                             + "<p>" + HtmlUtils.htmlEscape(decision) + ".</p>"
                             + "<p>" + planLine + "</p>"

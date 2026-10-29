@@ -6,6 +6,7 @@ import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
 import com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.training.dto.*;
 import com.horsetrack.equinecare.modules.training.entity.SessionReading;
@@ -47,6 +48,7 @@ public class SessionMonitorService {
     private final TrainingPlanActivator planActivator;
     private final SessionReadingView readingView;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
     private final AuditTrail auditTrail;
     private final SessionVetLink sessionVetLink;
     private final com.horsetrack.equinecare.modules.medical.repository.VetCaseRepository vetCaseRepository;
@@ -256,13 +258,18 @@ public class SessionMonitorService {
         Horse horse = plan != null ? plan.getHorse() : null;
         User trainer = horse != null && horse.getAssignedTrainer() != null ? horse.getAssignedTrainer()
                 : plan != null ? plan.getHeadTrainer() : null;
-        if (trainer == null || !StringUtils.hasText(trainer.getEmail())) {
-            log.warn("Buổi tập #{} tạm dừng nhưng không có email HLV để báo", session.getSessionId());
+        if (trainer == null) {
+            log.warn("Buổi tập #{} tạm dừng nhưng không có HLV để báo", session.getSessionId());
             return;
         }
         String horseName = horse != null ? horse.getHorseName() : "?";
+        String title = "Buổi tập của ngựa " + horseName + " tạm dừng do vượt ngưỡng";
+        String plain = "Buổi tập #" + session.getSessionId() + " (" + session.getActivityType() + ") của ngựa "
+                + horseName + " đã tự tạm dừng: " + reason + ". Vào phiên tập để cho tiếp hoặc dừng gửi bác sĩ.";
+        appNotifications.push(trainer, "TRAINING_PAUSE", title, plain, "/trainer");
+        if (!StringUtils.hasText(trainer.getEmail())) return;
         try {
-            emailService.sendAsync("TRAINING_PAUSE", trainer.getEmail(), "[HorseTrack] Buổi tập của ngựa " + horseName + " tạm dừng do vượt ngưỡng",
+            emailService.sendAsync("TRAINING_PAUSE", trainer.getEmail(), "[HorseTrack] " + title,
                     "<p>Xin chào <b>" + HtmlUtils.htmlEscape(String.valueOf(trainer.getFullName())) + "</b>,</p>"
                             + "<p>Buổi tập #" + session.getSessionId() + " (" + HtmlUtils.htmlEscape(session.getActivityType()) + ") của ngựa <b>"
                             + HtmlUtils.htmlEscape(horseName) + "</b> đã tự tạm dừng: " + HtmlUtils.htmlEscape(reason) + ".</p>"

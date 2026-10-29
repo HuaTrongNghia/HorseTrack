@@ -2,6 +2,7 @@ package com.horsetrack.equinecare.modules.training.service;
 
 import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.training.entity.TrainingPlan;
 import com.horsetrack.equinecare.modules.training.entity.TrainingSession;
@@ -40,6 +41,7 @@ public class TrainingLockHandler {
     private final TrainingSessionRepository sessionRepository;
     private final TrainingPlanRepository planRepository;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
     private final SessionIncidentHandler incidentHandler;
     private final com.horsetrack.equinecare.modules.nutrition.service.NutritionLockHandler nutritionLockHandler;
 
@@ -103,15 +105,20 @@ public class TrainingLockHandler {
         return plans.size();
     }
 
-    // Gửi cho HLV phụ trách các giáo án và chủ ngựa (mỗi email một lần)
+    // Chuông + mail cho HLV phụ trách giáo án và chủ ngựa (mỗi user một lần)
     private void notify(Horse horse, List<TrainingPlan> plans, String subject, String body) {
-        Map<String, User> recipients = new LinkedHashMap<>();
-        plans.stream().map(TrainingPlan::getHeadTrainer).filter(u -> u != null && StringUtils.hasText(u.getEmail()))
-                .forEach(u -> recipients.putIfAbsent(u.getEmail().toLowerCase(), u));
-        if (horse.getOwner() != null && StringUtils.hasText(horse.getOwner().getEmail())) {
-            recipients.putIfAbsent(horse.getOwner().getEmail().toLowerCase(), horse.getOwner());
+        Map<Integer, User> recipients = new LinkedHashMap<>();
+        plans.stream().map(TrainingPlan::getHeadTrainer).filter(u -> u != null && u.getUserId() != null)
+                .forEach(u -> recipients.putIfAbsent(u.getUserId(), u));
+        if (horse.getOwner() != null && horse.getOwner().getUserId() != null) {
+            recipients.putIfAbsent(horse.getOwner().getUserId(), horse.getOwner());
         }
+        String plain = body.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+        String title = subject != null && subject.startsWith("[HorseTrack] ") ? subject.substring(13) : subject;
         recipients.values().forEach(u -> {
+            String link = u.getRoleName() != null && u.getRoleName().contains("Owner") ? "/owner" : "/trainer";
+            appNotifications.push(u, "VET_LOCK", title, plain, link);
+            if (!StringUtils.hasText(u.getEmail())) return;
             try {
                 emailService.sendAsync("VET_LOCK", u.getEmail(), subject, "<p>Xin chào <b>" + esc(u.getFullName()) + "</b>,</p>" + body);
             } catch (Exception ex) {

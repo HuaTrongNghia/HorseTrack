@@ -9,6 +9,7 @@ import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
 import com.horsetrack.equinecare.modules.horse.repository.HorseRepository;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -42,6 +43,7 @@ public class AssignmentRequestWriter {
     private final UserRepository userRepository;
     private final HorseRepository horseRepository;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
     private final AuditTrail auditTrail;
 
     @Transactional
@@ -222,7 +224,15 @@ public class AssignmentRequestWriter {
     }
 
     private void mail(User user, String purpose, String subject, String html) {
-        if (user == null || !StringUtils.hasText(user.getEmail())) return;
+        if (user == null) return;
+        String title = subject != null && subject.startsWith("[HorseTrack] ") ? subject.substring(13) : subject;
+        String plain = html == null ? title : html.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+        String role = user.getRoleName() == null ? "" : user.getRoleName();
+        String link = role.contains("Groom") ? "/groom"
+                : role.contains("Club Manager") ? "/manager"
+                : "/trainer";
+        appNotifications.push(user, purpose, title, plain, link);
+        if (!StringUtils.hasText(user.getEmail())) return;
         try {
             emailService.sendAsync(purpose, user.getEmail(), subject, html);
         } catch (Exception ex) {

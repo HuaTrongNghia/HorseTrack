@@ -3,6 +3,7 @@ package com.horsetrack.equinecare.modules.medical.service;
 import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -20,6 +21,7 @@ import org.springframework.web.util.HtmlUtils;
 public class HorseConditionNotifier {
 
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
     private final ProtocolPhaseBilling phaseBilling;
 
     public void onStatus(Horse horse, String status, String detail) {
@@ -76,16 +78,22 @@ public class HorseConditionNotifier {
 
     private void notify(Horse horse, String what, String detail) {
         User owner = horse.getOwner();
-        if (owner == null || !StringUtils.hasText(owner.getEmail())) {
-            log.warn("Không gửi email sức khỏe: ngựa {} chưa có email chủ.", horse.getHorseId());
+        if (owner == null) {
+            log.warn("Không gửi thông báo sức khỏe: ngựa {} chưa có chủ.", horse.getHorseId());
             return;
         }
         String horseName = horse.getHorseName();
         String subjectWhat = what.length() > 80 ? what.substring(0, 80) : what;
-        String subject = "[HorseTrack] Ngựa " + horseName + " " + subjectWhat;
-        if (subject.length() > 200) {
-            subject = subject.substring(0, 200);
+        String title = "Ngựa " + horseName + " " + subjectWhat;
+        if (title.length() > 200) {
+            title = title.substring(0, 200);
         }
+        String plain = "Ngựa " + horseName + " " + what + (StringUtils.hasText(detail) ? ". " + detail : "");
+        appNotifications.push(owner, "HORSE_HEALTH", title, plain, "/owner");
+        if (!StringUtils.hasText(owner.getEmail())) {
+            return;
+        }
+        String subject = "[HorseTrack] " + title;
         String detailHtml = StringUtils.hasText(detail)
                 ? "<p>" + HtmlUtils.htmlEscape(detail).replace("\n", "<br>") + "</p>"
                 : "";

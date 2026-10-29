@@ -6,6 +6,7 @@ import com.horsetrack.equinecare.modules.finance.entity.InvoiceLineItem;
 import com.horsetrack.equinecare.modules.finance.repository.InvoiceRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
 import com.horsetrack.equinecare.modules.horse.repository.HorseRepository;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +48,7 @@ public class InvoiceGenerator {
     private final EntityManager entityManager;
     private final BillingPolicy billingPolicy;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
 
     /** Ngày 1 hằng tháng (00:30) phát hành hóa đơn cho kỳ tháng trước (BR_12) */
     @Scheduled(cron = "${app.billing.generate-cron:0 30 0 1 * *}")
@@ -163,12 +165,17 @@ public class InvoiceGenerator {
     }
 
     private void notifyOwner(Invoice invoice, YearMonth period) {
+        String title = "Hóa đơn " + invoice.getInvoiceCode() + " kỳ " + period.format(MONTH_VN);
+        String plain = "Hóa đơn " + invoice.getInvoiceCode() + " cho ngựa " + invoice.getHorse().getHorseName()
+                + ", số tiền " + money(invoice.getFinalPayableAmount())
+                + ", hạn " + invoice.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) + ".";
+        appNotifications.push(invoice.getOwner(), "INVOICE", title, plain, "/owner");
         if (!StringUtils.hasText(invoice.getOwner().getEmail())) {
             return;
         }
         try {
             emailService.sendAsync("INVOICE", invoice.getOwner().getEmail(),
-                    "[HorseTrack] Hóa đơn " + invoice.getInvoiceCode() + " kỳ " + period.format(MONTH_VN),
+                    "[HorseTrack] " + title,
                     "<p>Xin chào <b>" + HtmlUtils.htmlEscape(invoice.getOwner().getFullName()) + "</b>,</p>"
                             + "<p>CLB đã phát hành hóa đơn <b>" + invoice.getInvoiceCode() + "</b> cho ngựa <b>"
                             + HtmlUtils.htmlEscape(invoice.getHorse().getHorseName()) + "</b>, kỳ " + period.format(MONTH_VN) + ".</p>"
