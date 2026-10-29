@@ -44,7 +44,7 @@ public class AssignmentDecisionService {
     @Transactional
     public void reject(Integer requestId, String reason) {
         String why = reason == null ? "" : reason.trim();
-        if (why.length() < 10) throw new IllegalArgumentException("Lý do phải có ít nhất 10 ký tự.");
+        if (why.isEmpty()) throw new IllegalArgumentException("Phải ghi lý do.");
         AssignmentRequest req = writer.requireMine(requestId);
         writer.mark(req, "REJECTED", why);
         writer.mailRejected(req, why);
