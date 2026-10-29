@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-/** Club Manager từ chối hồ sơ ngựa (SRS: lý do tối thiểu 10 ký tự, có thể cho phép nộp lại). */
+/** Club Manager từ chối hồ sơ ngựa (có thể cho phép nộp lại). */
 @Data
 @Builder
 @NoArgsConstructor
@@ -18,7 +18,7 @@ import java.util.List;
 public class HorseRejectRequestDTO {
 
     @NotBlank(message = "Lý do từ chối (reason) là bắt buộc")
-    @Size(min = 10, max = 500, message = "Lý do từ chối phải dài 10–500 ký tự")
+    @Size(max = 500, message = "Lý do từ chối không được vượt quá 500 ký tự")
     private String reason;
 
     // true: chủ ngựa được sửa và nộp lại hồ sơ
