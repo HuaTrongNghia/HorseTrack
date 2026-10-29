@@ -12,6 +12,8 @@ import com.horsetrack.equinecare.modules.medical.dto.MedicalCaseDTO;
 import com.horsetrack.equinecare.modules.medical.dto.VetActionRequestDTO;
 import com.horsetrack.equinecare.modules.medical.dto.VetLockRequestDTO;
 import com.horsetrack.equinecare.modules.medical.entity.VetCase;
+import com.horsetrack.equinecare.modules.medical.entity.TreatmentProtocol;
+import com.horsetrack.equinecare.modules.medical.repository.TreatmentProtocolRepository;
 import com.horsetrack.equinecare.modules.medical.repository.VetCaseRepository;
 import jakarta.persistence.EntityManager;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ import org.springframework.util.StringUtils;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -34,7 +37,10 @@ import java.util.stream.Collectors;
 public class MedicalService {
 
     private final HorseRepository horseRepository;
+    private static final Set<String> PROTOCOL_FINISHED = Set.of("COMPLETED", "CANCELLED", "SUPERSEDED");
+
     private final VetCaseRepository vetCaseRepository;
+    private final TreatmentProtocolRepository protocolRepository;
     private final UserRepository userRepository;
     private final GroomProfileRepository groomProfileRepository;
     private final EntityManager entityManager;
@@ -42,6 +48,7 @@ public class MedicalService {
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.training.service.SessionIncidentHandler incidentHandler;
+    private final HorseConditionNotifier conditionNotifier;
 
     private boolean isCurrentUserVeterinarian() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -64,6 +71,7 @@ public class MedicalService {
         horse.setHealthStatus("INJURED");
 
         horseRepository.save(horse);
+        conditionNotifier.onStatus(horse, "INJURED", dto.getReason());
 
         int cancelled = trainingLockHandler.onHorseLocked(horse, dto.getReason());
         auditTrail.record("VET_LOCK", "Horses", "isLocked=false",
@@ -134,7 +142,6 @@ public class MedicalService {
                 .reportedBy(reporter)
                 .caseType(dto.getCaseType().trim())
                 .description(dto.getDescription().trim())
-                .imageUrl(StringUtils.hasText(dto.getImageUrl()) ? dto.getImageUrl().trim() : null)
                 .severity(StringUtils.hasText(dto.getSeverity()) ? dto.getSeverity().toUpperCase() : "MEDIUM")
                 .source(isGroom ? "GROOM_REPORT" : "TRAINER_REQUEST")
                 .status("NEW")
@@ -169,12 +176,20 @@ public class MedicalService {
         if ("CLOSED".equals(vetCase.getStatus()) || "CANCELLED".equals(vetCase.getStatus())) {
             throw new IllegalArgumentException("Ca " + vetCase.getCaseCode() + " đã đóng trước đó.");
         }
+        TreatmentProtocol openProtocol = protocolRepository.findByCaseId(vetCase.getCaseId()).stream()
+                .filter(p -> !PROTOCOL_FINISHED.contains(p.getState()))
+                .findFirst()
+                .orElse(null);
+        if (openProtocol != null) {
+            throw new IllegalArgumentException("Phác đồ " + openProtocol.getProtocolCode() + " của ca " + vetCase.getCaseCode()
+                    + " chưa hoàn thành (đang " + openProtocol.getState() + "). Hãy kết thúc hoặc hủy phác đồ trước khi đóng ca.");
+        }
         vetCase.setStatus("CLOSED");
         vetCase.setOutcome(outcome.trim().length() > 1000 ? outcome.trim().substring(0, 1000) : outcome.trim());
         vetCase.setAssignedVet(vetCase.getAssignedVet() != null ? vetCase.getAssignedVet() : currentUser());
         vetCase.setClosedAt(LocalDateTime.now());
         VetCase saved = vetCaseRepository.save(vetCase);
-        // Bác sĩ đóng ca mà không khóa huấn luyện: buổi tập đang chờ bác sĩ kết thúc, giáo án đóng để lập giáo án mới
+        // Bác sĩ đóng ca mà không khóa huấn luyện: chỉ kết thúc buổi tập đang chờ, giáo án chạy tiếp
         Horse horse = saved.getHorse();
         if (horse != null && !Boolean.TRUE.equals(horse.getIsLocked())) {
             incidentHandler.resolveWaitingVet(horse, false, outcome);
@@ -213,7 +228,6 @@ public class MedicalService {
                 .severity(c.getSeverity())
                 .status(c.getStatus())
                 .description(c.getDescription())
-                .imageUrl(c.getImageUrl())
                 .reportedById(c.getReportedBy().getUserId())
                 .reportedByName(c.getReportedBy().getFullName())
                 .assignedVetName(c.getAssignedVet() != null ? c.getAssignedVet().getFullName() : null)
