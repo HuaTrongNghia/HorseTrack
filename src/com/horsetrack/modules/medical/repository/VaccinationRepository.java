@@ -17,5 +17,8 @@ public interface VaccinationRepository extends JpaRepository<Vaccination, Intege
 
     Optional<Vaccination> findByVaccinationCode(String vaccinationCode);
 
+    // Lịch tiêm phòng / tẩy giun còn chờ của một ngày (nhắc bác sĩ)
+    List<Vaccination> findByStatusAndDueDateOrderByKindAscVaccinationIdAsc(String status, java.time.LocalDate dueDate);
+
     boolean existsByHorse_HorseIdAndVaccineNameIgnoreCaseAndStatusIn(Integer horseId, String vaccineName, Collection<String> statuses);
 }
