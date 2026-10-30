@@ -44,4 +44,23 @@ public class HorseResponseDTO {
 
     private Integer assignedTrainerId;   // HLV được Club Manager phân công
     private String assignedTrainerName;
+
+    // Thành tích thi đấu (giải đã nhập kết quả), chỉ có ở GET /horses/{id}
+    private java.util.List<RaceResult> raceResults;
+    private Integer raceCount;
+    private Integer raceWins;
+    private BigDecimal totalPrize;
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class RaceResult {
+        private Integer proposalId;
+        private String tournamentName;
+        private LocalDate raceDate;
+        private Integer rank;
+        private BigDecimal finishTimeSeconds;
+        private BigDecimal prizeAmount;
+    }
 }

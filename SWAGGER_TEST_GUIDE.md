@@ -1624,7 +1624,7 @@ Dùng các bảng có sẵn `Invoices`, `Invoice_Line_Items`, `Payment_Transacti
 | `BOARDING` – Lưu chuồng | `Stalls.monthly_base_fee` của chuồng ngựa đang ở |
 | `DAILY_CARE` – Vật tư chăm sóc | `Task_Material_Usage` của việc chăm sóc `DONE` trong kỳ |
 | `MEDICATION` – Thuốc điều trị | **Không** nằm trong hóa đơn tháng: thu theo từng giai đoạn phác đồ bằng hóa đơn riêng `GD-...` (12F.8, BR_16) |
-| `COMPETITION` – Thi đấu | `entry_fee_charged`, `transport_fee` của `Competition_Entries` có giải diễn ra trong kỳ |
+| `COMPETITION` – Thi đấu | `transport_fee` của đề xuất `REGISTERED` / `RESULT_RECORDED` có giải diễn ra trong kỳ (lệ phí đăng ký thu riêng qua hóa đơn `TD-` khi khám đạt) |
 
 ### 12F.1 `PUT /api/v1/billing/stalls/{stallId}/monthly-fee` (`Club Manager`)
 
@@ -1720,44 +1720,65 @@ Báo cáo tài chính từ dữ liệu thật; tiền đã thu **chỉ tính gia
 
 Các API dưới đây (trừ mục 13, 14, 15) **không đọc/ghi database**. Dữ liệu được code cứng hoặc nằm trong RAM. Chỉ cần kiểm tra là gọi được và trả đúng format. Tất cả yêu cầu đã login (role nào cũng được).
 
-### 13. Giải đấu, đề xuất thi đấu và khám tiền thi đấu — DỮ LIỆU THẬT (`External_Competitions`, `Competition_Entries`)
+### 13. Giải đấu, đề xuất thi đấu và khám tiền thi đấu — DỮ LIỆU THẬT (flow 5)
 
-Luồng: HLV đề xuất (`WAITING_OWNER`) → chủ ngựa đồng ý (`WAITING_VET`) / từ chối (`OWNER_DECLINED`) → bác sĩ khám đạt (`READY_TO_SUBMIT`) / không đạt (`VET_FAILED`) → HLV gửi BTC (`SUBMITTED`) → BTC từ chối (`REJECTED`) hoặc ghi kết quả (`RESULT_RECORDED`). Mỗi bước có nhật ký; chủ ngựa / HLV nhận email ở các bước liên quan. Trạng thái "chờ bác sĩ khám" trong DB là `WAITING_VET` (FE gọi là WAITING_VET_EXAM); mỗi đề xuất có thêm `statusLabel` tiếng Việt.
+> **Bắt buộc trước khi chạy bản backend này:** chạy `DATABASE_tournament_flow5.sql` (thêm điều kiện / số suất / trạng thái giải, bảng thưởng `Competition_Prizes`, hạn chặng, HLV xác nhận, hóa đơn, khiếu nại cho đề xuất). Chưa chạy script thì mọi API giải đấu trả `500` "Invalid column name".
 
-**13.1 Giải đấu**
+Luồng: Quản lý CLB tạo giải (`DRAFT`) → công bố (`PUBLISHED`) → **chủ ngựa** đề xuất 1 ngựa đủ điều kiện → còn suất thì giữ chỗ, hết suất thì vào hàng chờ (`WAITLISTED`) → 3 chặng có hạn: HLV xác nhận trong **2 ngày** (`WAITING_TRAINER`) → bác sĩ khám trong **3 ngày** kể từ lúc HLV xác nhận (`WAITING_VET_EXAM`) → thanh toán lệ phí trong **2 ngày** kể từ lúc khám đạt (`WAITING_PAYMENT`) → `REGISTERED` → Quản lý CLB nhập kết quả (`RESULT_RECORDED`, giải `FINISHED`). Không hạn chặng nào vượt quá hết ngày `registrationDeadline`.
 
-- `GET /api/v1/tournaments?open=false` (mọi role đã login): danh sách giải. `open=true` chỉ lấy giải còn nhận đề xuất (chưa kết thúc, chưa qua ngày đua và hạn đăng ký). Mỗi giải: `tournamentId, code, name, organizer, location, raceDate, registrationDeadline, distanceM, entryFee, entryConditions, finished, openForProposal`.
-- `POST /api/v1/tournaments` (`Club Manager`), DB đang chưa có giải nào nên tạo trước:
+Mất suất (người đầu hàng chờ tự được đôn lên, hạn chặng mới bắt đầu tính): `TRAINER_REJECTED`, `TRAINER_EXPIRED`, `VET_FAILED`, `VET_EXPIRED`, `PAYMENT_EXPIRED`, `CANCELLED` (chủ ngựa hủy), `INELIGIBLE` (ngựa hết đủ điều kiện). Hết hạn đăng ký mà còn trong hàng chờ: `NO_SLOT`. Đề xuất lại xếp vào cuối hàng. Mỗi đề xuất có `statusLabel`, `holdingSlot`, `stageDeadline` (hạn chặng hiện tại), `queuePosition` (vị trí hàng chờ).
+
+**13.1 Giải đấu — `/api/v1/tournaments`**
+
+- `POST` (`Club Manager`) → `201`, giải ở `DRAFT`:
 
   ```json
   { "code": "BD-2026", "name": "Giải Mở rộng Bình Dương 2026", "organizer": "CLB Đua ngựa Bình Dương", "location": "Trường đua Đại Nam",
-    "raceDate": "2026-11-25", "registrationDeadline": "2026-11-10", "distanceM": 1200, "entryFee": 5000000, "entryConditions": "Ngựa từ 3 tuổi" }
+    "raceDate": "2026-11-25", "registrationDeadline": "2026-11-10", "distanceM": 1200, "entryFee": 5000000,
+    "minAgeYears": 3, "maxAgeYears": 8, "minWeightKg": 380, "maxWeightKg": 550, "allowedBreeds": ["Arabian", "Thoroughbred"],
+    "slots": 8, "prizes": [ { "rank": 1, "amount": 50000000 }, { "rank": 2, "amount": 20000000 }, { "rank": 3, "amount": 10000000 } ],
+    "entryConditions": "Ngựa có giấy tiêm phòng đầy đủ" }
   ```
 
-  → `201`. Lỗi: hạn đăng ký sau ngày đua → `400`; mã giải trùng → `400`; ngày đua ở quá khứ → `400`; role khác → `403`.
+  Bỏ trống điều kiện nào thì không lọc theo điều kiện đó (`allowedBreeds` trống = mọi giống). Lỗi `400`: hạn đăng ký sau ngày thi, tuổi / cân nặng min > max, hạng thưởng trùng, mã giải trùng, thiếu `slots` / `registrationDeadline`.
+- `PUT /{id}` (`Club Manager`): cùng body. Giải đã có người đề xuất thì đổi ngày thi / hạn đăng ký / lệ phí / tuổi / cân nặng / giống → `400`; chỉ được **tăng** `slots` (hàng chờ tự được đôn). Giải `FINISHED` → `400`.
+- `PUT /{id}/publish` (`Club Manager`): `DRAFT` → `PUBLISHED`, mọi chủ ngựa nhận thông báo. Hạn đăng ký đã qua → `400`.
+- `GET ?open=` / `GET /{id}` (mọi role): Quản lý CLB thấy cả giải `DRAFT`, role khác chỉ thấy `PUBLISHED` / `FINISHED`. Mỗi giải có thêm `status, statusLabel, slots, slotsLeft, queueLength, prizes[], allowedBreeds[], minAgeYears…, openForProposal, hasProposals`.
+- `PUT /{id}/results` (`Club Manager`), từ ngày thi trở đi:
 
-**13.2 Đề xuất thi đấu — `/api/v1/race-proposals`**
+  ```json
+  [ { "proposalId": 12, "rank": 1, "finishTime": "1:12.45" }, { "proposalId": 15, "rank": 2, "finishTime": "73.1" } ]
+  ```
 
-- `POST` (`Trainer` phụ trách ngựa): `{ "horseId": 21, "tournamentId": 1, "note": "Ngựa đang phong độ tốt" }` → `201`, `status = WAITING_OWNER`, `proposalCode` dạng `DX-0001`, `entryFee` lấy lệ phí của giải. Lỗi: ngựa chưa duyệt / đang VetLock → `400`; giải đã đóng → `400`; ngựa đã có đề xuất cho giải này → `400`; HLV không phụ trách ngựa → `403`.
-- `GET ?status=` (Trainer: ngựa được giao; Horse Owner: ngựa của mình; Veterinarian, Club Manager: tất cả), `GET /{id}` (ngoài phạm vi → `403`). Mỗi đề xuất gồm ngựa, chủ ngựa, `tournament`, người đề xuất, `note`, phản hồi chủ ngựa, kết luận bác sĩ, kết quả.
-- `PUT /{id}/owner-response` (`Horse Owner` của ngựa): `{ "agree": true, "note": "Đồng ý" }` → `WAITING_VET`; `agree: false` → `OWNER_DECLINED`. Lỗi: không phải chủ → `403`; đã trả lời → `400`.
-- `PUT /{id}/submitted` (`Trainer`): chỉ khi `READY_TO_SUBMIT` → `SUBMITTED`. Chưa qua bác sĩ → `400`.
-- `PUT /{id}/organizer-rejected` (`Trainer`): `{ "reason": "Thiếu giấy chứng nhận" }`, chỉ khi `SUBMITTED` → `REJECTED`.
-- `PUT /{id}/result` (`Trainer`): `{ "rank": 2, "finishTime": "1:12.45", "note": "Về nhì" }` (`finishTime` là giây `72.45` hoặc `phút:giây`), chỉ khi `SUBMITTED` và đã tới ngày đua → `RESULT_RECORDED`, `finishTimeSeconds = 72.450`. Lỗi: giải chưa diễn ra → `400`; `finishTime` sai → `400`; `rank` < 1 → `400`.
+  Chỉ cho đề xuất `REGISTERED` (sửa lại được đề xuất đã `RESULT_RECORDED`). `prizeAmount` tự lấy theo bảng thưởng (hạng không có trong bảng = 0). Thành tích vào hồ sơ ngựa: `GET /api/v1/horses/{id}` có `raceResults[], raceCount, raceWins, totalPrize`. Mọi đề xuất `REGISTERED` đã có kết quả thì giải → `FINISHED`. Lỗi `400`: trước ngày thi, đề xuất không thuộc giải / không `REGISTERED`, hạng trùng, `finishTime` sai.
 
-**13.3 Khám tiền thi đấu — `/api/v1/prerace-exams`** (đọc / ghi `Competition_Entries`)
+**13.2 Chủ ngựa xem giải kèm lọc điều kiện — `GET /api/v1/owner/tournaments?open=true`, `GET /api/v1/owner/tournaments/{id}`** (`Horse Owner`)
 
-1. **`GET /api/v1/prerace-exams?tab=CHO_KHAM`** (`Veterinarian`, `Club Manager`): các đề xuất chủ ngựa đã đồng ý (`WAITING_VET`). `healthStatus` là trạng thái sức khỏe hiện tại của ngựa; `warningTag` báo ngựa đang VetLock hoặc không khỏe.
-2. **`GET /api/v1/prerace-exams?tab=DA_CO_KET_QUA`**: các đề xuất bác sĩ đã kết luận; `resultStatus` "ĐẠT" / "KHÔNG ĐẠT", `nextStepStatus` là trạng thái hiện tại của đề xuất.
-3. **`POST /api/v1/prerace-exams/{proposalCode}/examine`** (`Veterinarian`), `proposalCode` là `DX-0001` hoặc ID:
+Mỗi giải: `tournament`, `eligible` (có ngựa phù hợp), `horses[]` (phù hợp trước, xếp theo phong độ), `recommendedHorseId`, `myProposal`, `slotsLeft`, `queueLength`, `canPropose` + `cannotProposeReason`. Mỗi ngựa: `eligible`, `checks[]` (`APPROVED`, `HAS_TRAINER`, `AGE`, `WEIGHT`, `BREED`, `NOT_LOCKED`, `NOT_IN_TREATMENT`, `NO_DATE_CONFLICT` — mỗi tiêu chí có `passed` và `detail`), `reasons[]` (các tiêu chí không đạt), `formScore` (0–100), `formNote`, `formRank`, `recommended`.
 
-   ```json
-   { "isPassed": true, "vetNotes": "Tim mạch ổn định" }
-   ```
+`formScore` tính từ 10 buổi tập gần nhất trong 90 ngày: tốc độ tối đa 40% (65 km/h = 100 điểm), nhịp tim hồi phục 20%, tỉ lệ hoàn thành buổi tập 15%, điểm HLV chấm 25%. Thiếu chỉ số nào thì chia lại tỉ trọng; chưa có buổi tập thì `null` (xếp cuối).
 
-   → `200`. Đạt → đề xuất `READY_TO_SUBMIT`; không đạt → `VET_FAILED`.
+**13.3 Đề xuất thi đấu — `/api/v1/race-proposals`**
 
-4. **Test lỗi:** đề xuất không ở `WAITING_VET` (khám lại) → `400`; mã không tồn tại → `404`; `isPassed` thiếu → `400`; không đạt mà thiếu `vetNotes` → `400`; kết luận đạt khi ngựa đang VetLock → `400`; role khác → `403`.
+- `POST` (`Horse Owner`): `{ "tournamentId": 1, "horseId": 21, "note": "..." }` → `201`. Còn suất → `WAITING_TRAINER` (HLV phụ trách nhận thông báo, `stageDeadline` = +2 ngày); hết suất → `WAITLISTED` kèm `queuePosition`. Lỗi `400`: đã có 1 đề xuất còn hiệu lực cho giải (kể cả ngựa khác), đang có khiếu nại chờ xử lý, ngựa không đủ điều kiện (message liệt kê từng tiêu chí), giải chưa công bố / hết hạn đăng ký. Ngựa không phải của mình → `403`.
+- `PUT /{id}/cancel` (`Horse Owner`): hủy đề xuất `WAITLISTED` / đang giữ chỗ → `CANCELLED`, hóa đơn lệ phí chưa trả bị hủy, đôn hàng chờ. `REGISTERED` (đã trả tiền) hoặc đang có giao dịch VNPay chờ xác minh → `400`.
+- `PUT /{id}/trainer-decision` (`Trainer` phụ trách ngựa): `{ "approve": true }` → `WAITING_VET_EXAM` (bác sĩ nhận thông báo, hạn +3 ngày). `{ "approve": false, "reasonCode": "NOT_FIT", "note": "..." }` → `TRAINER_REJECTED`, mất suất, đôn hàng chờ, ghi nhật ký. Từ chối thiếu / sai `reasonCode` → `400`; `OTHER` thiếu `note` → `400`; quá hạn chặng → `400`. Danh sách mã: `GET /reject-reasons` (`NOT_FIT, INJURY_RISK, POOR_FORM, TRAINING_PLAN, DISTANCE_MISMATCH, OTHER`).
+- `POST /{id}/complaint` (`Horse Owner`): `{ "note": "Ngựa vừa đo thể lực tốt" }`, chỉ cho `TRAINER_REJECTED`, mỗi đề xuất 1 lần, trước hạn đăng ký → `complaintStatus = PENDING`, Quản lý CLB nhận thông báo.
+- `PUT /{id}/complaint-decision` (`Club Manager`): `{ "accept": true, "note": "..." }` → đề xuất về `WAITING_VET_EXAM` (hạn khám +3 ngày), **giữ nguyên suất** (nếu suất đã được đôn cho người khác thì giải tạm vượt số suất, `slotsLeft = 0`). `accept: false` → `REJECTED`, đề xuất giữ `TRAINER_REJECTED`. Danh sách khiếu nại chờ duyệt: `GET /race-proposals?complaintStatus=PENDING`.
+- `GET ?status=&complaintStatus=&tournamentId=` (HLV: ngựa được giao; chủ ngựa: của mình; bác sĩ, Quản lý CLB: tất cả), `GET /{id}`.
+- `GET /{id}/dossier` (4 role, trong phạm vi): hồ sơ đăng ký tổng hợp — `horse` (mã, tuổi vào ngày thi, giống, cân nặng, chuồng…), `owner`, `trainer` (tên, SĐT, email), `vaccinations[]`, `vetExam`, `payment`. Chỉ xem trên màn hình, không xuất PDF.
+- Đã bỏ: HLV tạo đề xuất, `owner-response`, `submitted`, `organizer-rejected`, `/{id}/result` (kết quả chuyển sang `PUT /tournaments/{id}/results`).
+
+**13.4 Khám tiền thi đấu — `/api/v1/prerace-exams`**
+
+1. `GET ?tab=CHO_KHAM` (`Veterinarian`, `Club Manager`): đề xuất `WAITING_VET_EXAM`, có thêm `examDeadline` (hạn khám); `trainerName` là HLV phụ trách.
+2. `GET ?tab=DA_CO_KET_QUA`: đề xuất bác sĩ đã kết luận.
+3. `POST /{proposalCode}/examine` (`Veterinarian`): `{ "isPassed": true, "vetNotes": "Tim mạch ổn định" }`. Đạt → tự lập hóa đơn lệ phí `TD-<id 6 số>` (hạn = hạn chặng thanh toán), đề xuất `WAITING_PAYMENT`; giải lệ phí 0 → `REGISTERED` luôn. Không đạt (bắt buộc `vetNotes`) → `VET_FAILED`, mất suất, đôn hàng chờ. Lỗi `400`: không ở `WAITING_VET_EXAM`, quá hạn khám, kết luận đạt khi ngựa VetLock.
+4. Thanh toán hóa đơn `TD-` bằng luồng VNPay ở mục 12F; VNPay xác nhận thành công thì đề xuất → `REGISTERED` (chủ ngựa và HLV nhận thông báo). Hóa đơn tháng không thu lại lệ phí đăng ký (chỉ còn phí vận chuyển nếu có).
+
+**13.5 Job tự động (mặc định 15 phút/lần, `TOURNAMENT_JOB_MS`)**: hết hạn chặng → `*_EXPIRED` và đôn hàng chờ (hóa đơn đang có giao dịch VNPay chờ xác minh thì đợi); kiểm tra lại điều kiện ngựa của đề xuất ở hàng chờ / đang chạy chặng → `INELIGIBLE`; nhắc trước 12 giờ khi sắp hết hạn chặng (HLV / bác sĩ / chủ ngựa); đến hạn đăng ký → hàng chờ còn lại `NO_SLOT`. Mọi lần hệ thống tự hủy và mọi lần HLV từ chối đều ghi `Audit_Logs` (`RACE_AUTO_EXPIRE`, `RACE_AUTO_INELIGIBLE`, `RACE_AUTO_NO_SLOT`, `TRAINER_REJECT_RACE`). Hạn chặng đổi được bằng `TOURNAMENT_TRAINER_DAYS`, `TOURNAMENT_VET_DAYS`, `TOURNAMENT_PAYMENT_DAYS`.
+
+**13.6 Chặn giáo án nặng trước giải**: ngựa có đề xuất từ `WAITING_VET_EXAM` trở đi thì trong 7 ngày trước ngày thi (tính cả ngày thi) → `400` khi: tạo giáo án có giai đoạn `HIGH` rơi vào khoảng đó; phân công buổi tập vào ngày thuộc giai đoạn `HIGH`; HLV cho tập tiếp mà nâng giai đoạn lên `HIGH`. Message nêu giải, ngày thi và khoảng ngày bị chặn.
 
 ### 14. Protocols — ĐÃ DÙNG DỮ LIỆU THẬT (không còn là mock)
 

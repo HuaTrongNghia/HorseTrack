@@ -100,6 +100,29 @@ public class HorseServiceImpl implements HorseService {
         }
     }
 
+    // Thành tích thi đấu: các giải đã nhập kết quả (Quản lý CLB nhập sau ngày thi)
+    private void fillRaceResults(HorseResponseDTO dto) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entityManager.createNativeQuery("""
+                SELECT ce.entry_id, ec.competition_name, ec.start_date, ce.rank_position, ce.finish_time_seconds, ce.prize_awarded
+                FROM Competition_Entries ce JOIN External_Competitions ec ON ec.competition_id = ce.competition_id
+                WHERE ce.horse_id = ?1 AND ce.registration_status = 'RESULT_RECORDED'
+                ORDER BY ec.start_date DESC, ce.entry_id DESC""")
+                .setParameter(1, dto.getHorseId()).getResultList();
+        List<HorseResponseDTO.RaceResult> results = rows.stream().map(r -> HorseResponseDTO.RaceResult.builder()
+                .proposalId(((Number) r[0]).intValue())
+                .tournamentName((String) r[1])
+                .raceDate(r[2] instanceof java.sql.Date d ? d.toLocalDate() : (java.time.LocalDate) r[2])
+                .rank(r[3] == null ? null : ((Number) r[3]).intValue())
+                .finishTimeSeconds((BigDecimal) r[4])
+                .prizeAmount((BigDecimal) r[5])
+                .build()).toList();
+        dto.setRaceResults(results);
+        dto.setRaceCount(results.size());
+        dto.setRaceWins((int) results.stream().filter(x -> Integer.valueOf(1).equals(x.getRank())).count());
+        dto.setTotalPrize(results.stream().map(HorseResponseDTO.RaceResult::getPrizeAmount).filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
+    }
+
     private Horse findHorse(Integer horseId) {
         return horseRepository.findById(horseId)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy ngựa với ID: " + horseId));
@@ -192,6 +215,7 @@ public class HorseServiceImpl implements HorseService {
         horseAccessGuard.checkAssigned(horse);
         HorseResponseDTO dto = mapToResponseDTO(horse);
         dto.setInjuries(injuryService.listForHorse(horse.getHorseId()));
+        fillRaceResults(dto);
         return dto;
     }
 

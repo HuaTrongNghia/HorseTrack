@@ -1,12 +1,14 @@
 package com.horsetrack.equinecare.modules.tournament.dto;
 
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
-/** Quản lý CLB thêm giải đua bên ngoài */
+/** Quản lý CLB tạo / sửa giải đấu (POST /tournaments, PUT /tournaments/{id}) */
 @Data
 public class TournamentCreateDTO {
 
@@ -22,9 +24,10 @@ public class TournamentCreateDTO {
     @NotBlank(message = "Địa điểm là bắt buộc") @Size(max = 100, message = "Địa điểm tối đa 100 ký tự")
     private String location;
 
-    @NotNull(message = "Ngày đua là bắt buộc") @FutureOrPresent(message = "Ngày đua không được ở quá khứ")
+    @NotNull(message = "Ngày thi đấu là bắt buộc") @FutureOrPresent(message = "Ngày thi đấu không được ở quá khứ")
     private LocalDate raceDate;
 
+    @NotNull(message = "Hạn đăng ký là bắt buộc")
     private LocalDate registrationDeadline;
 
     @NotNull(message = "Cự ly là bắt buộc") @DecimalMin(value = "100", message = "Cự ly tối thiểu 100 m") @DecimalMax(value = "10000", message = "Cự ly tối đa 10000 m")
@@ -35,4 +38,25 @@ public class TournamentCreateDTO {
 
     @Size(max = 500, message = "Điều kiện tham gia tối đa 500 ký tự")
     private String entryConditions;
+
+    @Min(value = 1, message = "Tuổi tối thiểu từ 1") @Max(value = 40, message = "Tuổi tối đa 40")
+    private Integer minAgeYears;
+
+    @Min(value = 1, message = "Tuổi tối thiểu từ 1") @Max(value = 40, message = "Tuổi tối đa 40")
+    private Integer maxAgeYears;
+
+    @DecimalMin(value = "50", message = "Cân nặng tối thiểu 50 kg") @DecimalMax(value = "1500", message = "Cân nặng tối đa 1500 kg")
+    private BigDecimal minWeightKg;
+
+    @DecimalMin(value = "50", message = "Cân nặng tối thiểu 50 kg") @DecimalMax(value = "1500", message = "Cân nặng tối đa 1500 kg")
+    private BigDecimal maxWeightKg;
+
+    // Trống = mọi giống
+    private List<@NotBlank(message = "Tên giống không được trống") @Size(max = 60, message = "Tên giống tối đa 60 ký tự") String> allowedBreeds;
+
+    @NotNull(message = "Số suất (slots) là bắt buộc") @Min(value = 1, message = "Số suất tối thiểu 1") @Max(value = 500, message = "Số suất tối đa 500")
+    private Integer slots;
+
+    @Valid
+    private List<PrizeDTO> prizes;
 }

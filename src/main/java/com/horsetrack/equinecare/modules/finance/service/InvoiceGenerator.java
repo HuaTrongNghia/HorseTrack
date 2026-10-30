@@ -33,7 +33,7 @@ import java.util.Locale;
  * - BOARDING: phí lưu chuồng Stalls.monthly_base_fee
  * - DAILY_CARE: vật tư dùng cho việc chăm sóc đã hoàn thành (Task_Material_Usage x Daily_Tasks)
  * Thuốc theo phác đồ KHÔNG nằm ở đây: được thu theo từng giai đoạn bằng hóa đơn riêng (ProtocolPhaseBilling, BR_16).
- * - COMPETITION: phí đăng ký và vận chuyển của các cuộc đua trong kỳ (Competition_Entries)
+ * - COMPETITION: phí vận chuyển của các cuộc đua trong kỳ (Competition_Entries); lệ phí đăng ký đã thu riêng qua hóa đơn TD-
  * Ngựa không phát sinh chi phí (tổng 0 đồng) thì không lập hóa đơn. Mỗi ngựa chỉ có một hóa đơn (chưa hủy) mỗi kỳ.
  */
 @Slf4j
@@ -135,18 +135,15 @@ public class InvoiceGenerator {
             lines.add(line("DAILY_CARE", toInt(r[0]), "Vật tư chăm sóc: " + r[1], dec(r[2]), dec(r[3]), toDateTime(r[4], endOfPeriod)));
         }
 
-        // 3. Thi đấu: phí đăng ký và vận chuyển của các cuộc đua diễn ra trong kỳ
+        // 3. Thi đấu: phí vận chuyển của các cuộc đua diễn ra trong kỳ (lệ phí đăng ký đã thu qua hóa đơn TD- khi khám đạt)
         List<Object[]> races = native_("""
                 SELECT ce.entry_id, ec.competition_name, ce.entry_fee_charged, ce.transport_fee, ec.start_date
                 FROM Competition_Entries ce
                 JOIN External_Competitions ec ON ec.competition_id = ce.competition_id
-                WHERE ce.horse_id = ?1 AND ce.registration_status IN ('SUBMITTED', 'ACCEPTED', 'RESULT_RECORDED')
+                WHERE ce.horse_id = ?1 AND ce.registration_status IN ('REGISTERED', 'RESULT_RECORDED')
                   AND ec.start_date BETWEEN ?2 AND ?3""", horse.getHorseId(), from, to);
         for (Object[] r : races) {
             LocalDateTime when = toDateTime(r[4], endOfPeriod);
-            if (dec(r[2]).signum() > 0) {
-                lines.add(line("COMPETITION", toInt(r[0]), "Phí đăng ký giải " + r[1], dec(r[2]), BigDecimal.ONE, when));
-            }
             if (dec(r[3]).signum() > 0) {
                 lines.add(line("COMPETITION", toInt(r[0]), "Phí vận chuyển giải " + r[1], dec(r[3]), BigDecimal.ONE, when));
             }

@@ -1,7 +1,6 @@
 package com.horsetrack.equinecare.modules.medical.service;
 
 import com.horsetrack.equinecare.common.exception.ResourceNotFoundException;
-import com.horsetrack.equinecare.modules.audit.service.AuditTrail;
 import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
@@ -23,8 +22,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Khám tiền thi đấu trên đề xuất thật (Competition_Entries): tab CHO_KHAM = đề xuất chủ ngựa đã đồng ý (WAITING_VET);
- * tab DA_CO_KET_QUA = đề xuất bác sĩ đã kết luận. Đạt -> READY_TO_SUBMIT (HLV gửi BTC), không đạt -> VET_FAILED.
+ * Khám tiền thi đấu trên đề xuất thật (Competition_Entries): tab CHO_KHAM = đề xuất HLV đã xác nhận (WAITING_VET_EXAM, có hạn khám);
+ * tab DA_CO_KET_QUA = đề xuất bác sĩ đã kết luận. Đạt -> tự lập hóa đơn lệ phí, WAITING_PAYMENT (hạn 2 ngày);
+ * không đạt -> VET_FAILED, mất suất và đôn hàng chờ (RaceProposalService.afterVetExam).
  */
 @Service
 @RequiredArgsConstructor
@@ -38,14 +38,14 @@ public class PreRaceExamService {
 
     private final CompetitionEntryRepository entryRepository;
     private final UserRepository userRepository;
-    private final AuditTrail auditTrail;
+    private final RaceProposalService raceProposalService;
 
     // Lấy danh sách theo Tab
     @Transactional(readOnly = true)
     public List<PreRaceExamDTO> getExamsByTab(String tabStatus) {
         List<CompetitionEntry> list = TAB_DONE.equalsIgnoreCase(tabStatus)
                 ? entryRepository.findByVetPassedIsNotNullOrderByVetCheckedAtDesc()
-                : entryRepository.findByStatusInOrderByProposedAtAsc(List.of(CompetitionEntry.WAITING_VET));
+                : entryRepository.findByStatusInOrderByProposedAtAsc(List.of(CompetitionEntry.WAITING_VET_EXAM));
         return list.stream().map(PreRaceExamService::toDto).toList();
     }
 
@@ -57,7 +57,7 @@ public class PreRaceExamService {
         }
         CompetitionEntry entry = (proposalCode.matches("\\d+") ? entryRepository.findById(Integer.valueOf(proposalCode)) : entryRepository.findByEntryCode(proposalCode))
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy đề xuất thi đấu " + proposalCode));
-        if (!CompetitionEntry.WAITING_VET.equals(entry.getStatus())) {
+        if (!CompetitionEntry.WAITING_VET_EXAM.equals(entry.getStatus())) {
             throw new IllegalArgumentException("Đề xuất " + proposalCode + " không ở trạng thái chờ bác sĩ khám (hiện tại: "
                     + RaceProposalService.label(entry.getStatus()) + ").");
         }
@@ -69,16 +69,18 @@ public class PreRaceExamService {
         if (!passed && !StringUtils.hasText(dto.getVetNotes())) {
             throw new IllegalArgumentException("Phải ghi lý do khi kết luận không đạt.");
         }
+        LocalDateTime now = LocalDateTime.now();
+        if (entry.getStageDeadline() != null && !now.isBefore(entry.getStageDeadline())) {
+            throw new IllegalArgumentException("Đã quá hạn khám (" + entry.getStageDeadline().format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy"))
+                    + "), đề xuất sẽ bị hệ thống hủy.");
+        }
         User vet = currentUser();
         entry.setVet(vet);
         entry.setVetPassed(passed);
-        entry.setVetCheckedAt(LocalDateTime.now());
+        entry.setVetCheckedAt(now);
         entry.setVetNote(StringUtils.hasText(dto.getVetNotes()) ? truncate(dto.getVetNotes().trim()) : null);
-        entry.setStatus(passed ? CompetitionEntry.READY_TO_SUBMIT : CompetitionEntry.VET_FAILED);
-        entryRepository.save(entry);
-        auditTrail.record(passed ? "PRERACE_EXAM_PASS" : "PRERACE_EXAM_FAIL", "Competition_Entries", "status=WAITING_VET",
-                "status=" + entry.getStatus() + " | đề xuất " + entry.getEntryCode() + " | ngựa " + horse.getHorseName()
-                        + (entry.getVetNote() != null ? " | " + entry.getVetNote() : ""));
+        // Đạt: lập hóa đơn lệ phí và chờ thanh toán; không đạt: mất suất, đôn hàng chờ (kèm nhật ký và thông báo)
+        raceProposalService.afterVetExam(entry);
     }
 
     private static PreRaceExamDTO toDto(CompetitionEntry e) {
@@ -96,7 +98,8 @@ public class PreRaceExamService {
                 .raceDate(c.getStartDate() != null ? c.getStartDate().format(DATE) : null)
                 .distance(c.getRaceDistanceM() != null ? c.getRaceDistanceM().stripTrailingZeros().toPlainString() + " m" : null)
                 .location(c.getLocation())
-                .trainerName(e.getProposedBy() != null ? e.getProposedBy().getFullName() : null)
+                .trainerName(e.getTrainer() != null ? e.getTrainer().getFullName() : h.getAssignedTrainer() != null ? h.getAssignedTrainer().getFullName() : null)
+                .examDeadline(!done && e.getStageDeadline() != null ? e.getStageDeadline().format(DateTimeFormatter.ofPattern("HH:mm dd/MM/yyyy")) : null)
                 .healthStatus(HEALTH.getOrDefault(h.getHealthStatus(), h.getHealthStatus()))
                 .warningTag(warning)
                 .tabStatus(done ? TAB_DONE : TAB_WAITING)

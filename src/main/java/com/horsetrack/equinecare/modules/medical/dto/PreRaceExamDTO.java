@@ -26,6 +26,7 @@ public class PreRaceExamDTO {
 
     // Đề xuất bởi
     private String trainerName;
+    private String examDeadline;   // Hạn khám (chặng 2: 3 ngày từ khi HLV xác nhận), chỉ có ở tab CHO_KHAM
 
     // Tình trạng sức khỏe hiện tại
     private String healthStatus;

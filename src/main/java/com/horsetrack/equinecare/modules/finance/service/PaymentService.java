@@ -46,6 +46,7 @@ public class PaymentService {
     private final AuditTrail auditTrail;
     private final EntityManager entityManager;
     private final ProtocolPhaseBilling protocolPhaseBilling;
+    private final com.horsetrack.equinecare.modules.tournament.service.RaceProposalService raceProposalService;
 
     /** VNPay từ chối (mã 94) nếu hỏi lại cùng giao dịch trong khoảng giới hạn: giữ khoảng cách giữa 2 lần querydr */
     @Value("${app.vnpay.querydr-interval-seconds:300}")
@@ -381,6 +382,8 @@ public class PaymentService {
         }
         // BR_16: hóa đơn giai đoạn phác đồ đã trả thì phác đồ đang tạm dừng được tiếp tục
         protocolPhaseBilling.onInvoicePaid(invoice);
+        // Hóa đơn lệ phí giải đấu đã trả thì đề xuất chuyển REGISTERED
+        raceProposalService.onInvoicePaid(invoice);
         auditTrail.record("PAYMENT_VERIFIED", "Invoices", "payment_status=" + old,
                 "payment_status=PAID | " + invoice.getInvoiceCode() + " | " + tx.getAmountPaid() + " VND | VNPay " + gatewayNo + " | " + source);
         invoiceService.notify(invoice.getOwner(), "[HorseTrack] Đã nhận thanh toán hóa đơn " + invoice.getInvoiceCode(),

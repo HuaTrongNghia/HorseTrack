@@ -51,6 +51,7 @@ public class SessionMonitorService {
     private final AppNotificationService appNotifications;
     private final AuditTrail auditTrail;
     private final SessionVetLink sessionVetLink;
+    private final com.horsetrack.equinecare.modules.tournament.service.RaceTrainingGuard raceTrainingGuard;
     private final com.horsetrack.equinecare.modules.medical.repository.VetCaseRepository vetCaseRepository;
 
     @Transactional
@@ -171,6 +172,15 @@ public class SessionMonitorService {
         }
         if (!StringUtils.hasText(request.getNote())) {
             throw new IllegalArgumentException("Phải ghi nội dung điều chỉnh.");
+        }
+        // Nâng giai đoạn lên cường độ Cao: không được nếu giai đoạn rơi vào 7 ngày trước giải mà ngựa đã được HLV xác nhận thi
+        String newIntensity = TrainingPlanPhases.intensityOf(request.getIntensity());
+        TrainingPlan plan = session.getTrainingPlan();
+        if (newIntensity != null && plan != null && session.getSessionDate() != null) {
+            TrainingPlanPhases.phaseOn(plan, session.getSessionDate().toLocalDate()).ifPresent(ph -> {
+                java.time.LocalDate[] range = TrainingPlanPhases.rangeOf(plan, ph);
+                raceTrainingGuard.assertAllowed(horse, range[0], range[1], newIntensity, "điều chỉnh giai đoạn " + ph.getPhaseNo() + " lên");
+            });
         }
         applyPhaseAdjustment(session, request);
 

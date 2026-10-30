@@ -85,6 +85,20 @@ public final class TrainingPlanPhases {
         return Optional.empty();
     }
 
+    /** Khoảng ngày [bắt đầu, kết thúc] của một giai đoạn (cắt theo ngày kết thúc giáo án) */
+    public static LocalDate[] rangeOf(TrainingPlan plan, TrainingPlanPhase target) {
+        LocalDate start = plan.getStartDate();
+        for (TrainingPlanPhase ph : sorted(plan)) {
+            LocalDate end = start.plusWeeks(ph.getDurationWeeks());
+            if (ph == target) {
+                LocalDate last = end.minusDays(1);
+                return new LocalDate[]{start, plan.getEndDate() != null && last.isAfter(plan.getEndDate()) ? plan.getEndDate() : last};
+            }
+            start = end;
+        }
+        return new LocalDate[]{plan.getStartDate(), plan.getEndDate()};
+    }
+
     public static List<TrainingPlanPhaseDTO> toDtos(TrainingPlan plan) {
         List<TrainingPlanPhaseDTO> list = new ArrayList<>();
         LocalDate today = LocalDate.now();

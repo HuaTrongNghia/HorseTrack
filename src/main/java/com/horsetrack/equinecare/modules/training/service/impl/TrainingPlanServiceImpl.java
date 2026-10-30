@@ -37,6 +37,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     private final com.horsetrack.equinecare.modules.training.service.SessionReadingView sessionReadingView;
     private final com.horsetrack.equinecare.modules.training.service.SessionVetLink sessionVetLink;
     private final com.horsetrack.equinecare.modules.care.service.HorseScheduleGuard scheduleGuard;
+    private final com.horsetrack.equinecare.modules.tournament.service.RaceTrainingGuard raceTrainingGuard;
 
     // Thời lượng mặc định một buổi tập (bảng chỉ lưu giờ bắt đầu), dùng để kiểm tra trùng giờ
     @org.springframework.beans.factory.annotation.Value("${app.training.session-duration-minutes:60}")
@@ -261,6 +262,11 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
             throw new IllegalArgumentException("Ngày tập " + day + " nằm ngoài thời gian giáo án (" + plan.getStartDate() + " đến " + plan.getEndDate() + ").");
         }
 
+        // 7 ngày trước giải mà ngựa đã được HLV xác nhận thi: không phân công buổi tập cường độ Cao
+        String dayIntensity = com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.phaseOn(plan, day)
+                .map(ph -> ph.getIntensity()).orElse(null);
+        raceTrainingGuard.assertAllowed(horse, day, day, dayIntensity, "phân công buổi tập ngày " + day);
+
         // Người được gán phải là Groom đang hoạt động, phụ trách đúng khu chuồng của ngựa
         String barnZone = horseBarnZone(plan);
         // QA H3: khóa dòng Groom để 2 buổi tập phân công song song cho cùng Groom không cùng qua kiểm tra trùng giờ
@@ -357,6 +363,11 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .headTrainer(trainer)
                 .build();
         plan.getPhases().addAll(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.build(plan, request.getPhases()));
+        // 7 ngày trước giải mà ngựa đã được HLV xác nhận thi: không có giai đoạn cường độ Cao
+        for (var ph : plan.getPhases()) {
+            java.time.LocalDate[] range = com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.rangeOf(plan, ph);
+            raceTrainingGuard.assertAllowed(horse, range[0], range[1], ph.getIntensity(), "giao giáo án có giai đoạn " + ph.getPhaseNo());
+        }
 
         return trainingPlanRepository.save(plan).getPlanId();
     }
