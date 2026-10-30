@@ -45,6 +45,9 @@ public class TreatmentProtocolDTO {
     private BigDecimal totalCost;
     private Boolean emergency;            // Cấp cứu (ngựa EMERGENCY hoặc ca CRITICAL): không chờ thanh toán mới cấp phát (BR_17)
     private Boolean pendingSupplement;    // Đang điều trị và có thuốc bổ sung chờ kho cấp
+    private Integer awaitingPaymentPhaseNo;      // Đang chờ thanh toán (ON_HOLD_PAYMENT): giai đoạn nào (1 lúc mới cấp thuốc, 2+ sau khi kết thúc giai đoạn trước)
+    private String awaitingPaymentPhaseName;
+    private String awaitingPaymentInvoiceCode;   // Hóa đơn chủ ngựa cần trả để tiếp tục
     private List<Phase> phases;           // Chỉ có ở API chi tiết
     private List<StockAnswer> stockAnswer; // Kết quả kiểm kho của kho (chỉ có ở API chi tiết)
     private List<Note> progressNotes;     // Chỉ có ở API chi tiết
