@@ -30,6 +30,9 @@ public interface CareTaskRepository extends JpaRepository<CareTask, Integer> {
 
     List<CareTask> findByNotesStartingWithAndStatusAndTaskDateGreaterThanEqual(String notesPrefix, String status, LocalDate fromDate);
 
+    // Việc cho ăn chưa làm từ hôm nay trở về trước (lọc trễ quá hạn ở service)
+    List<CareTask> findByTaskTypeAndStatusInAndTaskDateLessThanEqual(String taskType, java.util.Collection<String> statuses, LocalDate taskDate);
+
     // Việc chăm sóc chưa xong từ hôm nay trở đi của một Groom (chặn đổi / bỏ khu khi còn việc dở)
     long countByGroom_UserIdAndStatusInAndTaskDateGreaterThanEqual(Integer groomId, java.util.Collection<String> statuses, LocalDate fromDate);
 

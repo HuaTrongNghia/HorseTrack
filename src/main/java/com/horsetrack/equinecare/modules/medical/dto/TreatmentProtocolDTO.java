@@ -49,8 +49,24 @@ public class TreatmentProtocolDTO {
     private String awaitingPaymentPhaseName;
     private String awaitingPaymentInvoiceCode;   // Hóa đơn chủ ngựa cần trả để tiếp tục
     private List<Phase> phases;           // Chỉ có ở API chi tiết
+    private List<PhaseProgress> phaseProgress; // Trạng thái từng giai đoạn (giai đoạn nào đang làm, kết thúc / bắt đầu được không) - chỉ có ở API chi tiết
     private List<StockAnswer> stockAnswer; // Kết quả kiểm kho của kho (chỉ có ở API chi tiết)
     private List<Note> progressNotes;     // Chỉ có ở API chi tiết
+
+    @Data
+    @Builder
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    public static class PhaseProgress {
+        private Integer phaseNo;
+        // COMPLETED: đã hoàn thành; IN_PROGRESS: đang thực hiện; READY_TO_START: đã thanh toán, chờ bác sĩ bắt đầu;
+        // WAITING_PAYMENT: chưa thanh toán; STOPPED: phác đồ đã đóng khi chưa làm giai đoạn này
+        private String status;
+        private Boolean canFinish;        // Kết thúc được ngay (PUT .../phases/{phaseNo}/finish-early hoặc /complete)
+        private String finishBlockedReason; // Đang thực hiện nhưng chưa kết thúc được: lý do (chưa cấp thuốc / chưa thanh toán)
+        private Boolean canStart;         // Bắt đầu được ngay (PUT .../phases/{phaseNo}/start-early)
+    }
 
     @Data
     @Builder

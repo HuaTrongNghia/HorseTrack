@@ -32,6 +32,8 @@ import java.util.stream.Collectors;
  * - Tự tạo cho hôm nay khi lập / sửa khẩu phần, và hằng ngày lúc 00:05 cho mọi khẩu phần đang áp dụng.
  * - Groom hoàn thành việc cho ăn thì trừ kho đúng các món của bữa đó qua sổ cái kho và ghi chi phí vật tư
  *   (Task_Material_Usage, dùng cho hóa đơn tháng - dòng DAILY_CARE).
+ * - Việc cho ăn trễ quá app.nutrition.feed-expire-minutes (mặc định 90 phút) sau giờ hẹn mà chưa làm: tự hủy (SKIPPED)
+ *   và nhập lại kho thức ăn của bữa đó nếu kho đã cấp cho ngày.
  * Việc cho ăn được đánh dấu bằng ghi chú bắt đầu "KP-planId-MEAL:" (không dùng ký tự [ vì là ký tự đặc biệt của LIKE).
  */
 @Slf4j
@@ -42,6 +44,9 @@ public class NutritionFeedTaskService {
     public static final List<String> MEALS = List.of("MORNING", "NOON", "EVENING");
     private static final Pattern MARKER = Pattern.compile("^KP-(\\d+)-(MORNING|NOON|EVENING):");
     private static final Map<String, String> MEAL_LABEL = Map.of("MORNING", "sáng", "NOON", "trưa", "EVENING", "tối");
+    // Ghi chú của việc cho ăn bị tự hủy do trễ; bữa đó không được sinh lại
+    public static final String EXPIRED_TAG = "Tự hủy do trễ";
+    private static final List<String> OPEN = List.of("TODO", "IN_PROGRESS");
 
     private final CareTaskRepository careTaskRepository;
     private final GroomProfileRepository groomProfileRepository;
@@ -57,6 +62,8 @@ public class NutritionFeedTaskService {
     private String noonTime;
     @Value("${app.nutrition.evening-time:17:00}")
     private String eveningTime;
+    @Value("${app.nutrition.feed-expire-minutes:90}")
+    private long expireMinutes;
 
     public LocalTime mealTime(String meal) {
         return LocalTime.parse(switch (meal) {
@@ -127,7 +134,8 @@ public class NutritionFeedTaskService {
             }
             String mark = marker(plan.getPlanId(), meal);
             boolean exists = careTaskRepository.findByHorse_HorseIdAndTaskDateAndTaskType(horse.getHorseId(), date, "FEED").stream()
-                    .anyMatch(t -> t.getNotes() != null && t.getNotes().startsWith(mark) && !"SKIPPED".equals(t.getStatus()));
+                    .anyMatch(t -> t.getNotes() != null && t.getNotes().startsWith(mark)
+                            && (!"SKIPPED".equals(t.getStatus()) || t.getNotes().contains(EXPIRED_TAG)));
             if (exists) {
                 continue;
             }
@@ -190,6 +198,78 @@ public class NutritionFeedTaskService {
             n++;
         }
         return n;
+    }
+
+    public long getExpireMinutes() {
+        return expireMinutes;
+    }
+
+    /** Việc cho ăn theo thực đơn còn mở mà đã trễ quá expireMinutes phút sau giờ hẹn */
+    public boolean isExpired(CareTask t, LocalDateTime now) {
+        return "FEED".equals(t.getTaskType()) && OPEN.contains(t.getStatus())
+                && t.getNotes() != null && MARKER.matcher(t.getNotes()).find()
+                && t.getTaskDate() != null && t.getScheduledTime() != null
+                && t.getTaskDate().atTime(t.getScheduledTime()).plusMinutes(expireMinutes).isBefore(now);
+    }
+
+    /** Định kỳ (mặc định 5 phút): hủy việc cho ăn trễ quá hạn và trả thức ăn về kho */
+    @Scheduled(fixedDelayString = "${app.nutrition.feed-expire-check-ms:300000}", initialDelayString = "${app.nutrition.feed-expire-initial-delay-ms:90000}")
+    @Transactional
+    public void expireLateFeedsJob() {
+        int n = expireLateFeeds(LocalDateTime.now());
+        if (n > 0) {
+            log.warn("Đã tự hủy {} việc cho ăn trễ quá {} phút", n, expireMinutes);
+        }
+    }
+
+    /** Hủy các việc cho ăn trễ quá hạn tại thời điểm now; kho đã cấp thức ăn của ngày thì nhập lại đúng lượng của bữa. Trả về số việc bị hủy. */
+    @Transactional
+    public int expireLateFeeds(LocalDateTime now) {
+        List<CareTask> late = careTaskRepository.findByTaskTypeAndStatusInAndTaskDateLessThanEqual("FEED", OPEN, now.toLocalDate()).stream()
+                .filter(t -> isExpired(t, now))
+                .toList();
+        List<String> rows = new ArrayList<>();
+        for (CareTask t : late) {
+            Matcher m = MARKER.matcher(t.getNotes());
+            m.find();
+            NutritionPlan plan = planRepository.findById(Integer.parseInt(m.group(1))).orElse(null);
+            String meal = m.group(2);
+            List<String> back = new ArrayList<>();
+            if (plan != null && requisitions.isDayIssued(plan.getPlanId(), t.getTaskDate())) {
+                for (Map.Entry<Integer, double[]> e : mealItems(plan, meal).entrySet()) {
+                    double qty = StockLedgerService.round2(e.getValue()[0]);
+                    if (qty <= 0) {
+                        continue;
+                    }
+                    var tx = stockLedger.returnStock(e.getKey(), qty, "TASK", t.getTaskId(),
+                            "Nhập lại thức ăn bữa " + MEAL_LABEL.get(meal) + " bị hủy do trễ: " + t.getTaskCode() + " - " + t.getHorse().getHorseName());
+                    back.add(StockLedgerService.fmt(qty) + " " + tx.getItem().getUnit() + " " + tx.getItem().getItemName());
+                }
+            }
+            t.setStatus("SKIPPED");
+            t.setNotes(truncate(t.getNotes() + " | " + EXPIRED_TAG + " quá " + expireMinutes + " phút (lúc "
+                    + now.format(java.time.format.DateTimeFormatter.ofPattern("HH:mm dd/MM")) + ")"
+                    + (back.isEmpty() ? "" : ", nhập lại kho " + String.join("; ", back)), 1000));
+            careTaskRepository.save(t);
+            rows.add(t.getTaskCode() + " (ngựa " + t.getHorse().getHorseName() + ", bữa " + MEAL_LABEL.get(meal) + " " + t.getTaskDate() + ")"
+                    + (back.isEmpty() ? "" : ": nhập lại " + String.join("; ", back)));
+        }
+        if (!rows.isEmpty()) {
+            requisitions.notifyWarehouse("NUTRITION_STOCK", late.size() + " bữa ăn bị hủy do trễ quá " + expireMinutes + " phút",
+                    "Groom chưa cho ăn sau " + expireMinutes + " phút kể từ giờ hẹn, hệ thống tự hủy: " + String.join(" · ", rows) + ".");
+        }
+        return late.size();
+    }
+
+    /** Định lượng từng món của một bữa trong thực đơn (itemId -> tổng lượng) */
+    private static Map<Integer, double[]> mealItems(NutritionPlan plan, String meal) {
+        Map<Integer, double[]> perItem = new LinkedHashMap<>();
+        for (NutritionPlanDetail d : plan.getDetails()) {
+            if (meal.equals(d.getMealType()) && d.getInventoryItem() != null) {
+                perItem.computeIfAbsent(d.getInventoryItem().getItemId(), k -> new double[1])[0] += d.getQuantity();
+            }
+        }
+        return perItem;
     }
 
     /** Cập nhật lưu ý đặc biệt cho các việc cho ăn chưa làm của khẩu phần (sau khi bác sĩ duyệt đề xuất thức ăn) */

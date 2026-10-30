@@ -85,7 +85,7 @@ public class NutritionRequisitions {
             }
             String note = " | Hủy: " + reason;
             if (ISSUED.contains(r.getStatus())) {
-                // Phần chưa dùng = đã cấp - đã dùng (chi phí vật tư các việc cho ăn đã hoàn thành của ngày đó)
+                // Phần chưa dùng = đã cấp - đã dùng (chi phí vật tư các việc cho ăn đã hoàn thành) - đã nhập lại (bữa tự hủy do trễ)
                 double used = usedQuantity(plan.getPlanId(), day, r.getItem().getItemId());
                 double back = StockLedgerService.round2((r.getIssuedQuantity() != null ? r.getIssuedQuantity() : r.getQuantity()) - used);
                 if (back > 0) {
@@ -110,12 +110,15 @@ public class NutritionRequisitions {
         return summary;
     }
 
-    /** Lượng vật tư đã dùng cho các việc cho ăn đã hoàn thành của thực đơn trong ngày (Task_Material_Usage) */
+    /** Lượng vật tư đã dùng (Task_Material_Usage của việc cho ăn đã hoàn thành) cộng lượng đã nhập lại khi bữa tự hủy do trễ, của thực đơn trong ngày */
     private double usedQuantity(Integer planId, LocalDate day, Integer itemId) {
         Object v = entityManager.createNativeQuery("SELECT COALESCE(SUM(u.quantity_used), 0) FROM Task_Material_Usage u JOIN Daily_Tasks t ON t.task_id = u.task_id "
                         + "WHERE t.notes LIKE ?1 AND t.task_date = ?2 AND u.item_id = ?3")
                 .setParameter(1, "KP-" + planId + "-%").setParameter(2, day).setParameter(3, itemId).getSingleResult();
-        return v == null ? 0 : ((Number) v).doubleValue();
+        Object r = entityManager.createNativeQuery("SELECT COALESCE(SUM(s.quantity), 0) FROM Stock_Transactions s JOIN Daily_Tasks t ON t.task_id = s.ref_id "
+                        + "WHERE s.tx_type = 'RETURN' AND s.ref_type = 'TASK' AND t.notes LIKE ?1 AND t.task_date = ?2 AND s.item_id = ?3")
+                .setParameter(1, "KP-" + planId + "-%").setParameter(2, day).setParameter(3, itemId).getSingleResult();
+        return (v == null ? 0 : ((Number) v).doubleValue()) + (r == null ? 0 : ((Number) r).doubleValue());
     }
 
     public void notifyWarehouse(String purpose, String title, String message) {

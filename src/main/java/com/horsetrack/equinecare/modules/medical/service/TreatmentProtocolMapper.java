@@ -99,6 +99,8 @@ public class TreatmentProtocolMapper {
                             .build()).collect(Collectors.toList()))
                     .build()).collect(Collectors.toList()));
 
+            dto.setPhaseProgress(phaseProgress(p));
+
             var issues = dispensingHistory.byHold(p.getProtocolId());
             dto.setStockAnswer(holdRepository.findByProtocolIdOrderByHoldIdAsc(p.getProtocolId()).stream()
                     .map(h -> {
@@ -123,6 +125,54 @@ public class TreatmentProtocolMapper {
                     .collect(Collectors.toList()));
         }
         return dto;
+    }
+
+    /**
+     * Trạng thái từng giai đoạn, áp dụng như nhau cho mọi giai đoạn (không chỉ giai đoạn 1):
+     * giai đoạn đầu tiên chưa hoàn thành là "đang thực hiện" khi phác đồ đang điều trị và giai đoạn đó đã bắt đầu
+     * (giai đoạn đầu: từ lúc vào điều trị; giai đoạn sau: có ghi chú "Bắt đầu (sớm) giai đoạn N").
+     */
+    private List<TreatmentProtocolDTO.PhaseProgress> phaseProgress(TreatmentProtocol p) {
+        java.util.Set<Integer> finished = phaseBilling.finishedPhaseNos(p.getProtocolId());
+        boolean closed = java.util.Set.of("COMPLETED", "CANCELLED", "SUPERSEDED").contains(p.getState());
+        boolean inTreatment = "IN_TREATMENT".equals(p.getState());
+        boolean running = inTreatment || com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(p.getState());
+        List<com.horsetrack.equinecare.modules.medical.entity.ProtocolPhase> phases = p.getPhases().stream()
+                .filter(ph -> ph.getPhaseNo() != null)
+                .sorted(java.util.Comparator.comparing(com.horsetrack.equinecare.modules.medical.entity.ProtocolPhase::getPhaseNo))
+                .toList();
+        List<TreatmentProtocolDTO.PhaseProgress> out = new java.util.ArrayList<>();
+        boolean earlierDone = true;
+        for (int i = 0; i < phases.size(); i++) {
+            var ph = phases.get(i);
+            int no = ph.getPhaseNo();
+            var row = TreatmentProtocolDTO.PhaseProgress.builder().phaseNo(no).canFinish(false).canStart(false);
+            if (finished.contains(no)) {
+                out.add(row.status("COMPLETED").build());
+                continue;
+            }
+            if (closed) {
+                out.add(row.status("STOPPED").build());
+                earlierDone = false;
+                continue;
+            }
+            boolean started = (i == 0 && inTreatment) || phaseBilling.isPhaseStarted(p.getProtocolId(), no);
+            if (earlierDone && running && started) {
+                String blocked = null;
+                try {
+                    phaseBilling.assertCanFinishPhase(p, no);
+                } catch (IllegalArgumentException ex) {
+                    blocked = ex.getMessage();
+                }
+                out.add(row.status("IN_PROGRESS").canFinish(blocked == null).finishBlockedReason(blocked).build());
+            } else if (phaseBilling.isPhaseSettled(p, no)) {
+                out.add(row.status("READY_TO_START").canStart(earlierDone && running && i > 0).build());
+            } else {
+                out.add(row.status("WAITING_PAYMENT").build());
+            }
+            earlierDone = false;
+        }
+        return out;
     }
 
     public List<TreatmentProtocolDTO> toSummaryList(List<TreatmentProtocol> protocols) {

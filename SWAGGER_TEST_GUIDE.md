@@ -621,6 +621,8 @@ Khi đăng ký (3.1), có thể gửi thêm các field tùy chọn: `color` (mà
 - **Kho duyệt và cấp thức ăn trước (theo từng ngày):** lập / sửa thực đơn (HLV hoặc bác sĩ) → hệ thống tạo **phiếu cấp thức ăn** cho hôm nay (các bữa chưa tới giờ) và ngày mai, mỗi món một phiếu, số lượng = tổng các bữa trong ngày; kho nhận thông báo trên chuông (`NUTRITION_STOCK`). Hằng ngày 00:02 tạo tiếp phiếu cho hôm nay + ngày mai của mọi thực đơn đang áp dụng. Kho cấp ở 5.5.
 - **Gửi cho nhân viên:** chỉ khi kho đã cấp thức ăn của ngày đó, mỗi bữa thành một **việc cho ăn** (`FEED`) giao cho Groom phụ trách khu chuồng (kèm `instructions`, `dietNote`; khẩu phần y tế có `medicalDiet = true`). Kho cấp hôm nay thì chỉ giao các bữa chưa tới giờ. Groom hoàn thành việc cho ăn **không trừ kho lần nữa** (chỉ ghi chi phí vật tư cho hóa đơn tháng). Groom xem ở `GET /care-tasks/my-tasks` (9.1), ngày mai: `?date=yyyy-MM-dd`.
 - **Hủy / sửa / thay thế / kết thúc thực đơn** (kể cả khi ngựa bị khóa hoặc mở khóa): phiếu chưa cấp → `CANCELLED`; phiếu đã cấp → tự **nhập lại kho phần chưa dùng** (giao dịch `RETURN`, = đã cấp − đã dùng ở các việc cho ăn đã hoàn thành) rồi `CANCELLED`; kho nhận thông báo. Sửa thực đơn sinh phiếu mới theo khẩu phần mới.
+- **Bữa ăn trễ quá 90 phút** (`app.nutrition.feed-expire-minutes`): việc cho ăn còn `TODO` / `IN_PROGRESS` quá 90 phút sau giờ hẹn thì hệ thống (quét mỗi 5 phút) tự chuyển `SKIPPED`, `notes` thêm "Tự hủy do trễ quá 90 phút (lúc HH:mm dd/MM), nhập lại kho ...". Nếu kho đã cấp thức ăn của ngày đó, đúng lượng các món của bữa được **nhập lại kho** (giao dịch `RETURN`, nguồn `TASK`); kho nhận thông báo trên chuông. Bữa đã tự hủy không được sinh lại, và khi sau đó hủy / sửa thực đơn, phần đã nhập lại không bị trả kho lần hai.
+  - Groom xác nhận bữa đã quá 90 phút → `400` "Bữa ăn đã trễ quá 90 phút so với giờ hẹn ... nên không thể xác nhận..."; `canComplete = false`.
 
 | Trường hợp | Kết quả |
 |---|---|
@@ -1191,6 +1193,8 @@ Club Manager được **xem** danh mục thuốc và phác đồ (12.1, 12.3) nh
 
 - `GET /api/v1/medical-management/protocols?state=&horseId=`: danh sách, mới nhất trước.
 - `GET /api/v1/medical-management/protocols/{protocolId}`: chi tiết gồm `phases`, `stockAnswer` (kết quả kiểm kho từng thuốc: cần, khả dụng, đã giữ, thiếu, ngày về, trạng thái), `progressNotes`, cùng phiên bản trước/sau (`replacesProtocolCode`, `replacedByProtocolCode`).
+- **`phaseProgress[]`** (chi tiết và danh sách): trạng thái từng giai đoạn, **áp dụng như nhau cho mọi giai đoạn** (không chỉ giai đoạn 1). Mỗi dòng: `phaseNo`, `status` (`COMPLETED` / `IN_PROGRESS` / `READY_TO_START` / `WAITING_PAYMENT` / `STOPPED`), `canFinish` (kết thúc được ngay bằng `PUT .../phases/{phaseNo}/finish-early` hoặc `/complete`), `finishBlockedReason` (đang làm nhưng chưa kết thúc được: chưa cấp thuốc / chưa thanh toán), `canStart` (bắt đầu được ngay bằng `PUT .../phases/{phaseNo}/start-early`). Giai đoạn đầu đang làm từ lúc phác đồ vào điều trị; giai đoạn sau đang làm khi đã bắt đầu (sau `/complete` chuyển tiếp hoặc `start-early`).
+  - Luồng kết thúc sớm cho giai đoạn N bất kỳ: `finish-early` GĐ N → GĐ N+1 `READY_TO_START` (`canStart = true` nếu đã thanh toán) → `start-early` GĐ N+1 → `IN_PROGRESS` (`canFinish = true` khi kho đã cấp thuốc) → `finish-early` GĐ N+1 ... Hết giai đoạn thì `PUT .../complete` (12.8).
 
 ### 12.4 `PUT /api/v1/medical-management/protocols/{protocolId}/confirm` — Xác nhận phương án kho
 

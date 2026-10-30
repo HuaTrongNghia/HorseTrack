@@ -137,7 +137,7 @@ public class CareTaskServiceImpl implements CareTaskService {
                 .dietNote(task.getDietNote())
                 .medicalDiet(task.getIsMedicalDiet())
                 .completableFrom(completableFrom(task))
-                .canComplete(OPEN_STATUSES.contains(task.getStatus())
+                .canComplete(OPEN_STATUSES.contains(task.getStatus()) && !feedTaskService.isExpired(task, LocalDateTime.now())
                         && (completableFrom(task) == null || !LocalDateTime.now().isBefore(completableFrom(task))))
                 .build();
     }
@@ -184,6 +184,11 @@ public class CareTaskServiceImpl implements CareTaskService {
         }
         if ("DONE".equals(task.getStatus())) {
             throw new IllegalArgumentException("Công việc này đã được đánh dấu hoàn thành trước đó");
+        }
+        // Bữa ăn theo thực đơn trễ quá hạn: không xác nhận nữa, hệ thống tự hủy và trả thức ăn về kho
+        if (feedTaskService.isExpired(task, LocalDateTime.now())) {
+            throw new IllegalArgumentException("Bữa ăn đã trễ quá " + feedTaskService.getExpireMinutes() + " phút so với giờ hẹn "
+                    + task.getScheduledTime() + " nên không thể xác nhận; hệ thống tự hủy việc này và trả thức ăn về kho.");
         }
         // Ngựa đang trong buổi tập thì chưa cho ăn / chăm sóc được
         if (task.getHorse() != null) {
