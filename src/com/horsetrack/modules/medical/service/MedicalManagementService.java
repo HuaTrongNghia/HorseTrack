@@ -2,15 +2,6 @@
 
   
 
-    // Phác đồ tạm dừng vì chưa thanh toán nhưng đã cấp thuốc thì không còn sửa / hủy được
-    private boolean alreadyDispensed(TreatmentProtocol protocol) {
-        return com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(protocol.getState())
-                && !holdRepository.findByProtocolIdAndStatusIn(protocol.getProtocolId(), List.of("ISSUED")).isEmpty();
-    }
-
-    // ==========================================
-    // ĐIỀU TRỊ & KẾT THÚC
-    // ==========================================
 
     @Transactional(rollbackFor = Exception.class)
     public TreatmentProtocolDTO addProgressNote(Integer protocolId, ProtocolTextRequestDTO request) {
