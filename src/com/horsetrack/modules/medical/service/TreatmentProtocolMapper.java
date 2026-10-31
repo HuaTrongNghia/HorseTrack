@@ -62,18 +62,7 @@ public class TreatmentProtocolMapper {
                 .build();
 
         // Đang chờ thanh toán: giai đoạn sớm nhất còn hóa đơn mở (FE hiển thị đúng "chờ thanh toán giai đoạn N", không cố định giai đoạn 1)
-        if (com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling.ON_HOLD.equals(p.getState())) {
-            p.getPhases().stream()
-                    .filter(ph -> ph.getPhaseNo() != null)
-                    .sorted(java.util.Comparator.comparing(com.horsetrack.equinecare.modules.medical.entity.ProtocolPhase::getPhaseNo))
-                    .filter(ph -> phaseBilling.findPhaseInvoice(p.getProtocolId(), ph.getPhaseNo()).filter(i -> i.isOpen()).isPresent())
-                    .findFirst()
-                    .ifPresent(ph -> {
-                        dto.setAwaitingPaymentPhaseNo(ph.getPhaseNo());
-                        dto.setAwaitingPaymentPhaseName(ph.getPhaseName());
-                        dto.setAwaitingPaymentInvoiceCode(phaseBilling.findPhaseInvoice(p.getProtocolId(), ph.getPhaseNo()).map(i -> i.getInvoiceCode()).orElse(null));
-                    });
-        }
+        
 
         
       
