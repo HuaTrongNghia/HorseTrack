@@ -28,18 +28,6 @@ public class VaccinationReminder {
 
     private static final DateTimeFormatter VN_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
-    private final VaccinationRepository vaccinationRepository;
-    private final UserRepository userRepository;
-    private final EmailService emailService;
-
-    @Scheduled(cron = "${app.vaccination.reminder-cron:0 0 7 * * *}")
-    @Transactional(readOnly = true)
-    public void runDaily() {
-        int n = remind(LocalDate.now());
-        if (n > 0) {
-            log.info("Đã gửi email nhắc lịch tiêm phòng / tẩy giun hôm nay cho {} bác sĩ", n);
-        }
-    }
 
     /** Gửi email nhắc các lịch còn chờ thực hiện của ngày day. Trả về số bác sĩ được gửi. */
     @Transactional(readOnly = true)
