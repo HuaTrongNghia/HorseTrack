@@ -59,9 +59,17 @@ public class TournamentController {
         return ResponseEntity.ok(ApiResponse.ok("Đã công bố giải đấu", tournamentService.publish(id)));
     }
 
+    @PutMapping("/{id}/finish")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @Operation(summary = "Kết thúc giải (đã thi xong)", description = "Dùng được cả trước ngày thi (demo). Ngừng nhận đề xuất; đề xuất còn ở hàng chờ / chờ HLV / chờ khám / chờ thanh toán chuyển NO_SLOT (hủy hóa đơn lệ phí chưa trả), "
+            + "chỉ giữ đề xuất REGISTERED để nhập kết quả. Không có đề xuất REGISTERED thì giải chuyển FINISHED luôn.")
+    public ResponseEntity<ApiResponse<TournamentDTO>> finish(@PathVariable Integer id) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã kết thúc giải", tournamentService.finish(id)));
+    }
+
     @PutMapping("/{id}/results")
     @PreAuthorize("hasAuthority('Club Manager')")
-    @Operation(summary = "Nhập kết quả giải", description = "Từ ngày thi trở đi, chỉ cho đề xuất REGISTERED. Tự tính tiền thưởng theo bảng thưởng, cập nhật thành tích ngựa, báo chủ ngựa. Mọi đề xuất đã có kết quả thì giải chuyển FINISHED.")
+    @Operation(summary = "Nhập kết quả giải", description = "Sau khi giải kết thúc (PUT /finish) hoặc từ ngày thi trở đi, chỉ cho đề xuất REGISTERED. Tự tính tiền thưởng theo bảng thưởng, cập nhật thành tích ngựa, báo chủ ngựa. Mọi đề xuất đã có kết quả thì giải chuyển FINISHED.")
     public ResponseEntity<ApiResponse<List<RaceProposalDTO>>> results(@PathVariable Integer id, @RequestBody List<@Valid RaceResultItemDTO> request) {
         return ResponseEntity.ok(ApiResponse.ok("Đã nhập kết quả", tournamentService.recordResults(id, request)));
     }

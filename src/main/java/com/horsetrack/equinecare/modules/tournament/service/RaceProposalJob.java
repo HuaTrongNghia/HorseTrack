@@ -77,6 +77,7 @@ public class RaceProposalJob {
         r.put("promoted", 0);
         r.put("noSlot", 0);
         for (ExternalCompetition c : competitionRepository.findByStatusOrderByStartDateAsc(ExternalCompetition.PUBLISHED)) {
+            if (Boolean.TRUE.equals(c.getIsFinished())) continue; // đã kết thúc: không còn đề xuất đang chạy
             Integer cid = c.getCompetitionId();
 
             for (CompetitionEntry e : entries(cid, CompetitionEntry.IN_STAGE)) {

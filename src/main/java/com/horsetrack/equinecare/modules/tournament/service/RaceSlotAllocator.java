@@ -138,7 +138,7 @@ public class RaceSlotAllocator {
     @Transactional
     public int promoteWaitlist(ExternalCompetition competition, LocalDateTime now) {
         ExternalCompetition c = competitionRepository.findByIdForUpdate(competition.getCompetitionId()).orElse(competition);
-        if (!ExternalCompetition.PUBLISHED.equals(c.getStatus()) || !now.isBefore(c.registrationCloseAt())) {
+        if (!ExternalCompetition.PUBLISHED.equals(c.getStatus()) || Boolean.TRUE.equals(c.getIsFinished()) || !now.isBefore(c.registrationCloseAt())) {
             return 0;
         }
         long held = holding(c.getCompetitionId());

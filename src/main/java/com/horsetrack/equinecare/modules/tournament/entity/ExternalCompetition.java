@@ -61,6 +61,8 @@ public class ExternalCompetition {
     @Column(name = "source_note", length = 255)
     private String sourceNote;
 
+    // Giải đã thi xong (Quản lý CLB bấm "Kết thúc giải"): ngừng nhận đề xuất, được nhập kết quả.
+    // tournament_status chỉ sang FINISHED khi mọi đề xuất đã đăng ký đều có kết quả.
     @Column(name = "is_finished", nullable = false)
     private Boolean isFinished;
 
@@ -98,6 +100,11 @@ public class ExternalCompetition {
     private Map<Integer, BigDecimal> prizes = new HashMap<>();
 
     /** Thời điểm hết hạn đăng ký chung: cuối ngày registrationDeadline (không có thì đầu ngày thi). Không hạn chặng nào vượt quá mốc này. */
+    /** Đã thi xong: Quản lý CLB đã kết thúc giải hoặc đã đến ngày thi */
+    public boolean raceEnded() {
+        return Boolean.TRUE.equals(isFinished) || (startDate != null && !java.time.LocalDate.now().isBefore(startDate));
+    }
+
     public LocalDateTime registrationCloseAt() {
         return registrationDeadline != null ? registrationDeadline.plusDays(1).atStartOfDay() : startDate.atStartOfDay();
     }

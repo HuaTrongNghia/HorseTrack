@@ -37,6 +37,12 @@ public class TournamentDTO {
     private String statusLabel;
     private LocalDateTime publishedAt;
     private Boolean finished;
+    /** Quản lý CLB đã bấm "Kết thúc giải", đang chờ nhập đủ kết quả (status vẫn PUBLISHED) */
+    private Boolean raceEnded;
+    /** Hiện nút "Kết thúc giải" (giải đang công bố, chưa kết thúc) */
+    private Boolean canFinish;
+    /** Được nhập kết quả: giải đang công bố và đã kết thúc hoặc đã đến ngày thi */
+    private Boolean canRecordResults;
     /** Còn nhận đề xuất: đã công bố, chưa qua hạn đăng ký */
     private Boolean openForProposal;
     /** Số suất chính thức còn trống */

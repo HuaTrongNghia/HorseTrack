@@ -86,7 +86,7 @@ public class TournamentService {
     public TournamentDTO update(Integer id, TournamentCreateDTO request) {
         ExternalCompetition c = competitionRepository.findByIdForUpdate(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giải đấu với ID: " + id));
-        if (ExternalCompetition.FINISHED.equals(c.getStatus())) {
+        if (ExternalCompetition.FINISHED.equals(c.getStatus()) || Boolean.TRUE.equals(c.getIsFinished())) {
             throw new IllegalArgumentException("Giải " + c.getCompetitionName() + " đã kết thúc, không sửa được.");
         }
         validate(request, id);
@@ -137,7 +137,47 @@ public class TournamentService {
         return mapper.toDto(c);
     }
 
-    // ---------- Quản lý CLB: nhập kết quả ----------
+    // ---------- Quản lý CLB: kết thúc giải, nhập kết quả ----------
+
+    /**
+     * Kết thúc giải (cho phép trước ngày thi để demo): ngừng nhận đề xuất, đóng các đề xuất chưa đăng ký xong (NO_SLOT, hủy hóa đơn
+     * lệ phí chưa trả), chỉ giữ đề xuất REGISTERED để nhập kết quả. Không còn ai REGISTERED thì giải chuyển FINISHED luôn.
+     */
+    @Transactional
+    public TournamentDTO finish(Integer id) {
+        ExternalCompetition c = competitionRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy giải đấu với ID: " + id));
+        if (!ExternalCompetition.PUBLISHED.equals(c.getStatus())) {
+            throw new IllegalArgumentException("Chỉ kết thúc được giải đang công bố (hiện tại: " + RaceMapper.tournamentLabel(c) + ").");
+        }
+        if (Boolean.TRUE.equals(c.getIsFinished())) {
+            throw new IllegalArgumentException("Giải " + c.getCompetitionName() + " đã kết thúc, đang chờ nhập kết quả.");
+        }
+        List<CompetitionEntry> open = entryRepository.findByCompetition_CompetitionIdAndStatusInOrderByProposedAtAscEntryIdAsc(id, List.of(
+                CompetitionEntry.WAITLISTED, CompetitionEntry.WAITING_TRAINER, CompetitionEntry.WAITING_VET_EXAM, CompetitionEntry.WAITING_PAYMENT));
+        // Đang có giao dịch VNPay chờ xác minh: đợi kết quả thanh toán rồi mới kết thúc
+        for (CompetitionEntry e : open) {
+            if (e.getInvoice() != null && RaceSlotAllocator.hasLiveTransaction(e.getInvoice())) {
+                throw new IllegalArgumentException("Đề xuất " + RaceNotifier.code(e) + " đang có giao dịch thanh toán lệ phí chờ xác minh. Vui lòng đợi kết quả thanh toán rồi kết thúc giải.");
+            }
+        }
+        // Đánh dấu trước để việc đóng đề xuất không đôn hàng chờ lên
+        c.setIsFinished(true);
+        competitionRepository.saveAndFlush(c);
+        LocalDateTime now = LocalDateTime.now();
+        for (CompetitionEntry e : open) {
+            slots.close(e, CompetitionEntry.NO_SLOT, "Quản lý CLB đã kết thúc giải khi đề xuất chưa hoàn tất đăng ký", "RACE_TOURNAMENT_FINISHED", now);
+        }
+        long registered = entryRepository.countByCompetition_CompetitionIdAndStatusIn(id, List.of(CompetitionEntry.REGISTERED));
+        if (registered == 0) {
+            c.setStatus(ExternalCompetition.FINISHED);
+        }
+        competitionRepository.save(c);
+        auditTrail.record("FINISH_TOURNAMENT", "External_Competitions", "status=PUBLISHED",
+                "status=" + c.getStatus() + " | is_finished=1 | giải #" + id + " | " + c.getCompetitionName() + " | đóng " + open.size()
+                        + " đề xuất chưa hoàn tất | " + registered + " đề xuất chờ nhập kết quả");
+        return mapper.toDto(c);
+    }
 
     @Transactional
     public List<RaceProposalDTO> recordResults(Integer id, List<RaceResultItemDTO> items) {
@@ -146,8 +186,8 @@ public class TournamentService {
         if (ExternalCompetition.DRAFT.equals(c.getStatus())) {
             throw new IllegalArgumentException("Giải chưa công bố, chưa thể nhập kết quả.");
         }
-        if (LocalDate.now().isBefore(c.getStartDate())) {
-            throw new IllegalArgumentException("Giải diễn ra ngày " + c.getStartDate() + ", chỉ nhập kết quả từ ngày thi trở đi.");
+        if (!c.raceEnded()) {
+            throw new IllegalArgumentException("Giải diễn ra ngày " + c.getStartDate() + ". Bấm \"Kết thúc giải\" trước, hoặc đợi đến ngày thi rồi nhập kết quả.");
         }
         if (items == null || items.isEmpty()) {
             throw new IllegalArgumentException("Danh sách kết quả trống.");

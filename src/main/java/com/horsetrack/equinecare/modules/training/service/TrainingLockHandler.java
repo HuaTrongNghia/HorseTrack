@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 
 /**
  * Tác động của khóa huấn luyện (VetLock) lên giáo án (BR_01 / F3-03, F21-02):
- * - Khi khóa: hủy mọi buổi tập chưa thực hiện (chờ xác nhận / đã xác nhận), tạm dừng giáo án ACTIVE (PAUSED),
+ * - Khi khóa: hủy mọi buổi tập chưa thực hiện (chờ xác nhận / đã xác nhận), tạm dừng giáo án ACTIVE (PAUSED), hủy đăng ký giải đấu chưa thi,
  *   gửi email báo HLV phụ trách và chủ ngựa. Giáo án PENDING giữ nguyên trạng thái chờ.
  * - Khi mở khóa: giáo án tạm dừng quay về PENDING (các buổi tập cũ đã bị hủy), HLV phân công lại buổi tập
  *   và giáo án chạy lại khi Groom xác nhận (xem TrainingPlanActivator). Gửi email báo HLV và chủ ngựa.
@@ -44,6 +44,7 @@ public class TrainingLockHandler {
     private final AppNotificationService appNotifications;
     private final SessionIncidentHandler incidentHandler;
     private final com.horsetrack.equinecare.modules.nutrition.service.NutritionLockHandler nutritionLockHandler;
+    private final com.horsetrack.equinecare.modules.tournament.service.RaceInjuryWithdrawal raceWithdrawal;
 
     /** Gọi ngay sau khi ngựa chuyển sang khóa huấn luyện. Trả về số buổi tập đã hủy. */
     public int onHorseLocked(Horse horse, String reason) {
@@ -80,7 +81,10 @@ public class TrainingLockHandler {
                 """.formatted(esc(horse.getHorseName()), esc(why), pending.size(), sessionsHtml);
         notify(horse, plans, "[HorseTrack] Ngựa " + horse.getHorseName() + " bị khóa huấn luyện", body);
 
-        log.info("VetLock ngựa {}: hủy {} buổi tập, tạm dừng {} giáo án", horse.getHorseId(), pending.size(), plans.size());
+        // Hủy đăng ký giải đấu chưa thi (kể cả đã thanh toán: hoàn lệ phí), đôn hàng chờ
+        int races = raceWithdrawal.onHorseLocked(horse, why);
+
+        log.info("VetLock ngựa {}: hủy {} buổi tập, tạm dừng {} giáo án, hủy {} đề xuất thi đấu", horse.getHorseId(), pending.size(), plans.size(), races);
         return pending.size();
     }
 

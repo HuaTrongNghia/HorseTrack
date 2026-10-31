@@ -25,9 +25,18 @@ public class RaceMapper {
     private final RaceSlotAllocator slots;
     private final CompetitionEntryRepository entryRepository;
 
-    /** Còn nhận đề xuất: đã công bố và chưa hết hạn đăng ký chung */
+    /** Còn nhận đề xuất: đã công bố, chưa kết thúc và chưa hết hạn đăng ký chung */
     public static boolean isOpen(ExternalCompetition c) {
-        return ExternalCompetition.PUBLISHED.equals(c.getStatus()) && LocalDateTime.now().isBefore(c.registrationCloseAt());
+        return ExternalCompetition.PUBLISHED.equals(c.getStatus()) && !Boolean.TRUE.equals(c.getIsFinished())
+                && LocalDateTime.now().isBefore(c.registrationCloseAt());
+    }
+
+    /** Nhãn trạng thái; giải đã kết thúc nhưng chưa nhập đủ kết quả hiện "Đã thi xong - chờ nhập kết quả" */
+    public static String tournamentLabel(ExternalCompetition c) {
+        if (ExternalCompetition.PUBLISHED.equals(c.getStatus()) && Boolean.TRUE.equals(c.getIsFinished())) {
+            return "Đã thi xong - chờ nhập kết quả";
+        }
+        return TOURNAMENT_LABELS.getOrDefault(c.getStatus(), c.getStatus());
     }
 
     public TournamentDTO toDto(ExternalCompetition c) {
@@ -53,9 +62,12 @@ public class RaceMapper {
                 .slots(c.getSlots())
                 .prizes(new TreeMap<>(c.getPrizes()).entrySet().stream().map(p -> new PrizeDTO(p.getKey(), p.getValue())).toList())
                 .status(c.getStatus())
-                .statusLabel(TOURNAMENT_LABELS.getOrDefault(c.getStatus(), c.getStatus()))
+                .statusLabel(tournamentLabel(c))
                 .publishedAt(c.getPublishedAt())
                 .finished(ExternalCompetition.FINISHED.equals(c.getStatus()))
+                .raceEnded(ExternalCompetition.PUBLISHED.equals(c.getStatus()) && Boolean.TRUE.equals(c.getIsFinished()))
+                .canFinish(ExternalCompetition.PUBLISHED.equals(c.getStatus()) && !Boolean.TRUE.equals(c.getIsFinished()))
+                .canRecordResults(ExternalCompetition.PUBLISHED.equals(c.getStatus()) && c.raceEnded())
                 .openForProposal(isOpen(c))
                 .slotsLeft((int) Math.max(0, total - held))
                 .queueLength(id == null ? 0 : (int) slots.queueLength(id))

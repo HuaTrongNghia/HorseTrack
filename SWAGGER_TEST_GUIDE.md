@@ -1740,17 +1740,18 @@ Mất suất (người đầu hàng chờ tự được đôn lên, hạn chặn
     "entryConditions": "Ngựa có giấy tiêm phòng đầy đủ" }
   ```
 
-  Bỏ trống điều kiện nào thì không lọc theo điều kiện đó (`allowedBreeds` trống = mọi giống). Lỗi `400`: hạn đăng ký sau ngày thi, tuổi / cân nặng min > max, hạng thưởng trùng, mã giải trùng, thiếu `slots` / `registrationDeadline`.
-- `PUT /{id}` (`Club Manager`): cùng body. Giải đã có người đề xuất thì đổi ngày thi / hạn đăng ký / lệ phí / tuổi / cân nặng / giống → `400`; chỉ được **tăng** `slots` (hàng chờ tự được đôn). Giải `FINISHED` → `400`.
+  Bắt buộc: `minAgeYears`, `maxAgeYears`, `minWeightKg`, `maxWeightKg`, `entryFee` (≥ 0, nhập 0 nếu miễn phí), ít nhất 1 giống trong `allowedBreeds`, ít nhất 1 hạng trong `prizes` có tiền thưởng > 0. `raceDate` ≥ hôm nay + 5 ngày; `registrationDeadline` ≤ `raceDate` − 3 ngày (khi sửa giải, 2 luật ngày chỉ kiểm tra nếu đổi ngày thi / hạn đăng ký). Lỗi `400`: thiếu trường bắt buộc, sai luật ngày, tuổi / cân nặng min > max, hạng thưởng trùng, mã giải trùng.
+- `PUT /{id}` (`Club Manager`): cùng body. Giải đã có người đề xuất thì đổi ngày thi / hạn đăng ký / lệ phí / tuổi / cân nặng / giống → `400`; chỉ được **tăng** `slots` (hàng chờ tự được đôn). Giải đã kết thúc (`raceEnded` hoặc `FINISHED`) → `400`.
 - `PUT /{id}/publish` (`Club Manager`): `DRAFT` → `PUBLISHED`, mọi chủ ngựa nhận thông báo. Hạn đăng ký đã qua → `400`.
-- `GET ?open=` / `GET /{id}` (mọi role): Quản lý CLB thấy cả giải `DRAFT`, role khác chỉ thấy `PUBLISHED` / `FINISHED`. Mỗi giải có thêm `status, statusLabel, slots, slotsLeft, queueLength, prizes[], allowedBreeds[], minAgeYears…, openForProposal, hasProposals`.
-- `PUT /{id}/results` (`Club Manager`), từ ngày thi trở đi:
+- `GET ?open=` / `GET /{id}` (mọi role): Quản lý CLB thấy cả giải `DRAFT`, role khác chỉ thấy `PUBLISHED` / `FINISHED`. Mỗi giải có thêm `status, statusLabel, slots, slotsLeft, queueLength, prizes[], allowedBreeds[], minAgeYears…, openForProposal, hasProposals, raceEnded, canFinish, canRecordResults`.
+- `PUT /{id}/finish` (`Club Manager`) — **Kết thúc giải**, dùng được cả trước ngày thi (để demo nhập kết quả): ngừng nhận đề xuất; đề xuất còn `WAITLISTED` / `WAITING_TRAINER` / `WAITING_VET_EXAM` / `WAITING_PAYMENT` → `NO_SLOT` (hủy hóa đơn lệ phí chưa trả, báo chủ ngựa); chỉ giữ đề xuất `REGISTERED`. Còn đề xuất `REGISTERED` thì giải vẫn `PUBLISHED` với `raceEnded = true`, `statusLabel = "Đã thi xong - chờ nhập kết quả"`, `canRecordResults = true`; không còn ai `REGISTERED` thì giải → `FINISHED` luôn. Lỗi `400`: giải không ở `PUBLISHED`, đã kết thúc rồi, hoặc có hóa đơn lệ phí đang chờ VNPay xác minh. Ghi `Audit_Logs` `FINISH_TOURNAMENT`, `RACE_TOURNAMENT_FINISHED`.
+- `PUT /{id}/results` (`Club Manager`), sau khi **Kết thúc giải** hoặc từ ngày thi trở đi:
 
   ```json
   [ { "proposalId": 12, "rank": 1, "finishTime": "1:12.45" }, { "proposalId": 15, "rank": 2, "finishTime": "73.1" } ]
   ```
 
-  Chỉ cho đề xuất `REGISTERED` (sửa lại được đề xuất đã `RESULT_RECORDED`). `prizeAmount` tự lấy theo bảng thưởng (hạng không có trong bảng = 0). Thành tích vào hồ sơ ngựa: `GET /api/v1/horses/{id}` có `raceResults[], raceCount, raceWins, totalPrize`. Mọi đề xuất `REGISTERED` đã có kết quả thì giải → `FINISHED`. Lỗi `400`: trước ngày thi, đề xuất không thuộc giải / không `REGISTERED`, hạng trùng, `finishTime` sai.
+  Chỉ cho đề xuất `REGISTERED` (sửa lại được đề xuất đã `RESULT_RECORDED`). `prizeAmount` tự lấy theo bảng thưởng (hạng không có trong bảng = 0). Thành tích vào hồ sơ ngựa: `GET /api/v1/horses/{id}` có `raceResults[], raceCount, raceWins, totalPrize`. Mọi đề xuất `REGISTERED` đã có kết quả thì giải → `FINISHED`. Lỗi `400`: chưa kết thúc giải mà chưa đến ngày thi, đề xuất không thuộc giải / không `REGISTERED`, hạng trùng, `finishTime` sai.
 
 **13.2 Chủ ngựa xem giải kèm lọc điều kiện — `GET /api/v1/owner/tournaments?open=true`, `GET /api/v1/owner/tournaments/{id}`** (`Horse Owner`)
 
@@ -1777,6 +1778,8 @@ Mỗi giải: `tournament`, `eligible` (có ngựa phù hợp), `horses[]` (phù
 4. Thanh toán hóa đơn `TD-` bằng luồng VNPay ở mục 12F; VNPay xác nhận thành công thì đề xuất → `REGISTERED` (chủ ngựa và HLV nhận thông báo). Hóa đơn tháng không thu lại lệ phí đăng ký (chỉ còn phí vận chuyển nếu có).
 
 **13.5 Job tự động (mặc định 15 phút/lần, `TOURNAMENT_JOB_MS`)**: hết hạn chặng → `*_EXPIRED` và đôn hàng chờ (hóa đơn đang có giao dịch VNPay chờ xác minh thì đợi); kiểm tra lại điều kiện ngựa của đề xuất ở hàng chờ / đang chạy chặng → `INELIGIBLE`; nhắc trước 12 giờ khi sắp hết hạn chặng (HLV / bác sĩ / chủ ngựa); đến hạn đăng ký → hàng chờ còn lại `NO_SLOT`. Mọi lần hệ thống tự hủy và mọi lần HLV từ chối đều ghi `Audit_Logs` (`RACE_AUTO_EXPIRE`, `RACE_AUTO_INELIGIBLE`, `RACE_AUTO_NO_SLOT`, `TRAINER_REJECT_RACE`). Hạn chặng đổi được bằng `TOURNAMENT_TRAINER_DAYS`, `TOURNAMENT_VET_DAYS`, `TOURNAMENT_PAYMENT_DAYS`.
+
+**13.5b Ngựa bị khóa huấn luyện (chấn thương) khi đang có đề xuất**: bác sĩ khóa ngựa (`POST` VetLock, bệnh án có chỉ định khóa tập, hoặc `PUT /horses/{id}` với `isLocked = true`) → mọi đề xuất còn hiệu lực của ngựa ở giải chưa thi (kể cả `REGISTERED` đã thanh toán) chuyển `INELIGIBLE`. Lệ phí đã trả: hóa đơn `TD-` chuyển `REFUNDED` (ghi `Audit_Logs` `REFUND_INVOICE`), chủ ngựa được báo sẽ hoàn toàn bộ, Quản lý CLB nhận thông báo chuyển trả tiền (link `/manager/invoices`). Suất trống được đôn cho người đầu hàng chờ (chỉ khi giải còn hạn đăng ký) → `WAITING_TRAINER`, chủ ngựa đó nhận thông báo lên suất, HLV nhận yêu cầu xác nhận. HLV của ngựa bị hủy cũng nhận thông báo. Giải đã kết thúc (chờ nhập kết quả) thì không hủy. Nhật ký: `RACE_INJURY_WITHDRAW`.
 
 **13.6 Chặn giáo án nặng trước giải**: ngựa có đề xuất từ `WAITING_VET_EXAM` trở đi thì trong 7 ngày trước ngày thi (tính cả ngày thi) → `400` khi: tạo giáo án có giai đoạn `HIGH` rơi vào khoảng đó; phân công buổi tập vào ngày thuộc giai đoạn `HIGH`; HLV cho tập tiếp mà nâng giai đoạn lên `HIGH`. Message nêu giải, ngày thi và khoảng ngày bị chặn.
 
