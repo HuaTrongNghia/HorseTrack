@@ -99,18 +99,7 @@ public class TreatmentProtocolMapper {
                             .build()).collect(Collectors.toList()))
                     .build()).collect(Collectors.toList()));
 
-            var issues = dispensingHistory.byHold(p.getProtocolId());
-            dto.setStockAnswer(holdRepository.findByProtocolIdOrderByHoldIdAsc(p.getProtocolId()).stream()
-                    .map(h -> {
-                        TreatmentProtocolDTO.StockAnswer a = toStockAnswer(h);
-                        var lines = issues.get(h.getHoldId());
-                        if (lines != null && !lines.isEmpty()) {
-                            a.setIssuedAt(lines.get(0).getIssuedAt());
-                            a.setIssuedByName(lines.get(0).getIssuedByName());
-                            a.setIssuedLots(lines.stream().map(com.horsetrack.equinecare.modules.inventory.service.DispensingHistory.Record::lotLabel).toList());
-                        }
-                        return a;
-         
+      
 
     // Tự tính thay vì đọc cột line_total (cột tính toán chỉ có sau khi đọc lại từ DB)
    
