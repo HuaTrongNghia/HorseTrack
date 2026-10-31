@@ -67,12 +67,4 @@ public class VaccinationReminder {
         for (User vet : userRepository.findByRoleNameInAndIsActiveTrue(List.of("Veterinarian"))) {
             if (!StringUtils.hasText(vet.getEmail())) {
                 continue;
-            }
-            try {
-                emailService.sendAsync("VACCINATION_REMINDER", vet.getEmail(), subject,
-                        "<p>Xin chào <b>" + esc(vet.getFullName()) + "</b>,</p>"
-                                + "<p>Hôm nay <b>" + day.format(VN_DATE) + "</b> bạn có lịch " + what + " cho <b>" + due.size() + "</b> ngựa:</p>"
-                                + "<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\">"
-                                + "<tr><th>Mã lịch</th><th>Ngựa</th><th>Chuồng</th><th>Loại</th><th>Vaccine / thuốc</th></tr>" + rows + "</table>"
-                                + "<p>Thực hiện xong, ghi nhận tại mục Tiêm phòng (POST /api/v1/vaccinations/{mã lịch}/execute).</p>");
-          
+           
