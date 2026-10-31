@@ -59,7 +59,11 @@ public class HorseResponseDTO {
         private Integer proposalId;
         private String tournamentName;
         private LocalDate raceDate;
+        /** Cự ly giải (m) */
+        private BigDecimal distanceM;
         private Integer rank;
+        /** Số ngựa có kết quả trong giải (hiển thị hạng dạng rank/fieldSize) */
+        private Integer fieldSize;
         private BigDecimal finishTimeSeconds;
         private BigDecimal prizeAmount;
     }

@@ -109,7 +109,8 @@ public class HorseServiceImpl implements HorseService {
     private void fillRaceResults(HorseResponseDTO dto) {
         @SuppressWarnings("unchecked")
         List<Object[]> rows = entityManager.createNativeQuery("""
-                SELECT ce.entry_id, ec.competition_name, ec.start_date, ce.rank_position, ce.finish_time_seconds, ce.prize_awarded
+                SELECT ce.entry_id, ec.competition_name, ec.start_date, ce.rank_position, ce.finish_time_seconds, ce.prize_awarded, ec.race_distance_m,
+                       (SELECT COUNT(*) FROM Competition_Entries x WHERE x.competition_id = ce.competition_id AND x.registration_status = 'RESULT_RECORDED') field_size
                 FROM Competition_Entries ce JOIN External_Competitions ec ON ec.competition_id = ce.competition_id
                 WHERE ce.horse_id = ?1 AND ce.registration_status = 'RESULT_RECORDED'
                 ORDER BY ec.start_date DESC, ce.entry_id DESC""")
@@ -121,6 +122,8 @@ public class HorseServiceImpl implements HorseService {
                 .rank(r[3] == null ? null : ((Number) r[3]).intValue())
                 .finishTimeSeconds((BigDecimal) r[4])
                 .prizeAmount((BigDecimal) r[5])
+                .distanceM((BigDecimal) r[6])
+                .fieldSize(r[7] == null ? null : ((Number) r[7]).intValue())
                 .build()).toList();
         dto.setRaceResults(results);
         dto.setRaceCount(results.size());
