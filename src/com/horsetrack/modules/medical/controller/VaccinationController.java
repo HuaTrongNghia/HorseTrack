@@ -10,15 +10,7 @@ public class VaccinationController {
     private final VaccinationService vaccinationService;
 
     // tab: due (quá hạn / đến hạn trong 7 ngày), upcoming, done, bỏ trống = tất cả; lọc theo quyền xem ngựa
-    @GetMapping
-    @PreAuthorize("hasAnyAuthority('Veterinarian', 'Club Manager', 'Trainer', 'Groom', 'Horse Owner')")
-    public ResponseEntity<ApiResponse<List<VaccinationRecordDTO>>> getVaccinationRecords(
-            @RequestParam(required = false) String tab,
-            @RequestParam(required = false) Integer horseId,
-            @RequestParam(required = false) String kind) {
-        return ResponseEntity.ok(ApiResponse.ok("Lấy lịch tiêm phòng thành công", vaccinationService.list(tab, horseId, kind)));
-    }
-
+   
     // Bác sĩ tạo lịch tiêm / tẩy giun cho nhiều ngựa
     @PostMapping("/schedule")
     @PreAuthorize("hasAuthority('Veterinarian')")
