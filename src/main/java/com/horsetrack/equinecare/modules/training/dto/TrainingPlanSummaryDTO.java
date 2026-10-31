@@ -15,7 +15,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class TrainingPlanSummaryDTO {
     private Integer planId;
-    private String planName;
+    private     String planName;
     private String horseName;
     private LocalDate startDate;
     private LocalDate endDate;

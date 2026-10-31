@@ -124,6 +124,8 @@ public class RaceSlotAllocator {
         entryRepository.save(e);
         notifier.audit(action, before, e, (system ? "Hệ thống tự hủy: " : "") + reason);
         String again = CompetitionEntry.NO_SLOT.equals(status) ? ""
+                : CompetitionEntry.VET_FAILED.equals(status)
+                ? "<p>Ngựa này không được đề xuất lại cho giải này. Bạn có thể đề xuất ngựa khác nếu giải còn hạn đăng ký; đề xuất mới sẽ xếp vào cuối hàng.</p>"
                 : "<p>Bạn có thể đề xuất lại nếu giải còn hạn đăng ký; đề xuất mới sẽ xếp vào cuối hàng.</p>";
         notifier.notify(e.getOwner(), "[HorseTrack] Đề xuất " + RaceNotifier.code(e) + ": " + RaceNotifier.label(status),
                 "<p>Đề xuất ngựa <b>" + esc(e.getHorse().getHorseName()) + "</b> thi giải <b>" + esc(e.getCompetition().getCompetitionName())

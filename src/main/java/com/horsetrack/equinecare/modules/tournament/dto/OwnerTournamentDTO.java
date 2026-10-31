@@ -19,8 +19,10 @@ public class OwnerTournamentDTO {
     /** Ngựa của chủ, phù hợp trước, xếp theo phong độ giảm dần */
     private List<HorseEligibilityDTO> horses;
     private Integer recommendedHorseId;
-    /** Đề xuất còn hiệu lực của chủ ngựa cho giải (nếu không có: đề xuất gần nhất) */
+    /** Đề xuất còn hiệu lực của chủ ngựa cho giải (null nếu không có: được đề xuất ngựa khác khi giải còn mở) */
     private RaceProposalDTO myProposal;
+    /** Đề xuất gần nhất đã đóng (VD: khám không đạt, HLV từ chối) khi không có đề xuất còn hiệu lực, để hiển thị lịch sử */
+    private RaceProposalDTO lastProposal;
     private Integer slotsLeft;
     private Integer queueLength;
     private Boolean canPropose;

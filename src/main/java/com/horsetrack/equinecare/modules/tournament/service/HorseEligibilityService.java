@@ -95,6 +95,11 @@ public class HorseEligibilityService {
         checks.add(check("NOT_IN_TREATMENT", "Không đang điều trị", protocol == null,
                 protocol == null ? "Không có phác đồ điều trị đang mở" : "Đang có phác đồ điều trị " + protocol));
 
+        // Đã khám tiền thi đấu không đạt cho chính giải này: không được đề xuất lại ngựa này (đề xuất ngựa khác thì được)
+        entryRepository.findFirstByHorse_HorseIdAndCompetition_CompetitionIdAndStatus(h.getHorseId(), c.getCompetitionId(), CompetitionEntry.VET_FAILED)
+                .ifPresent(f -> checks.add(check("NOT_VET_FAILED", "Chưa khám không đạt cho giải này", false,
+                        "Ngựa đã khám tiền thi đấu không đạt cho giải này (đề xuất " + RaceNotifier.code(f) + "), không được đề xuất lại")));
+
         List<CompetitionEntry> sameDay = entryRepository.findSameDayEntries(h.getHorseId(), raceDate, c.getCompetitionId(), CompetitionEntry.ACTIVE);
         checks.add(check("NO_DATE_CONFLICT", "Không trùng ngày thi giải khác", sameDay.isEmpty(),
                 sameDay.isEmpty() ? "Không trùng lịch" : "Đã có đề xuất ở giải " + sameDay.get(0).getCompetition().getCompetitionName() + " cùng ngày " + raceDate));

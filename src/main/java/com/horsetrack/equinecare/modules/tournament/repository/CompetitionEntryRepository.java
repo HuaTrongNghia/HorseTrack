@@ -28,6 +28,8 @@ public interface CompetitionEntryRepository extends JpaRepository<CompetitionEnt
 
     Optional<CompetitionEntry> findByEntryCode(String entryCode);
 
+    Optional<CompetitionEntry> findFirstByHorse_HorseIdAndCompetition_CompetitionIdAndStatus(Integer horseId, Integer competitionId, String status);
+
     Optional<CompetitionEntry> findFirstByInvoice_InvoiceId(Integer invoiceId);
 
     // Đề xuất của một giải theo thứ tự đề xuất (dùng cho giữ chỗ / hàng chờ)

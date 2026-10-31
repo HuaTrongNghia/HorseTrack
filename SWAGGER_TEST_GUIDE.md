@@ -1759,6 +1759,8 @@ Mỗi giải: `tournament`, `eligible` (có ngựa phù hợp), `horses[]` (phù
 
 `formScore` tính từ 10 buổi tập gần nhất trong 90 ngày: tốc độ tối đa 40% (65 km/h = 100 điểm), nhịp tim hồi phục 20%, tỉ lệ hoàn thành buổi tập 15%, điểm HLV chấm 25%. Thiếu chỉ số nào thì chia lại tỉ trọng; chưa có buổi tập thì `null` (xếp cuối).
 
+- `myProposal` chỉ là đề xuất **còn hiệu lực** (null nếu không có → chủ ngựa đề xuất ngựa khác được); đề xuất gần nhất đã đóng (VD `VET_FAILED`, `TRAINER_REJECTED`) nằm ở `lastProposal`. Ngựa đã khám tiền thi đấu không đạt cho giải thì có check `NOT_VET_FAILED` không đạt và `POST /race-proposals` với ngựa đó → `400` (ngựa khác vẫn đề xuất được).
+
 **13.3 Đề xuất thi đấu — `/api/v1/race-proposals`**
 
 - `POST` (`Horse Owner`): `{ "tournamentId": 1, "horseId": 21, "note": "..." }` → `201`. Còn suất → `WAITING_TRAINER` (HLV phụ trách nhận thông báo, `stageDeadline` = +2 ngày); hết suất → `WAITLISTED` kèm `queuePosition`. Lỗi `400`: đã có 1 đề xuất còn hiệu lực cho giải (kể cả ngựa khác), đang có khiếu nại chờ xử lý, ngựa không đủ điều kiện (message liệt kê từng tiêu chí), giải chưa công bố / hết hạn đăng ký. Ngựa không phải của mình → `403`.
