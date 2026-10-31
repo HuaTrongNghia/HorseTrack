@@ -26,21 +26,6 @@ public class TreatmentProtocolMapper {
     private final com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling phaseBilling;
     private final com.horsetrack.equinecare.modules.inventory.service.DispensingHistory dispensingHistory;
 
-    public TreatmentProtocolDTO toDTO(TreatmentProtocol p, boolean detail) {
-        TreatmentProtocol replacedBy = protocolRepository.findByReplacesProtocol_ProtocolId(p.getProtocolId()).orElse(null);
-
-        TreatmentProtocolDTO dto = TreatmentProtocolDTO.builder()
-                .protocolId(p.getProtocolId())
-                .protocolCode(p.getProtocolCode())
-                .horseId(p.getHorse().getHorseId())
-                .horseName(p.getHorse().getHorseName())
-                .vetId(p.getVet().getUserId())
-                .vetName(p.getVet().getFullName())
-                .caseId(p.getCaseId())
-                .recordId(p.getRecordId())
-                .versionNo(p.getVersionNo())
-                .replacesProtocolId(p.getReplacesProtocol() != null ? p.getReplacesProtocol().getProtocolId() : null)
-                ai đoạn sớm nhất còn hóa đơn mở (FE hiển thị đúng "chờ thanh toán giai đoạn N", không cố định giai đoạn 1)
         
 
         
