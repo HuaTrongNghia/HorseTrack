@@ -13,15 +13,7 @@ package com.horsetrack.equinecare.modules.medical.service;
 
     /** Kho đã giữ đủ hàng: bác sĩ xác nhận để kho được cấp thuốc. */
    
-        }
-        protocol.setState("VET_CONFIRMED");
-        protocol.setConfirmedAt(LocalDateTime.now());
-        protocolRepository.save(protocol);
-        // BR_16: lập hóa đơn từng giai đoạn; giai đoạn đã tới ngày mà chưa trả thì tạm dừng ngay (trừ ca cấp cứu - BR_17)
-        phaseBilling.issuePhaseInvoices(protocol);
-        phaseBilling.evaluate(protocol, LocalDate.now());
-        return mapper.toDTO(protocol, true);
-    }
+  
 
     /** Kho báo thiếu hoặc hàng về trễ: bác sĩ chấp nhận chờ hàng, giữ nguyên phác đồ. */
     @Transactional(rollbackFor = Exception.class)
