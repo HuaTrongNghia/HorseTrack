@@ -279,7 +279,7 @@ public class TournamentService {
         List<HorseEligibilityDTO> ranked = eligibility.rank(horses, c);
         List<CompetitionEntry> mine = entryRepository.findByCompetition_CompetitionIdAndOwner_UserIdOrderByProposedAtDesc(c.getCompetitionId(), owner.getUserId());
         CompetitionEntry active = mine.stream().filter(e -> CompetitionEntry.ACTIVE.contains(e.getStatus())).findFirst().orElse(null);
-        CompetitionEntry shown = active != null ? active : mine.stream().findFirst().orElse(null);
+        CompetitionEntry last = active == null ? mine.stream().findFirst().orElse(null) : null;
         boolean complaintPending = mine.stream().anyMatch(e -> CompetitionEntry.COMPLAINT_PENDING.equals(e.getComplaintStatus()));
         boolean anyEligible = ranked.stream().anyMatch(HorseEligibilityDTO::getEligible);
         String reason = !RaceMapper.isOpen(c) ? "Giải đã hết hạn đăng ký hoặc đã kết thúc"
@@ -293,7 +293,8 @@ public class TournamentService {
                 .eligible(anyEligible)
                 .horses(ranked)
                 .recommendedHorseId(ranked.stream().filter(HorseEligibilityDTO::getRecommended).map(HorseEligibilityDTO::getHorseId).findFirst().orElse(null))
-                .myProposal(shown != null ? mapper.toDto(shown) : null)
+                .myProposal(active != null ? mapper.toDto(active) : null)
+                .lastProposal(last != null ? mapper.toDto(last) : null)
                 .slotsLeft(t.getSlotsLeft())
                 .queueLength(t.getQueueLength())
                 .canPropose(reason == null)
@@ -459,4 +460,3 @@ public class TournamentService {
         return StringUtils.hasText(s) ? s.trim() : null;
     }
 }
-
