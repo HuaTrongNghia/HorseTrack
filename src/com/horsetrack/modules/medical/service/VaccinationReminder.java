@@ -1,24 +1,89 @@
-package com.horsetrack.equinecare.modules.medical.repository;
+package com.horsetrack.equinecare.modules.medical.service;
 
+import com.horsetrack.equinecare.modules.auth.entity.User;
+import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.medical.entity.Vaccination;
-import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.stereotype.Repository;
+import com.horsetrack.equinecare.modules.medical.repository.VaccinationRepository;
+import com.horsetrack.equinecare.modules.notification.service.EmailService;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
+import org.springframework.web.util.HtmlUtils;
 
-import java.util.Collection;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
-import java.util.Optional;
 
-@Repository
-public interface VaccinationRepository extends JpaRepository<Vaccination, Integer> {
+/**
+ * Nhắc lịch tiêm phòng / tẩy giun: tới ngày dự kiến, mỗi bác sĩ thú y đang hoạt động nhận một email tổng hợp
+ * "Hôm nay bạn có lịch tiêm phòng / tẩy giun" kèm danh sách ngựa. Chạy hằng ngày (mặc định 07:00).
+ */
+@Slf4j
+@Component
+@RequiredArgsConstructor
+public class VaccinationReminder {
 
-    List<Vaccination> findAllByOrderByDueDateAscVaccinationIdAsc();
+    private static final DateTimeFormatter VN_DATE = DateTimeFormatter.ofPattern("dd/MM/yyyy");
 
-    List<Vaccination> findByHorse_HorseIdOrderByDueDateAscVaccinationIdAsc(Integer horseId);
+    private final VaccinationRepository vaccinationRepository;
+    private final UserRepository userRepository;
+    private final EmailService emailService;
 
-    Optional<Vaccination> findByVaccinationCode(String vaccinationCode);
+    @Scheduled(cron = "${app.vaccination.reminder-cron:0 0 7 * * *}")
+    @Transactional(readOnly = true)
+    public void runDaily() {
+        int n = remind(LocalDate.now());
+        if (n > 0) {
+            log.info("Đã gửi email nhắc lịch tiêm phòng / tẩy giun hôm nay cho {} bác sĩ", n);
+        }
+    }
 
-    // Lịch tiêm phòng / tẩy giun còn chờ của một ngày (nhắc bác sĩ)
-    List<Vaccination> findByStatusAndDueDateOrderByKindAscVaccinationIdAsc(String status, java.time.LocalDate dueDate);
+    /** Gửi email nhắc các lịch còn chờ thực hiện của ngày day. Trả về số bác sĩ được gửi. */
+    @Transactional(readOnly = true)
+    public int remind(LocalDate day) {
+        List<Vaccination> due = vaccinationRepository.findByStatusAndDueDateOrderByKindAscVaccinationIdAsc(Vaccination.SCHEDULED, day);
+        if (due.isEmpty()) {
+            return 0;
+        }
+        long vaccines = due.stream().filter(v -> !"DEWORM".equals(v.getKind())).count();
+        long deworms = due.size() - vaccines;
+        String what = vaccines > 0 && deworms > 0 ? "tiêm phòng và tẩy giun" : deworms > 0 ? "tẩy giun" : "tiêm phòng";
 
-    boolean existsByHorse_HorseIdAndVaccineNameIgnoreCaseAndStatusIn(Integer horseId, String vaccineName, Collection<String> statuses);
+        StringBuilder rows = new StringBuilder();
+        for (Vaccination v : due) {
+            String stall = v.getHorse() != null && v.getHorse().getStall() != null ? v.getHorse().getStall().getStallCode() : "—";
+            rows.append("<tr><td>").append(esc(v.getVaccinationCode() != null ? v.getVaccinationCode() : "#" + v.getVaccinationId()))
+                    .append("</td><td>").append(esc(v.getHorse() != null ? v.getHorse().getHorseName() : "?"))
+                    .append("</td><td>").append(esc(stall))
+                    .append("</td><td>").append("DEWORM".equals(v.getKind()) ? "Tẩy giun" : "Tiêm phòng")
+                    .append("</td><td>").append(esc(v.getVaccineName())).append("</td></tr>");
+        }
+        String subject = "[HorseTrack] Hôm nay (" + day.format(VN_DATE) + ") bạn có lịch " + what + " - " + due.size() + " ngựa";
+
+        int sent = 0;
+        for (User vet : userRepository.findByRoleNameInAndIsActiveTrue(List.of("Veterinarian"))) {
+            if (!StringUtils.hasText(vet.getEmail())) {
+                continue;
+            }
+            try {
+                emailService.sendAsync("VACCINATION_REMINDER", vet.getEmail(), subject,
+                        "<p>Xin chào <b>" + esc(vet.getFullName()) + "</b>,</p>"
+                                + "<p>Hôm nay <b>" + day.format(VN_DATE) + "</b> bạn có lịch " + what + " cho <b>" + due.size() + "</b> ngựa:</p>"
+                                + "<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\">"
+                                + "<tr><th>Mã lịch</th><th>Ngựa</th><th>Chuồng</th><th>Loại</th><th>Vaccine / thuốc</th></tr>" + rows + "</table>"
+                                + "<p>Thực hiện xong, ghi nhận tại mục Tiêm phòng (POST /api/v1/vaccinations/{mã lịch}/execute).</p>");
+                sent++;
+            } catch (Exception ex) {
+                log.warn("Không gửi được email nhắc tiêm phòng tới {}: {}", vet.getEmail(), ex.getMessage());
+            }
+        }
+        return sent;
+    }
+
+    private static String esc(String s) {
+        return s == null ? "" : HtmlUtils.htmlEscape(s);
+    }
 }
