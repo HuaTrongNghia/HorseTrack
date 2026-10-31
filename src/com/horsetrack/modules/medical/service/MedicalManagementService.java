@@ -4,26 +4,6 @@ package com.horsetrack.equinecare.modules.medical.service;
 
  
 
-    @Transactional(readOnly = true)
-    public List<MedicineCatalogDTO> getMedicineCatalog() {
-        return itemRepository.findByCategoryInOrderByItemNameAsc(com.horsetrack.equinecare.modules.inventory.service.ItemCategories.MEDICAL_VALUES).stream()
-                .map(i -> MedicineCatalogDTO.builder()
-                        .itemId(i.getItemId())
-                        .itemCode(i.getItemCode())
-                        .itemName(i.getItemName())
-                        .category(i.getCategory())
-                        .itemGroup(i.getItemGroup())
-                        .unit(i.getUnit())
-                        .unitPrice(i.getUnitPrice())
-                        .availableStock(BigDecimal.valueOf(i.getAvailableStock()).setScale(2, RoundingMode.HALF_UP).doubleValue())
-                        .route(i.getRoute())
-                        .isControlled(i.getIsControlled())
-                        .withdrawalHours(i.getWithdrawalHours())
-                        .doseReference(i.getDoseReference())
-                        .build())
-                .collect(Collectors.toList());
-    }
-
     // ==========================================
     // LẬP VÀ XEM PHÁC ĐỒ
     // ==========================================
