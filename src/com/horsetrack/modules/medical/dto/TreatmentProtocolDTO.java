@@ -70,20 +70,6 @@ public class TreatmentProtocolDTO {
         private List<Item> items;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class Item {
-        private Integer protocolItemId;
-        private Integer itemId;
-        private String itemCode;
-        private String itemName;
-        private String unit;
-        private Double quantity;
-        private BigDecimal unitPrice;
-        private BigDecimal lineTotal;
-        private String dosage;
     }
 
     
