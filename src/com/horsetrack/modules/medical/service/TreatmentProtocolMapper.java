@@ -16,17 +16,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /** Chuyển phác đồ sang DTO; dùng chung cho API của bác sĩ và của kho. */
-@Component
-@RequiredArgsConstructor
-public class TreatmentProtocolMapper {
 
-    private final TreatmentProtocolRepository protocolRepository;
-    private final StockHoldRepository holdRepository;
-    private final ProtocolProgressNoteRepository noteRepository;
-    private final com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling phaseBilling;
-    private final com.horsetrack.equinecare.modules.inventory.service.DispensingHistory dispensingHistory;
-
-        
 
         
       
