@@ -691,18 +691,6 @@ public class MedicalManagementService {
                 .build());
     }
 
-    private static String cap(String value) {
-        if (value == null) {
-            return "";
-        }
-        return value.length() > 1000 ? value.substring(0, 1000) : value;
-    }
 
-    private static ProtocolPhase phase(TreatmentProtocol protocol, Integer phaseNo) {
-        return protocol.getPhases().stream()
-                .filter(ph -> ph.getPhaseNo() != null && ph.getPhaseNo().equals(phaseNo))
-                .findFirst()
-                .orElseThrow(() -> new IllegalArgumentException("Phác đồ " + protocol.getProtocolCode() + " không có giai đoạn " + phaseNo + "."));
-    }
 
   
