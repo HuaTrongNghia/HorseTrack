@@ -129,25 +129,7 @@ public class TreatmentProtocolMapper {
         return protocols.stream().map(p -> toDTO(p, true)).collect(Collectors.toList());
     }
 
-    private static TreatmentProtocolDTO.StockAnswer toStockAnswer(StockHold h) {
-        double needed = h.getQtyNeeded() != null ? h.getQtyNeeded() : 0;
-        double held = h.getQtyHeld() != null ? h.getQtyHeld() : 0;
-        return TreatmentProtocolDTO.StockAnswer.builder()
-                .holdId(h.getHoldId())
-                .itemId(h.getItem().getItemId())
-                .itemName(h.getItem().getItemName())
-                .unit(h.getItem().getUnit())
-                .qtyNeeded(h.getQtyNeeded())
-                .qtyAvailable(h.getQtyAvailable())
-                .qtyHeld(h.getQtyHeld())
-                .qtyShort(Math.max(0, needed - held))
-                .eta(h.getEta())
-                .purchaseOrderId(h.getPurchaseOrderId())
-                .status(h.getStatus())
-                .checkedByName(h.getCheckedBy() != null ? h.getCheckedBy().getFullName() : null)
-                .checkedAt(h.getCheckedAt())
-                .build();
-    }
+
 
     // Tự tính thay vì đọc cột line_total (cột tính toán chỉ có sau khi đọc lại từ DB)
    
