@@ -5,14 +5,6 @@ import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
 import com.horsetrack.equinecare.modules.horse.repository.HorseRepository;
-import com.horsetrack.equinecare.modules.inventory.entity.InventoryItem;
-import com.horsetrack.equinecare.modules.inventory.entity.StockHold;
-import com.horsetrack.equinecare.modules.inventory.repository.InventoryItemRepository;
-import com.horsetrack.equinecare.modules.inventory.repository.StockHoldRepository;
-import com.horsetrack.equinecare.modules.inventory.service.ProtocolStockService;
-import com.horsetrack.equinecare.modules.medical.dto.*;
-
-
 
 /**
  * Phác đồ điều trị của bác sĩ thú y (SRS màn hình 61–65, BR_07).
