@@ -10,17 +10,4 @@ import com.horsetrack.equinecare.modules.medical.repository.TreatmentProtocolRep
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.util.List;
-import java.util.stream.Collectors;
-
-/** Chuyển phác đồ sang DTO; dùng chung cho API của bác sĩ và của kho. */
-
-
-        
-      
-
-    // Tự tính thay vì đọc cột line_total (cột tính toán chỉ có sau khi đọc lại từ DB)
-   
 }
