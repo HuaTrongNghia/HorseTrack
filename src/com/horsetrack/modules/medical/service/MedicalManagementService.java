@@ -6,16 +6,7 @@
 
     /**
      * Thêm thuốc khi phác đồ đang điều trị (không tạo phiên bản mới): cộng vào dòng thuốc của giai đoạn (cùng thuốc thì tăng số lượng),
-     * kho giữ ngay phần bổ sung, chủ ngựa nhận hóa đơn thuốc bổ sung; kho cấp phần bổ sung sau khi chủ ngựa thanh toán (trừ ca cấp cứu).
-     */
-    @Transactional(rollbackFor = Exception.class)
-    public TreatmentProtocolDTO addItemDuringTreatment(Integer protocolId, ProtocolItemAddRequestDTO request) {
-        TreatmentProtocol protocol = findProtocol(protocolId);
-        if (!"IN_TREATMENT".equals(protocol.getState())) {
-            throw new IllegalArgumentException("Chỉ thêm thuốc khi phác đồ đang điều trị (IN_TREATMENT). Hiện tại: " + protocol.getState()
-                    + ". Phác đồ chưa cấp thuốc thì tạo phiên bản mới.");
-        }
-        ProtocolPhase phase = protocol.getPhases().stream()
+     *
                 .filter(ph -> ph.getPhaseNo().equals(request.getPhaseNo()))
                 .findFirst()
                 .orElseThrow(() -> new IllegalArgumentException("Phác đồ " + protocol.getProtocolCode() + " không có giai đoạn " + request.getPhaseNo() + "."));
