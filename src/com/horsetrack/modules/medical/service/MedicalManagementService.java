@@ -6,13 +6,7 @@ package com.horsetrack.equinecare.modules.medical.service;
 
  
 
-    @Transactional
-    public TreatmentProtocolDTO getProtocolDetail(Integer protocolId) {
-        TreatmentProtocol protocol = findProtocol(protocolId);
-        phaseBilling.evaluate(protocol, LocalDate.now());
-        return mapper.toDTO(protocol, true);
-    }
-
+ 
     // ==========================================
     // QUYẾT ĐỊNH CỦA BÁC SĨ SAU KHI KHO TRẢ LỜI (BR_07)
     // ==========================================
