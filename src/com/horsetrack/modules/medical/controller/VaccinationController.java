@@ -12,13 +12,4 @@ public class VaccinationController {
     // tab: due (quá hạn / đến hạn trong 7 ngày), upcoming, done, bỏ trống = tất cả; lọc theo quyền xem ngựa
    
     // Bác sĩ tạo lịch tiêm / tẩy giun cho nhiều ngựa
-    @PostMapping("/schedule")
-    @PreAuthorize("hasAuthority('Veterinarian')")
-    public ResponseEntity<ApiResponse<List<VaccinationRecordDTO>>> createMassSchedule(@Valid @RequestBody CreateScheduleRequestDTO dto) {
-        List<VaccinationRecordDTO> created = vaccinationService.schedule(dto);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok("Đã tạo lịch " + dto.getMedicineName().trim() + " cho " + created.size() + " ngựa.", created));
-    }
-
-    // Ghi nhận đã tiêm (mã VC-0001 hoặc ID); có chu kỳ thì tự tạo mũi nhắc lại
-
+ 
