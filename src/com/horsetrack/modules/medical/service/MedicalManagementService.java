@@ -1,16 +1,6 @@
 
 
-    /** Đổi phác đồ (thuốc thiếu, hàng trễ...): bản cũ SUPERSEDED, trả hàng đã giữ, bản mới gửi kho kiểm lại. */
-    @Transactional(rollbackFor = Exception.class)
-    public TreatmentProtocolDTO createNewVersion(Integer protocolId, ProtocolCreateRequestDTO request) {
-        TreatmentProtocol old = findProtocol(protocolId);
-        if (!REVISABLE_STATES.contains(old.getState()) || alreadyDispensed(old)) {
-            throw new IllegalArgumentException("Không thể tạo phiên bản mới cho phác đồ đang ở trạng thái " + old.getState() + ".");
-        }
-        if (!old.getHorse().getHorseId().equals(request.getHorseId())) {
-            throw new IllegalArgumentException("Phiên bản mới phải cùng ngựa với phác đồ cũ (horseId = " + old.getHorse().getHorseId() + ").");
-        }
-
+  
         protocolStockService.releaseHolds(old.getProtocolId(), "Trả hàng do phác đồ " + old.getProtocolCode() + " có phiên bản mới");
         phaseBilling.cancelOpenPhaseInvoices(old, false, "Phác đồ " + old.getProtocolCode() + " có phiên bản mới");
         old.setState("SUPERSEDED");
