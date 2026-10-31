@@ -69,7 +69,7 @@ public class TournamentController {
 
     @PutMapping("/{id}/results")
     @PreAuthorize("hasAuthority('Club Manager')")
-    @Operation(summary = "Nhập kết quả giải", description = "Sau khi giải kết thúc (PUT /finish) hoặc từ ngày thi trở đi, chỉ cho đề xuất REGISTERED. Tự tính tiền thưởng theo bảng thưởng, cập nhật thành tích ngựa, báo chủ ngựa. Mọi đề xuất đã có kết quả thì giải chuyển FINISHED.")
+    @Operation(summary = "Nhập kết quả giải", description = "Nhập được bất cứ lúc nào khi giải đang công bố, kể cả trước ngày thi (để test). Lần nhập đầu tự kết thúc giải như PUT /finish (đề xuất chưa hoàn tất → NO_SLOT). Chỉ cho đề xuất REGISTERED. Tự tính tiền thưởng theo bảng thưởng, cập nhật thành tích ngựa, báo chủ ngựa. Mọi đề xuất đã có kết quả thì giải chuyển FINISHED.")
     public ResponseEntity<ApiResponse<List<RaceProposalDTO>>> results(@PathVariable Integer id, @RequestBody List<@Valid RaceResultItemDTO> request) {
         return ResponseEntity.ok(ApiResponse.ok("Đã nhập kết quả", tournamentService.recordResults(id, request)));
     }

@@ -1745,13 +1745,13 @@ Mất suất (người đầu hàng chờ tự được đôn lên, hạn chặn
 - `PUT /{id}/publish` (`Club Manager`): `DRAFT` → `PUBLISHED`, mọi chủ ngựa nhận thông báo. Hạn đăng ký đã qua → `400`.
 - `GET ?open=` / `GET /{id}` (mọi role): Quản lý CLB thấy cả giải `DRAFT`, role khác chỉ thấy `PUBLISHED` / `FINISHED`. Mỗi giải có thêm `status, statusLabel, slots, slotsLeft, queueLength, prizes[], allowedBreeds[], minAgeYears…, openForProposal, hasProposals, raceEnded, canFinish, canRecordResults`.
 - `PUT /{id}/finish` (`Club Manager`) — **Kết thúc giải**, dùng được cả trước ngày thi (để demo nhập kết quả): ngừng nhận đề xuất; đề xuất còn `WAITLISTED` / `WAITING_TRAINER` / `WAITING_VET_EXAM` / `WAITING_PAYMENT` → `NO_SLOT` (hủy hóa đơn lệ phí chưa trả, báo chủ ngựa); chỉ giữ đề xuất `REGISTERED`. Còn đề xuất `REGISTERED` thì giải vẫn `PUBLISHED` với `raceEnded = true`, `statusLabel = "Đã thi xong - chờ nhập kết quả"`, `canRecordResults = true`; không còn ai `REGISTERED` thì giải → `FINISHED` luôn. Lỗi `400`: giải không ở `PUBLISHED`, đã kết thúc rồi, hoặc có hóa đơn lệ phí đang chờ VNPay xác minh. Ghi `Audit_Logs` `FINISH_TOURNAMENT`, `RACE_TOURNAMENT_FINISHED`.
-- `PUT /{id}/results` (`Club Manager`), sau khi **Kết thúc giải** hoặc từ ngày thi trở đi:
+- `PUT /{id}/results` (`Club Manager`), nhập được bất cứ lúc nào khi giải đang `PUBLISHED`, **kể cả trước ngày thi** (để test). Lần nhập đầu tự kết thúc giải như `PUT /finish` (đề xuất chưa hoàn tất → `NO_SLOT`):
 
   ```json
   [ { "proposalId": 12, "rank": 1, "finishTime": "1:12.45" }, { "proposalId": 15, "rank": 2, "finishTime": "73.1" } ]
   ```
 
-  Chỉ cho đề xuất `REGISTERED` (sửa lại được đề xuất đã `RESULT_RECORDED`). `prizeAmount` tự lấy theo bảng thưởng (hạng không có trong bảng = 0). Thành tích vào hồ sơ ngựa: `GET /api/v1/horses/{id}` có `raceResults[], raceCount, raceWins, totalPrize`. Mọi đề xuất `REGISTERED` đã có kết quả thì giải → `FINISHED`. Lỗi `400`: chưa kết thúc giải mà chưa đến ngày thi, đề xuất không thuộc giải / không `REGISTERED`, hạng trùng, `finishTime` sai.
+  Chỉ cho đề xuất `REGISTERED` (sửa lại được đề xuất đã `RESULT_RECORDED`). `prizeAmount` tự lấy theo bảng thưởng (hạng không có trong bảng = 0). Thành tích vào hồ sơ ngựa: `GET /api/v1/horses/{id}` có `raceResults[], raceCount, raceWins, totalPrize`. Mọi đề xuất `REGISTERED` đã có kết quả thì giải → `FINISHED`. Lỗi `400`: giải chưa công bố, đề xuất không thuộc giải / không `REGISTERED`, hạng trùng, `finishTime` sai.
 
 **13.2 Chủ ngựa xem giải kèm lọc điều kiện — `GET /api/v1/owner/tournaments?open=true`, `GET /api/v1/owner/tournaments/{id}`** (`Horse Owner`)
 

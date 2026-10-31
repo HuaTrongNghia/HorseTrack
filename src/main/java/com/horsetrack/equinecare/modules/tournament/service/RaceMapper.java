@@ -67,7 +67,7 @@ public class RaceMapper {
                 .finished(ExternalCompetition.FINISHED.equals(c.getStatus()))
                 .raceEnded(ExternalCompetition.PUBLISHED.equals(c.getStatus()) && Boolean.TRUE.equals(c.getIsFinished()))
                 .canFinish(ExternalCompetition.PUBLISHED.equals(c.getStatus()) && !Boolean.TRUE.equals(c.getIsFinished()))
-                .canRecordResults(ExternalCompetition.PUBLISHED.equals(c.getStatus()) && c.raceEnded())
+                .canRecordResults(ExternalCompetition.PUBLISHED.equals(c.getStatus()))
                 .openForProposal(isOpen(c))
                 .slotsLeft((int) Math.max(0, total - held))
                 .queueLength(id == null ? 0 : (int) slots.queueLength(id))

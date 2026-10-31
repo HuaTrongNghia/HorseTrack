@@ -41,7 +41,7 @@ public class TournamentDTO {
     private Boolean raceEnded;
     /** Hiện nút "Kết thúc giải" (giải đang công bố, chưa kết thúc) */
     private Boolean canFinish;
-    /** Được nhập kết quả: giải đang công bố và đã kết thúc hoặc đã đến ngày thi */
+    /** Được nhập kết quả: giải đang công bố (kể cả trước ngày thi; lần nhập đầu tự kết thúc giải) */
     private Boolean canRecordResults;
     /** Còn nhận đề xuất: đã công bố, chưa qua hạn đăng ký */
     private Boolean openForProposal;
