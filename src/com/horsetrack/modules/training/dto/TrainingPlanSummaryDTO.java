@@ -15,10 +15,13 @@ import java.time.LocalDate;
 @AllArgsConstructor
 public class TrainingPlanSummaryDTO {
     private Integer planId;
-    private String planName;
+    private     String planName;
     private String horseName;
     private LocalDate startDate;
     private LocalDate endDate;
     private String status;
     private Double progress;
+    private String type;
+    private String goal;
+    private java.util.List<TrainingPlanPhaseDTO> phases;
 }
