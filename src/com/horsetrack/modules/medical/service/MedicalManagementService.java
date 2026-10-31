@@ -4,12 +4,7 @@ package com.horsetrack.equinecare.modules.medical.service;
 
  
 
-    @Transactional
-    public List<TreatmentProtocolDTO> getProtocols(String state, Integer horseId) {
-        phaseBilling.run(LocalDate.now());
-        String st = StringUtils.hasText(state) ? state.trim().toUpperCase() : null;
-        return mapper.toSummaryList(protocolRepository.search(st, horseId));
-    }
+ 
 
     @Transactional
     public TreatmentProtocolDTO getProtocolDetail(Integer protocolId) {
