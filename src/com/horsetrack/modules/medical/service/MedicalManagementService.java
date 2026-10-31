@@ -2,18 +2,7 @@ package com.horsetrack.equinecare.modules.medical.service;
 
 
 
-    private final TreatmentProtocolRepository protocolRepository;
-    private final ProtocolProgressNoteRepository noteRepository;
-    private final HorseRepository horseRepository;
-    private final UserRepository userRepository;
-    private final InventoryItemRepository itemRepository;
-    private final StockHoldRepository holdRepository;
-    private final MedicalRecordRepository medicalRecordRepository;
-   
-
-    // ==========================================
-    // DANH MỤC THUỐC (chỉ đọc)
-    // ==========================================
+ 
 
     @Transactional(readOnly = true)
     public List<MedicineCatalogDTO> getMedicineCatalog() {
