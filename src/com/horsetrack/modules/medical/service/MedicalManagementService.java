@@ -1,15 +1,6 @@
 package com.horsetrack.equinecare.modules.medical.service;
 
-import com.horsetrack.equinecare.common.exception.ResourceNotFoundException;
-import com.horsetrack.equinecare.modules.auth.entity.User;
-import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
-import com.horsetrack.equinecare.modules.horse.entity.Horse;
-import com.horsetrack.equinecare.modules.horse.repository.HorseRepository;
 
-/**
- * Phác đồ điều trị của bác sĩ thú y (SRS màn hình 61–65, BR_07).
- * Bác sĩ lập phác đồ -> kho kiểm hàng -> bác sĩ xác nhận / chờ hàng / đổi phiên bản -> kho cấp thuốc -> điều trị -> kết thúc.
- */
 @Service
 @RequiredArgsConstructor
 public class MedicalManagementService {
