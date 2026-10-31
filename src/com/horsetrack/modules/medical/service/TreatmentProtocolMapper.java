@@ -110,26 +110,7 @@ public class TreatmentProtocolMapper {
                             a.setIssuedLots(lines.stream().map(com.horsetrack.equinecare.modules.inventory.service.DispensingHistory.Record::lotLabel).toList());
                         }
                         return a;
-                    })
-                    .collect(Collectors.toList()));
-
-            dto.setProgressNotes(noteRepository.findByProtocol_ProtocolIdOrderByWrittenAtAsc(p.getProtocolId()).stream()
-                    .map(n -> TreatmentProtocolDTO.Note.builder()
-                            .noteId(n.getNoteId())
-                            .writtenByName(n.getWrittenBy().getFullName())
-                            .writtenAt(n.getWrittenAt())
-                            .content(n.getContent())
-                            .build())
-                    .collect(Collectors.toList()));
-        }
-        return dto;
-    }
-
-    public List<TreatmentProtocolDTO> toSummaryList(List<TreatmentProtocol> protocols) {
-        return protocols.stream().map(p -> toDTO(p, true)).collect(Collectors.toList());
-    }
-
-
+         
 
     // Tự tính thay vì đọc cột line_total (cột tính toán chỉ có sau khi đọc lại từ DB)
    
