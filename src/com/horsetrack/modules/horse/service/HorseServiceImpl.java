@@ -12,6 +12,7 @@ import com.horsetrack.equinecare.modules.horse.repository.HorseRegistrationRepos
 import com.horsetrack.equinecare.modules.horse.repository.HorseRepository;
 import com.horsetrack.equinecare.modules.horse.repository.StallRepository;
 import jakarta.persistence.EntityManager;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class HorseServiceImpl implements HorseService {
 
@@ -49,11 +51,12 @@ public class HorseServiceImpl implements HorseService {
     private final com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler;
     private final HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository;
-    private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
+    private final com.horsetrack.equinecare.modules.notification.service.AppNotificationService appNotifications;
     private final com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests;
     private final com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService;
     private final RegistrationAttachmentService attachmentService;
     private final com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier;
+    private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
 
     public HorseServiceImpl(HorseRepository horseRepository, UserRepository userRepository, StallRepository stallRepository,
                             HorseRegistrationRepository registrationRepository, EntityManager entityManager,
@@ -61,11 +64,12 @@ public class HorseServiceImpl implements HorseService {
                             com.horsetrack.equinecare.modules.training.service.TrainingLockHandler trainingLockHandler,
                             HorseAccessGuard horseAccessGuard,
                             com.horsetrack.equinecare.modules.training.repository.TrainingPlanRepository trainingPlanRepository,
-                            com.horsetrack.equinecare.modules.notification.service.EmailService emailService,
+                            com.horsetrack.equinecare.modules.notification.service.AppNotificationService appNotifications,
                             com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests,
                             com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService,
                             RegistrationAttachmentService attachmentService,
-                            com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier) {
+                            com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier,
+                            com.horsetrack.equinecare.modules.notification.service.EmailService emailService) {
         this.horseRepository = horseRepository;
         this.userRepository = userRepository;
         this.stallRepository = stallRepository;
@@ -75,11 +79,12 @@ public class HorseServiceImpl implements HorseService {
         this.trainingLockHandler = trainingLockHandler;
         this.horseAccessGuard = horseAccessGuard;
         this.trainingPlanRepository = trainingPlanRepository;
-        this.emailService = emailService;
+        this.appNotifications = appNotifications;
         this.assignmentRequests = assignmentRequests;
         this.injuryService = injuryService;
         this.attachmentService = attachmentService;
         this.conditionNotifier = conditionNotifier;
+        this.emailService = emailService;
     }
 
     private boolean currentUserHasRole(String role) {
@@ -98,6 +103,29 @@ public class HorseServiceImpl implements HorseService {
         if (currentUserHasRole(ROLE_OWNER) && !currentUser().getUserId().equals(ownerId)) {
             throw new AccessDeniedException(message);
         }
+    }
+
+    // Thành tích thi đấu: các giải đã nhập kết quả (Quản lý CLB nhập sau ngày thi)
+    private void fillRaceResults(HorseResponseDTO dto) {
+        @SuppressWarnings("unchecked")
+        List<Object[]> rows = entityManager.createNativeQuery("""
+                SELECT ce.entry_id, ec.competition_name, ec.start_date, ce.rank_position, ce.finish_time_seconds, ce.prize_awarded
+                FROM Competition_Entries ce JOIN External_Competitions ec ON ec.competition_id = ce.competition_id
+                WHERE ce.horse_id = ?1 AND ce.registration_status = 'RESULT_RECORDED'
+                ORDER BY ec.start_date DESC, ce.entry_id DESC""")
+                .setParameter(1, dto.getHorseId()).getResultList();
+        List<HorseResponseDTO.RaceResult> results = rows.stream().map(r -> HorseResponseDTO.RaceResult.builder()
+                .proposalId(((Number) r[0]).intValue())
+                .tournamentName((String) r[1])
+                .raceDate(r[2] instanceof java.sql.Date d ? d.toLocalDate() : (java.time.LocalDate) r[2])
+                .rank(r[3] == null ? null : ((Number) r[3]).intValue())
+                .finishTimeSeconds((BigDecimal) r[4])
+                .prizeAmount((BigDecimal) r[5])
+                .build()).toList();
+        dto.setRaceResults(results);
+        dto.setRaceCount(results.size());
+        dto.setRaceWins((int) results.stream().filter(x -> Integer.valueOf(1).equals(x.getRank())).count());
+        dto.setTotalPrize(results.stream().map(HorseResponseDTO.RaceResult::getPrizeAmount).filter(java.util.Objects::nonNull).reduce(BigDecimal.ZERO, BigDecimal::add));
     }
 
     private Horse findHorse(Integer horseId) {
@@ -192,6 +220,7 @@ public class HorseServiceImpl implements HorseService {
         horseAccessGuard.checkAssigned(horse);
         HorseResponseDTO dto = mapToResponseDTO(horse);
         dto.setInjuries(injuryService.listForHorse(horse.getHorseId()));
+        fillRaceResults(dto);
         return dto;
     }
 
@@ -221,9 +250,7 @@ public class HorseServiceImpl implements HorseService {
         horseRepository.save(horse);
         auditTrail.record("UNASSIGN_TRAINER", "Horses", "assigned_trainer_id=" + previous.getUserId(),
                 "assigned_trainer_id=null | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ")");
-        mailTrainer(previous, "[HorseTrack] Bạn không còn phụ trách ngựa " + horse.getHorseName(),
-                "<p>Xin chào <b>" + esc(previous.getFullName()) + "</b>,</p>"
-                        + "<p>Bạn đã xác nhận bỏ phân công ngựa <b>" + esc(horse.getHorseName()) + "</b>.</p>");
+        // Không mail — HLV vừa tự xác nhận bỏ trên app.
         return mapToResponseDTO(horse);
     }
 
@@ -259,15 +286,11 @@ public class HorseServiceImpl implements HorseService {
                 "assigned_trainer_id=" + trainer.getUserId() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId()
                         + ") | bàn giao " + handedOver + " giáo án");
 
-        String stall = horse.getStall() != null ? " (chuồng " + esc(horse.getStall().getStallCode()) + ")" : "";
-        mailTrainer(trainer, "[HorseTrack] Bạn đã nhận ngựa " + horse.getHorseName(),
-                "<p>Xin chào <b>" + esc(trainer.getFullName()) + "</b>,</p>"
-                        + "<p>Bạn đã xác nhận phụ trách ngựa <b>" + esc(horse.getHorseName()) + "</b>" + stall + ". Phân công có hiệu lực.</p>"
-                        + (handedOver > 0 ? "<p>Bạn tiếp nhận " + handedOver + " giáo án đang chạy của ngựa này.</p>" : ""));
+        // HLV mới vừa tự xác nhận → không spam mail/chuông. Chỉ báo HLV cũ qua chuông.
         if (previous != null) {
-            mailTrainer(previous, "[HorseTrack] Ngựa " + horse.getHorseName() + " đã chuyển sang HLV khác",
-                    "<p>Xin chào <b>" + esc(previous.getFullName()) + "</b>,</p>"
-                            + "<p>HLV <b>" + esc(trainer.getFullName()) + "</b> đã xác nhận nhận ngựa <b>" + esc(horse.getHorseName()) + "</b>. Bạn không còn phụ trách ngựa này.</p>");
+            notifyTrainerBell(previous, "Ngựa " + horse.getHorseName() + " đã chuyển sang HLV khác",
+                    "HLV " + trainer.getFullName() + " đã xác nhận nhận ngựa " + horse.getHorseName()
+                            + ". Bạn không còn phụ trách ngựa này.");
         }
         return mapToResponseDTO(horse);
     }
@@ -302,13 +325,23 @@ public class HorseServiceImpl implements HorseService {
         return new PreparedTrainer(horse, trainer, previous);
     }
 
-    private void mailTrainer(User user, String subject, String html) {
-        if (user == null || !StringUtils.hasText(user.getEmail())) return;
-        try {
-            emailService.sendAsync("TRAINER_ASSIGNMENT", user.getEmail(), subject, html);
-        } catch (Exception ignored) {
-            // Email chỉ là thông báo
+    // Kết quả duyệt hồ sơ: chuông + email cho chủ ngựa (lỗi gửi email không làm hỏng việc duyệt)
+    private void notifyRegistrationResult(User owner, String title, String message, String html) {
+        appNotifications.push(owner, "HORSE_REGISTRATION", title, message, "/owner/registrations");
+        if (!StringUtils.hasText(owner.getEmail())) {
+            return;
         }
+        try {
+            emailService.sendAsync("HORSE_REGISTRATION", owner.getEmail(), "[HorseTrack] " + title,
+                    "<p>Xin chào <b>" + esc(owner.getFullName()) + "</b>,</p>" + html
+                            + "<p>Xem chi tiết tại mục Hồ sơ đăng ký ngựa trên HorseTrack.</p>");
+        } catch (Exception ex) {
+            log.warn("Không gửi được email kết quả duyệt hồ sơ tới {}: {}", owner.getEmail(), ex.getMessage());
+        }
+    }
+
+    private void notifyTrainerBell(User user, String title, String message) {
+        appNotifications.push(user, "TRAINER_ASSIGNMENT", title, message, "/trainer");
     }
 
     private static String esc(String value) {
@@ -433,6 +466,13 @@ public class HorseServiceImpl implements HorseService {
         registrationRepository.saveAndFlush(reg);
         auditTrail.record("APPROVE_HORSE", "Horse_Registrations", "PENDING_REVIEW",
                 "APPROVED " + reg.getRegistrationCode() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ") | chuồng " + stall.getStallCode());
+        String approvedNote = trimToNull(request.getNote());
+        notifyRegistrationResult(horse.getOwner(), "Hồ sơ ngựa " + horse.getHorseName() + " đã được duyệt",
+                "Hồ sơ " + reg.getRegistrationCode() + " của ngựa " + horse.getHorseName() + " đã được Quản lý CLB duyệt. Ngựa được cấp chuồng "
+                        + stall.getStallCode() + "." + (approvedNote != null ? " Ghi chú: " + approvedNote : ""),
+                "<p>Hồ sơ <b>" + esc(reg.getRegistrationCode()) + "</b> của ngựa <b>" + esc(horse.getHorseName()) + "</b> đã được Quản lý CLB <b>duyệt</b>.</p>"
+                        + "<p>Chuồng được cấp: <b>" + esc(stall.getStallCode()) + "</b>.</p>"
+                        + (approvedNote != null ? "<p>Ghi chú: " + esc(approvedNote) + "</p>" : ""));
         entityManager.refresh(horse);
         return mapToResponseDTO(horse);
     }
@@ -456,6 +496,13 @@ public class HorseServiceImpl implements HorseService {
         auditTrail.record("REJECT_HORSE", "Horse_Registrations", "PENDING_REVIEW",
                 "REJECTED " + reg.getRegistrationCode() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ") | cho nộp lại: "
                         + reg.getAllowResubmit() + " | Lý do: " + reg.getDecisionNote());
+        boolean canResubmit = Boolean.TRUE.equals(reg.getAllowResubmit());
+        String resubmitText = canResubmit ? "Bạn được phép chỉnh sửa và nộp lại hồ sơ." : "Hồ sơ này không được nộp lại.";
+        notifyRegistrationResult(horse.getOwner(), "Hồ sơ ngựa " + horse.getHorseName() + " bị từ chối",
+                "Hồ sơ " + reg.getRegistrationCode() + " của ngựa " + horse.getHorseName() + " bị từ chối. Lý do: " + reg.getDecisionNote() + ". " + resubmitText,
+                "<p>Hồ sơ <b>" + esc(reg.getRegistrationCode()) + "</b> của ngựa <b>" + esc(horse.getHorseName()) + "</b> đã bị Quản lý CLB <b>từ chối</b>.</p>"
+                        + "<p>Lý do: " + esc(reg.getDecisionNote()).replace("\n", "<br>") + "</p>"
+                        + "<p><b>" + resubmitText + "</b></p>");
         entityManager.refresh(horse);
         return mapToResponseDTO(horse);
     }
@@ -625,7 +672,7 @@ public class HorseServiceImpl implements HorseService {
         horseRepository.save(horse);
     }
 
-    
+    // Chiều cao theo cm; FE cũ gửi heightHands thì đổi sang cm
     private static BigDecimal heightCm(BigDecimal cm, BigDecimal hands) {
         if (cm != null) {
             return cm.setScale(1, java.math.RoundingMode.HALF_UP);
