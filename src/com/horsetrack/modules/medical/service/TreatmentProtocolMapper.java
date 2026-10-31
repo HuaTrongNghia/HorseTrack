@@ -150,15 +150,5 @@ public class TreatmentProtocolMapper {
     }
 
     // Tự tính thay vì đọc cột line_total (cột tính toán chỉ có sau khi đọc lại từ DB)
-    private static BigDecimal lineTotal(ProtocolItem it) {
-        BigDecimal price = it.getUnitPrice() != null ? it.getUnitPrice() : BigDecimal.ZERO;
-        return price.multiply(BigDecimal.valueOf(it.getQuantity())).setScale(2, RoundingMode.HALF_UP);
-    }
-
-    private static BigDecimal totalCost(TreatmentProtocol p) {
-        return p.getPhases().stream()
-                .flatMap(ph -> ph.getItems().stream())
-                .map(TreatmentProtocolMapper::lineTotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-    }
+   
 }
