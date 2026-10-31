@@ -9,11 +9,7 @@ package com.horsetrack.equinecare.modules.medical.service;
     private final InventoryItemRepository itemRepository;
     private final StockHoldRepository holdRepository;
     private final MedicalRecordRepository medicalRecordRepository;
-    private final ProtocolStockService protocolStockService;
-    private final TreatmentProtocolMapper mapper;
-    private final EntityManager entityManager;
-    private final com.horsetrack.equinecare.modules.finance.service.ProtocolPhaseBilling phaseBilling;
-    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
+   
 
     // ==========================================
     // DANH MỤC THUỐC (chỉ đọc)
