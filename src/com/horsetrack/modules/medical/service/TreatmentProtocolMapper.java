@@ -75,30 +75,7 @@ public class TreatmentProtocolMapper {
                     });
         }
 
-        if (detail) {
-            dto.setPhases(p.getPhases().stream().map(ph -> TreatmentProtocolDTO.Phase.builder()
-                    .phaseId(ph.getPhaseId())
-                    .phaseNo(ph.getPhaseNo())
-                    .phaseName(ph.getPhaseName())
-                    .startDate(ph.getStartDate())
-                    .durationDays(ph.getDurationDays())
-                    .goal(ph.getGoal())
-                    .invoiceId(phaseBilling.findPhaseInvoice(p.getProtocolId(), ph.getPhaseNo()).map(i -> i.getInvoiceId()).orElse(null))
-                    .invoiceCode(phaseBilling.findPhaseInvoice(p.getProtocolId(), ph.getPhaseNo()).map(i -> i.getInvoiceCode()).orElse(null))
-                    .invoiceStatus(phaseBilling.findPhaseInvoice(p.getProtocolId(), ph.getPhaseNo()).map(i -> i.getPaymentStatus()).orElse(null))
-                    .items(ph.getItems().stream().map(it -> TreatmentProtocolDTO.Item.builder()
-                            .protocolItemId(it.getProtocolItemId())
-                            .itemId(it.getItem().getItemId())
-                            .itemCode(it.getItem().getItemCode())
-                            .itemName(it.getItem().getItemName())
-                            .unit(it.getItem().getUnit())
-                            .quantity(it.getQuantity())
-                            .unitPrice(it.getUnitPrice())
-                            .lineTotal(lineTotal(it))
-                            .dosage(it.getDosage())
-                            .build()).collect(Collectors.toList()))
-                    .build()).collect(Collectors.toList()));
-
+        
       
 
     // Tự tính thay vì đọc cột line_total (cột tính toán chỉ có sau khi đọc lại từ DB)
