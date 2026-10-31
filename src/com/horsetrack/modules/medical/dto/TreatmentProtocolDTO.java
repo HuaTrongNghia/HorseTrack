@@ -109,14 +109,5 @@ public class TreatmentProtocolDTO {
         private List<String> issuedLots;     // ví dụ ["LOT-01 x 2 (HSD 30/06/2027)", "Không ghi lô x 1"]
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class Note {
-        private Integer noteId;
-        private String writtenByName;
-        private LocalDateTime writtenAt;
-        private String content;
-    }
+
 }
