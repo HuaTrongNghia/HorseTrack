@@ -22,15 +22,5 @@ public class VaccinationRecordDTO {
     private String typeName;          // tên vaccine / thuốc tẩy giun
     private String category;          // "Vaccine" / "Tẩy giun"
     private LocalDate dueDate;
-    private String expectedDate;      // dd/MM/yyyy
-    private String countdown;         // "còn 3 ngày", "hôm nay", "quá hạn 2 ngày"
-    private Integer cycleMonths;
-    private String statusCode;        // OVERDUE, DUE_SOON (trong 7 ngày), SCHEDULED, POSTPONED, DONE, SKIPPED
-    private String status;            // nhãn tiếng Việt
-    private LocalDateTime doneAt;
-    private String doneByName;
-    private String lotNo;
-    private Integer itemId;
-    private String itemName;
-    private String note;
+  
 }
