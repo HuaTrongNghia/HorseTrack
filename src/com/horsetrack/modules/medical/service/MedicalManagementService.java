@@ -705,21 +705,4 @@ public class MedicalManagementService {
                 .orElseThrow(() -> new IllegalArgumentException("Phác đồ " + protocol.getProtocolCode() + " không có giai đoạn " + phaseNo + "."));
     }
 
-    private static String decisionNote(ProtocolPhaseDecisionDTO request) {
-        if (request == null || !StringUtils.hasText(request.getNote())) {
-            return "";
-        }
-        return request.getNote().trim();
-    }
-
-    private User currentUser() {
-        String username = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng: " + username));
-    }
-
-    private static String appendNote(String current, String addition) {
-        String merged = StringUtils.hasText(current) ? current + " | " + addition : addition;
-        return merged.length() > 1000 ? merged.substring(merged.length() - 1000) : merged;
-    }
-}
+  
