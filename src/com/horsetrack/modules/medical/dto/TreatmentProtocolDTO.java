@@ -52,24 +52,7 @@ public class TreatmentProtocolDTO {
     private List<StockAnswer> stockAnswer; // Kết quả kiểm kho của kho (chỉ có ở API chi tiết)
     private List<Note> progressNotes;     // Chỉ có ở API chi tiết
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class Phase {
-        private Integer phaseId;
-        private Integer phaseNo;
-        private String phaseName;
-        private LocalDate startDate;
-        private Integer durationDays;
-        private String goal;
-        // Hóa đơn của giai đoạn. Giai đoạn sau chỉ thanh toán được khi giai đoạn trước đã hoàn thành lâm sàng.
-        private Integer invoiceId;
-        private String invoiceCode;
-        private String invoiceStatus;
-        private List<Item> items;
-    }
-
+    
     }
 
     
