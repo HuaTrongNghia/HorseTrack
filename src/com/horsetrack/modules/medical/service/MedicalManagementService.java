@@ -1,30 +1,4 @@
-package com.horsetrack.equinecare.modules.medical.service;
 
-
-
- 
-
- 
-
- 
-    // ==========================================
-    // QUYẾT ĐỊNH CỦA BÁC SĨ SAU KHI KHO TRẢ LỜI (BR_07)
-    // ==========================================
-
-    /** Kho đã giữ đủ hàng: bác sĩ xác nhận để kho được cấp thuốc. */
-   
-  
-
-    /** Kho báo thiếu hoặc hàng về trễ: bác sĩ chấp nhận chờ hàng, giữ nguyên phác đồ. */
-  
-        LocalDate eta = request != null && request.getWaitEta() != null ? request.getWaitEta() : latestShortageEta(protocolId);
-        protocol.setState("WAITING_RESTOCK");
-        protocol.setWaitEta(eta);
-        protocol.setWaitNote(request != null && StringUtils.hasText(request.getNote()) ? request.getNote().trim() : null);
-        protocol.setWaitDecidedAt(LocalDateTime.now());
-        protocol.setIsDelayed(eta != null && protocol.getRequiredBy() != null && eta.isAfter(protocol.getRequiredBy()));
-        return mapper.toDTO(protocolRepository.save(protocol), true);
-    }
 
     /** Đổi phác đồ (thuốc thiếu, hàng trễ...): bản cũ SUPERSEDED, trả hàng đã giữ, bản mới gửi kho kiểm lại. */
     @Transactional(rollbackFor = Exception.class)
