@@ -40,19 +40,5 @@ public class VaccinationReminder {
         long deworms = due.size() - vaccines;
         String what = vaccines > 0 && deworms > 0 ? "tiêm phòng và tẩy giun" : deworms > 0 ? "tẩy giun" : "tiêm phòng";
 
-        StringBuilder rows = new StringBuilder();
-        for (Vaccination v : due) {
-            String stall = v.getHorse() != null && v.getHorse().getStall() != null ? v.getHorse().getStall().getStallCode() : "—";
-            rows.append("<tr><td>").append(esc(v.getVaccinationCode() != null ? v.getVaccinationCode() : "#" + v.getVaccinationId()))
-                    .append("</td><td>").append(esc(v.getHorse() != null ? v.getHorse().getHorseName() : "?"))
-                    .append("</td><td>").append(esc(stall))
-                    .append("</td><td>").append("DEWORM".equals(v.getKind()) ? "Tẩy giun" : "Tiêm phòng")
-                    .append("</td><td>").append(esc(v.getVaccineName())).append("</td></tr>");
-        }
-        String subject = "[HorseTrack] Hôm nay (" + day.format(VN_DATE) + ") bạn có lịch " + what + " - " + due.size() + " ngựa";
-
-        int sent = 0;
-        for (User vet : userRepository.findByRoleNameInAndIsActiveTrue(List.of("Veterinarian"))) {
-            if (!StringUtils.hasText(vet.getEmail())) {
-                continue;
+        
            
