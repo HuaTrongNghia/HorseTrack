@@ -1,16 +1,6 @@
 
 
   
-        protocolStockService.releaseHolds(old.getProtocolId(), "Trả hàng do phác đồ " + old.getProtocolCode() + " có phiên bản mới");
-        phaseBilling.cancelOpenPhaseInvoices(old, false, "Phác đồ " + old.getProtocolCode() + " có phiên bản mới");
-        old.setState("SUPERSEDED");
-        old.setClosedAt(LocalDateTime.now());
-        protocolRepository.saveAndFlush(old);
-
-        markEmergency(request, old);
-        TreatmentProtocol next = buildProtocol(request, old);
-        return mapper.toDTO(saveAndReload(next), true);
-    }
 
     // Phác đồ tạm dừng vì chưa thanh toán nhưng đã cấp thuốc thì không còn sửa / hủy được
     private boolean alreadyDispensed(TreatmentProtocol protocol) {
