@@ -75,15 +75,4 @@ public class VaccinationReminder {
                                 + "<table border=\"1\" cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse\">"
                                 + "<tr><th>Mã lịch</th><th>Ngựa</th><th>Chuồng</th><th>Loại</th><th>Vaccine / thuốc</th></tr>" + rows + "</table>"
                                 + "<p>Thực hiện xong, ghi nhận tại mục Tiêm phòng (POST /api/v1/vaccinations/{mã lịch}/execute).</p>");
-                sent++;
-            } catch (Exception ex) {
-                log.warn("Không gửi được email nhắc tiêm phòng tới {}: {}", vet.getEmail(), ex.getMessage());
-            }
-        }
-        return sent;
-    }
-
-    private static String esc(String s) {
-        return s == null ? "" : HtmlUtils.htmlEscape(s);
-    }
-}
+          
