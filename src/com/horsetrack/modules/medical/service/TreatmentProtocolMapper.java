@@ -40,28 +40,7 @@ public class TreatmentProtocolMapper {
                 .recordId(p.getRecordId())
                 .versionNo(p.getVersionNo())
                 .replacesProtocolId(p.getReplacesProtocol() != null ? p.getReplacesProtocol().getProtocolId() : null)
-                .replacesProtocolCode(p.getReplacesProtocol() != null ? p.getReplacesProtocol().getProtocolCode() : null)
-                .replacedByProtocolId(replacedBy != null ? replacedBy.getProtocolId() : null)
-                .replacedByProtocolCode(replacedBy != null ? replacedBy.getProtocolCode() : null)
-                .diagnosis(p.getDiagnosis())
-                .state(p.getState())
-                .requiredBy(p.getRequiredBy())
-                .isDelayed(p.getIsDelayed())
-                .trainingLocked(p.getTrainingLocked())
-                .waitEta(p.getWaitEta())
-                .waitNote(p.getWaitNote())
-                .note(p.getNote())
-                .outcome(p.getOutcome())
-                .createdAt(p.getCreatedAt())
-                .confirmedAt(p.getConfirmedAt())
-                .closedAt(p.getClosedAt())
-                .totalCost(totalCost(p))
-                .emergency(phaseBilling.isEmergency(p))
-                .pendingSupplement("IN_TREATMENT".equals(p.getState())
-                        && !holdRepository.findByProtocolIdAndStatusIn(p.getProtocolId(), List.of("HELD", "SHORT")).isEmpty())
-                .build();
-
-        // Đang chờ thanh toán: giai đoạn sớm nhất còn hóa đơn mở (FE hiển thị đúng "chờ thanh toán giai đoạn N", không cố định giai đoạn 1)
+                ai đoạn sớm nhất còn hóa đơn mở (FE hiển thị đúng "chờ thanh toán giai đoạn N", không cố định giai đoạn 1)
         
 
         
