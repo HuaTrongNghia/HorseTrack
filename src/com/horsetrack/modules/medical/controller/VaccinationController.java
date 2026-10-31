@@ -1,16 +1,3 @@
-package com.horsetrack.equinecare.modules.medical.controller;
-
-import com.horsetrack.equinecare.common.base.ApiResponse;
-import com.horsetrack.equinecare.modules.medical.dto.CreateScheduleRequestDTO;
-import com.horsetrack.equinecare.modules.medical.dto.VaccinationExecuteDTO;
-import com.horsetrack.equinecare.modules.medical.dto.VaccinationRecordDTO;
-import com.horsetrack.equinecare.modules.medical.service.VaccinationService;
-import jakarta.validation.Valid;
-import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
