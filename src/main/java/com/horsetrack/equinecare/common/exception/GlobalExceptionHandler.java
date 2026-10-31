@@ -1,6 +1,7 @@
 package com.horsetrack.equinecare.common.exception;
 
 import com.horsetrack.equinecare.common.base.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -13,7 +14,9 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.UUID;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -112,6 +115,10 @@ public class GlobalExceptionHandler {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ApiResponse.error("Ngựa này đang có một giáo án PENDING, ACTIVE hoặc PAUSED. Hãy hoàn thành hoặc hủy giáo án cũ trước."));
         }
+        if (msg.contains("UX_CE_owner_active") || msg.contains("UX_CE_horse_active")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ApiResponse.error("Đã có đề xuất còn hiệu lực cho giải này (mỗi chủ ngựa / mỗi ngựa chỉ 1 đề xuất). Vui lòng tải lại."));
+        }
         return handleRuntimeException(ex);
     }
 
@@ -126,14 +133,21 @@ public class GlobalExceptionHandler {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.error(msg.replace("BusinessException:", "").trim()));
         }
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Lỗi máy chủ: " + ex.getMessage()));
+        return serverError(ex);
     }
 
     // Bắt lỗi hệ thống ngoài dự kiến
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiResponse<Void>> handleGeneralException(Exception ex) {
+        return serverError(ex);
+    }
+
+    // Lỗi 500: không trả chi tiết kỹ thuật (câu SQL, tên bảng / cột, stack) cho client; ghi log đầy đủ kèm mã lỗi để tra cứu
+    private ResponseEntity<ApiResponse<Void>> serverError(Exception ex) {
+        String errorId = UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        log.error("Lỗi máy chủ [{}]: {}", errorId, ex.getMessage(), ex);
+        String what = ex instanceof org.springframework.dao.DataAccessException ? "Lỗi truy vấn cơ sở dữ liệu" : "Lỗi máy chủ";
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("Lỗi máy chủ: " + ex.getMessage()));
+                .body(ApiResponse.error(what + " (mã lỗi " + errorId + "). Vui lòng thử lại sau hoặc báo quản trị viên kèm mã lỗi."));
     }
 }
