@@ -21,13 +21,4 @@ public class VaccinationController {
     }
 
     // Ghi nhận đã tiêm (mã VC-0001 hoặc ID); có chu kỳ thì tự tạo mũi nhắc lại
-    @PostMapping("/{recordCode}/execute")
-    @PreAuthorize("hasAuthority('Veterinarian')")
-    public ResponseEntity<ApiResponse<List<VaccinationRecordDTO>>> executeVaccination(@PathVariable String recordCode,
-                                                                                      @Valid @RequestBody(required = false) VaccinationExecuteDTO dto) {
-        List<VaccinationRecordDTO> result = vaccinationService.execute(recordCode, dto);
-        return ResponseEntity.ok(ApiResponse.ok(result.size() > 1
-                ? "Đã ghi nhận tiêm và tạo lịch nhắc lại ngày " + result.get(1).getExpectedDate() + "."
-                : "Đã ghi nhận tiêm.", result));
-    }
-}
+
