@@ -11,19 +11,6 @@ import com.horsetrack.equinecare.modules.inventory.repository.InventoryItemRepos
 import com.horsetrack.equinecare.modules.inventory.repository.StockHoldRepository;
 import com.horsetrack.equinecare.modules.inventory.service.ProtocolStockService;
 import com.horsetrack.equinecare.modules.medical.dto.*;
-import com.horsetrack.equinecare.modules.medical.entity.ProtocolItem;
-import com.horsetrack.equinecare.modules.medical.entity.ProtocolPhase;
-import com.horsetrack.equinecare.modules.medical.entity.ProtocolProgressNote;
-import com.horsetrack.equinecare.modules.medical.entity.TreatmentProtocol;
-import com.horsetrack.equinecare.modules.medical.repository.MedicalRecordRepository;
-import com.horsetrack.equinecare.modules.medical.repository.ProtocolProgressNoteRepository;
-import com.horsetrack.equinecare.modules.medical.repository.TreatmentProtocolRepository;
-import jakarta.persistence.EntityManager;
-import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
-import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
