@@ -86,28 +86,6 @@ public class TreatmentProtocolDTO {
         private String dosage;
     }
 
-    @Data
-    @Builder
-    @NoArgsConstructor
-    @AllArgsConstructor
-    public static class StockAnswer {
-        private Integer holdId;
-        private Integer itemId;
-        private String itemName;
-        private String unit;
-        private Double qtyNeeded;
-        private Double qtyAvailable;
-        private Double qtyHeld;
-        private Double qtyShort;
-        private LocalDate eta;
-        private Integer purchaseOrderId;
-        private String status;       // HELD, SHORT, RELEASED, ISSUED
-        private String checkedByName;
-        private LocalDateTime checkedAt;
-        private LocalDateTime issuedAt;      // chỉ có khi status = ISSUED
-        private String issuedByName;
-        private List<String> issuedLots;     // ví dụ ["LOT-01 x 2 (HSD 30/06/2027)", "Không ghi lô x 1"]
-    }
-
+    
 
 }
