@@ -4,17 +4,6 @@ package com.horsetrack.equinecare.modules.medical.service;
 
  
 
-    // ==========================================
-    // LẬP VÀ XEM PHÁC ĐỒ
-    // ==========================================
-
-    @Transactional(rollbackFor = Exception.class)
-    public TreatmentProtocolDTO createProtocol(ProtocolCreateRequestDTO request) {
-        markEmergency(request, null);
-        TreatmentProtocol protocol = buildProtocol(request, null);
-        return mapper.toDTO(saveAndReload(protocol), true);
-    }
-
     @Transactional
     public List<TreatmentProtocolDTO> getProtocols(String state, Integer horseId) {
         phaseBilling.run(LocalDate.now());
