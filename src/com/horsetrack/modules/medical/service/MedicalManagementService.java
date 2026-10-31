@@ -3,34 +3,6 @@
   
 
 
-    @Transactional(rollbackFor = Exception.class)
-    public TreatmentProtocolDTO addProgressNote(Integer protocolId, ProtocolTextRequestDTO request) {
-        TreatmentProtocol protocol = findProtocol(protocolId);
-        if (!"IN_TREATMENT".equals(protocol.getState())) {
-            throw new IllegalArgumentException("Chỉ ghi tiến trình khi phác đồ đang điều trị (IN_TREATMENT). Hiện tại: " + protocol.getState() + ".");
-        }
-        java.util.regex.Matcher phaseDone = java.util.regex.Pattern.compile("Hoàn thành giai đoạn (\\d+)").matcher(request.getContent());
-        if (phaseDone.find()) {
-            int phaseNo = Integer.parseInt(phaseDone.group(1));
-            Set<Integer> finished = finishedPhases(protocolId);
-            for (ProtocolPhase phase : protocol.getPhases()) {
-                if (phase.getPhaseNo() == null || phase.getPhaseNo() >= phaseNo) {
-                    continue;
-                }
-                if (!finished.contains(phase.getPhaseNo())) {
-                    throw new IllegalArgumentException("Phải hoàn thành giai đoạn " + phase.getPhaseNo() + " (" + phase.getPhaseName() + ") trước giai đoạn " + phaseNo + ".");
-                }
-            }
-            phaseBilling.assertCanFinishPhase(protocol, phaseNo);
-        }
-        noteRepository.save(ProtocolProgressNote.builder()
-                .protocol(protocol)
-                .writtenBy(currentUser())
-                .writtenAt(LocalDateTime.now())
-                .content(request.getContent().trim())
-                .build());
-        return mapper.toDTO(protocol, true);
-    }
 
     /**
      * Thêm thuốc khi phác đồ đang điều trị (không tạo phiên bản mới): cộng vào dòng thuốc của giai đoạn (cùng thuốc thì tăng số lượng),
