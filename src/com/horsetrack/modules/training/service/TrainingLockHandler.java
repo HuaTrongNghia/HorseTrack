@@ -2,6 +2,7 @@ package com.horsetrack.equinecare.modules.training.service;
 
 import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.horse.entity.Horse;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import com.horsetrack.equinecare.modules.training.entity.TrainingPlan;
 import com.horsetrack.equinecare.modules.training.entity.TrainingSession;
@@ -23,7 +24,7 @@ import java.util.stream.Collectors;
 
 /**
  * Tác động của khóa huấn luyện (VetLock) lên giáo án (BR_01 / F3-03, F21-02):
- * - Khi khóa: hủy mọi buổi tập chưa thực hiện (chờ xác nhận / đã xác nhận), tạm dừng giáo án ACTIVE (PAUSED),
+ * - Khi khóa: hủy mọi buổi tập chưa thực hiện (chờ xác nhận / đã xác nhận), tạm dừng giáo án ACTIVE (PAUSED), hủy đăng ký giải đấu chưa thi,
  *   gửi email báo HLV phụ trách và chủ ngựa. Giáo án PENDING giữ nguyên trạng thái chờ.
  * - Khi mở khóa: giáo án tạm dừng quay về PENDING (các buổi tập cũ đã bị hủy), HLV phân công lại buổi tập
  *   và giáo án chạy lại khi Groom xác nhận (xem TrainingPlanActivator). Gửi email báo HLV và chủ ngựa.
@@ -40,10 +41,18 @@ public class TrainingLockHandler {
     private final TrainingSessionRepository sessionRepository;
     private final TrainingPlanRepository planRepository;
     private final EmailService emailService;
+    private final AppNotificationService appNotifications;
+    private final SessionIncidentHandler incidentHandler;
+    private final com.horsetrack.equinecare.modules.nutrition.service.NutritionLockHandler nutritionLockHandler;
+    private final com.horsetrack.equinecare.modules.tournament.service.RaceInjuryWithdrawal raceWithdrawal;
 
     /** Gọi ngay sau khi ngựa chuyển sang khóa huấn luyện. Trả về số buổi tập đã hủy. */
     public int onHorseLocked(Horse horse, String reason) {
         String why = StringUtils.hasText(reason) ? reason.trim() : "Khóa huấn luyện theo chỉ định y tế";
+        // Buổi tập đang chờ bác sĩ (dừng vì vượt ngưỡng) kết thúc và giáo án của nó đóng lại trước
+        incidentHandler.resolveWaitingVet(horse, true, why);
+        // BR_03: khẩu phần của ngựa bị khóa do bác sĩ thú y đảm nhiệm
+        nutritionLockHandler.onHorseLocked(horse);
 
         List<TrainingSession> pending = sessionRepository.findPendingByHorse(horse.getHorseId());
         for (TrainingSession s : pending) {
@@ -72,12 +81,17 @@ public class TrainingLockHandler {
                 """.formatted(esc(horse.getHorseName()), esc(why), pending.size(), sessionsHtml);
         notify(horse, plans, "[HorseTrack] Ngựa " + horse.getHorseName() + " bị khóa huấn luyện", body);
 
-        log.info("VetLock ngựa {}: hủy {} buổi tập, tạm dừng {} giáo án", horse.getHorseId(), pending.size(), plans.size());
+        // Hủy đăng ký giải đấu chưa thi (kể cả đã thanh toán: hoàn lệ phí), đôn hàng chờ
+        int races = raceWithdrawal.onHorseLocked(horse, why);
+
+        log.info("VetLock ngựa {}: hủy {} buổi tập, tạm dừng {} giáo án, hủy {} đề xuất thi đấu", horse.getHorseId(), pending.size(), plans.size(), races);
         return pending.size();
     }
 
     /** Gọi ngay sau khi Bác sĩ thú y mở khóa huấn luyện. Trả về số giáo án được chuyển về trạng thái chờ. */
     public int onHorseUnlocked(Horse horse) {
+        // BR_03: mở khóa thì khẩu phần y tế kết thúc, HLV lập lại khẩu phần thường
+        nutritionLockHandler.onHorseUnlocked(horse);
         List<TrainingPlan> plans = planRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), "PAUSED");
         for (TrainingPlan p : plans) {
             p.setStatus(TrainingPlanActivator.PLAN_PENDING);
@@ -95,17 +109,22 @@ public class TrainingLockHandler {
         return plans.size();
     }
 
-    // Gửi cho HLV phụ trách các giáo án và chủ ngựa (mỗi email một lần)
+    // Chuông + mail cho HLV phụ trách giáo án và chủ ngựa (mỗi user một lần)
     private void notify(Horse horse, List<TrainingPlan> plans, String subject, String body) {
-        Map<String, User> recipients = new LinkedHashMap<>();
-        plans.stream().map(TrainingPlan::getHeadTrainer).filter(u -> u != null && StringUtils.hasText(u.getEmail()))
-                .forEach(u -> recipients.putIfAbsent(u.getEmail().toLowerCase(), u));
-        if (horse.getOwner() != null && StringUtils.hasText(horse.getOwner().getEmail())) {
-            recipients.putIfAbsent(horse.getOwner().getEmail().toLowerCase(), horse.getOwner());
+        Map<Integer, User> recipients = new LinkedHashMap<>();
+        plans.stream().map(TrainingPlan::getHeadTrainer).filter(u -> u != null && u.getUserId() != null)
+                .forEach(u -> recipients.putIfAbsent(u.getUserId(), u));
+        if (horse.getOwner() != null && horse.getOwner().getUserId() != null) {
+            recipients.putIfAbsent(horse.getOwner().getUserId(), horse.getOwner());
         }
+        String plain = body.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim();
+        String title = subject != null && subject.startsWith("[HorseTrack] ") ? subject.substring(13) : subject;
         recipients.values().forEach(u -> {
+            String link = u.getRoleName() != null && u.getRoleName().contains("Owner") ? "/owner" : "/trainer";
+            appNotifications.push(u, "VET_LOCK", title, plain, link);
+            if (!StringUtils.hasText(u.getEmail())) return;
             try {
-                emailService.sendAsync(u.getEmail(), subject, "<p>Xin chào <b>" + esc(u.getFullName()) + "</b>,</p>" + body);
+                emailService.sendAsync("VET_LOCK", u.getEmail(), subject, "<p>Xin chào <b>" + esc(u.getFullName()) + "</b>,</p>" + body);
             } catch (Exception ex) {
                 log.warn("Không gửi được thông báo VetLock tới {}: {}", u.getEmail(), ex.getMessage());
             }
