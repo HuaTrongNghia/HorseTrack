@@ -12,12 +12,7 @@ package com.horsetrack.equinecare.modules.medical.service;
     // ==========================================
 
     /** Kho đã giữ đủ hàng: bác sĩ xác nhận để kho được cấp thuốc. */
-    @Transactional(rollbackFor = Exception.class)
-    public TreatmentProtocolDTO confirm(Integer protocolId) {
-        TreatmentProtocol protocol = findProtocol(protocolId);
-        if (!"STOCK_AVAILABLE".equals(protocol.getState())) {
-            throw new IllegalArgumentException("Chỉ xác nhận được khi kho đã giữ đủ hàng (STOCK_AVAILABLE). Hiện tại: "
-                    + protocol.getState() + ". Nếu thiếu hàng, hãy chọn chờ hàng hoặc tạo phiên bản mới.");
+   
         }
         protocol.setState("VET_CONFIRMED");
         protocol.setConfirmedAt(LocalDateTime.now());
