@@ -74,12 +74,17 @@ public class RaceNotifier {
 
     /** Thông báo trên chuông và email (lỗi gửi email không làm hỏng nghiệp vụ) */
     public void notify(User to, String subject, String html) {
+        notify(to, subject, html, linkFor(to));
+    }
+
+    /** Như notify nhưng chỉ định trang mở khi bấm thông báo (VD: giải mới -> /owner/tournaments) */
+    public void notify(User to, String subject, String html, String link) {
         if (to == null) {
             return;
         }
         String title = subject != null && subject.startsWith("[HorseTrack] ") ? subject.substring(13) : subject;
         String plain = html == null ? title : HtmlUtils.htmlUnescape(html.replaceAll("<[^>]+>", " ")).replaceAll("\\s+", " ").trim();
-        appNotifications.push(to, "RACE_PROPOSAL", title, plain, linkFor(to));
+        appNotifications.push(to, "RACE_PROPOSAL", title, plain, link);
         if (!StringUtils.hasText(to.getEmail())) {
             return;
         }
@@ -96,6 +101,10 @@ public class RaceNotifier {
         users.forEach(u -> notify(u, subject, html));
     }
 
+    public void notifyRole(String roleName, String subject, String html, String link) {
+        userRepository.findByRoleNameInAndIsActiveTrue(List.of(roleName)).forEach(u -> notify(u, subject, html, link));
+    }
+
     /** Nhật ký thay đổi trạng thái đề xuất; system = true khi hệ thống tự hủy / tự chuyển */
     public void audit(String action, String before, CompetitionEntry e, String extra) {
         auditTrail.record(action, "Competition_Entries", before == null ? null : "status=" + before,
@@ -107,13 +116,14 @@ public class RaceNotifier {
         return e.getEntryCode() != null ? e.getEntryCode() : "#" + e.getEntryId();
     }
 
-    private static String linkFor(User to) {
+    /** Trang xử lý đề xuất thi đấu theo vai trò người nhận */
+    public static String linkFor(User to) {
         String role = to.getRoleName() == null ? "" : to.getRoleName();
         return switch (role) {
-            case "Horse Owner" -> "/owner";
-            case "Trainer" -> "/trainer";
-            case "Veterinarian" -> "/vet";
-            case "Club Manager" -> "/manager";
+            case "Horse Owner" -> "/owner/race-entries";
+            case "Trainer" -> "/trainer/race-confirmations";
+            case "Veterinarian" -> "/vet/race-exams";
+            case "Club Manager" -> "/manager/race-complaints";
             default -> null;
         };
     }

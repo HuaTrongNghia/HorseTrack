@@ -35,6 +35,10 @@ import static com.horsetrack.equinecare.modules.tournament.service.RaceNotifier.
 @RequiredArgsConstructor
 public class TournamentService {
 
+    /** Ngày thi phải cách hôm nay ít nhất 5 ngày; hạn đăng ký trước ngày thi ít nhất 3 ngày */
+    static final int MIN_LEAD_DAYS = 5;
+    static final int DEADLINE_GAP_DAYS = 3;
+
     private final ExternalCompetitionRepository competitionRepository;
     private final CompetitionEntryRepository entryRepository;
     private final HorseRepository horseRepository;
@@ -66,6 +70,7 @@ public class TournamentService {
     @Transactional
     public TournamentDTO create(TournamentCreateDTO request) {
         validate(request, null);
+        validateDates(request);
         ExternalCompetition c = ExternalCompetition.builder()
                 .competitionCode(trimOrNull(request.getCode()))
                 .isFinished(false)
@@ -85,6 +90,10 @@ public class TournamentService {
             throw new IllegalArgumentException("Giải " + c.getCompetitionName() + " đã kết thúc, không sửa được.");
         }
         validate(request, id);
+        // Giải cũ chỉ sửa tên / địa điểm... thì không bắt lại luật ngày (có thể đã sát ngày thi)
+        if (!Objects.equals(c.getStartDate(), request.getRaceDate()) || !Objects.equals(c.getRegistrationDeadline(), request.getRegistrationDeadline())) {
+            validateDates(request);
+        }
         boolean locked = entryRepository.existsByCompetition_CompetitionId(id);
         if (locked) {
             List<String> changed = lockedChanges(c, request);
@@ -124,7 +133,7 @@ public class TournamentService {
         notifier.notifyRole("Horse Owner", "[HorseTrack] Giải đấu mới: " + c.getCompetitionName(),
                 "<p>CLB vừa công bố giải <b>" + esc(c.getCompetitionName()) + "</b> ngày " + c.getStartDate() + " tại " + esc(c.getLocation())
                         + " (" + c.getSlots() + " suất, hạn đăng ký " + c.getRegistrationDeadline() + ").</p>"
-                        + "<p>Vào HorseTrack để xem ngựa nào của bạn đủ điều kiện và gửi đề xuất.</p>");
+                        + "<p>Vào HorseTrack để xem ngựa nào của bạn đủ điều kiện và gửi đề xuất.</p>", "/owner/tournaments");
         return mapper.toDto(c);
     }
 
@@ -205,7 +214,7 @@ public class TournamentService {
     @Transactional(readOnly = true)
     public List<OwnerTournamentDTO> ownerTournaments(boolean openOnly) {
         User owner = currentUser();
-        List<Horse> horses = horseRepository.findByOwnerUserId(owner.getUserId());
+        List<Horse> horses = approvedHorses(owner);
         return competitionRepository.findByStatusInOrderByStartDateDesc(List.of(ExternalCompetition.PUBLISHED, ExternalCompetition.FINISHED)).stream()
                 .filter(c -> !openOnly || RaceMapper.isOpen(c))
                 .map(c -> ownerView(c, owner, horses))
@@ -216,7 +225,14 @@ public class TournamentService {
     public OwnerTournamentDTO ownerTournament(Integer id) {
         User owner = currentUser();
         ExternalCompetition c = findVisible(id);
-        return ownerView(c, owner, horseRepository.findByOwnerUserId(owner.getUserId()));
+        return ownerView(c, owner, approvedHorses(owner));
+    }
+
+    // Chỉ ngựa đã duyệt hồ sơ và được cấp chuồng mới hiện trong danh sách chọn ngựa đi giải
+    private List<Horse> approvedHorses(User owner) {
+        return horseRepository.findByOwnerUserId(owner.getUserId()).stream()
+                .filter(h -> Horse.APPROVAL_APPROVED.equals(h.getApprovalStatus()) && h.getStall() != null)
+                .toList();
     }
 
     private OwnerTournamentDTO ownerView(ExternalCompetition c, User owner, List<Horse> horses) {
@@ -229,6 +245,7 @@ public class TournamentService {
         String reason = !RaceMapper.isOpen(c) ? "Giải đã hết hạn đăng ký hoặc đã kết thúc"
                 : active != null ? "Bạn đã có đề xuất " + RaceNotifier.code(active) + " còn hiệu lực cho giải này"
                 : complaintPending ? "Bạn đang có khiếu nại chờ Quản lý CLB xử lý cho giải này"
+                : horses.isEmpty() ? "Bạn chưa có ngựa nào được duyệt hồ sơ"
                 : !anyEligible ? "Không có ngựa nào đủ điều kiện" : null;
         TournamentDTO t = mapper.toDto(c);
         return OwnerTournamentDTO.builder()
@@ -255,9 +272,27 @@ public class TournamentService {
         return c;
     }
 
+    /** Ngày thi >= hôm nay + 5 ngày; hạn đăng ký <= ngày thi - 3 ngày (đủ thời gian HLV xác nhận, khám, thanh toán) */
+    private static void validateDates(TournamentCreateDTO r) {
+        LocalDate earliest = LocalDate.now().plusDays(MIN_LEAD_DAYS);
+        if (r.getRaceDate().isBefore(earliest)) {
+            throw new IllegalArgumentException("Ngày thi đấu phải từ " + earliest + " trở đi (ít nhất " + MIN_LEAD_DAYS + " ngày kể từ hôm nay).");
+        }
+        LocalDate latestDeadline = r.getRaceDate().minusDays(DEADLINE_GAP_DAYS);
+        if (r.getRegistrationDeadline().isAfter(latestDeadline)) {
+            throw new IllegalArgumentException("Hạn đăng ký phải trước ngày thi ít nhất " + DEADLINE_GAP_DAYS + " ngày (chậm nhất " + latestDeadline + ").");
+        }
+    }
+
     private void validate(TournamentCreateDTO r, Integer id) {
         if (r.getRegistrationDeadline().isAfter(r.getRaceDate())) {
             throw new IllegalArgumentException("Hạn đăng ký phải trước hoặc bằng ngày thi đấu.");
+        }
+        if (r.getAllowedBreeds().stream().noneMatch(StringUtils::hasText)) {
+            throw new IllegalArgumentException("Phải chọn ít nhất 1 giống ngựa được tham gia.");
+        }
+        if (r.getPrizes().stream().noneMatch(p -> p.getAmount() != null && p.getAmount().signum() > 0)) {
+            throw new IllegalArgumentException("Bảng thưởng phải có ít nhất 1 hạng có tiền thưởng lớn hơn 0.");
         }
         if (r.getMinAgeYears() != null && r.getMaxAgeYears() != null && r.getMinAgeYears() > r.getMaxAgeYears()) {
             throw new IllegalArgumentException("Tuổi tối thiểu không được lớn hơn tuổi tối đa.");

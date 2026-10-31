@@ -52,12 +52,17 @@ public class RaceProposalJob {
     private final HorseEligibilityService eligibility;
     private final RaceSlotAllocator slots;
     private final RaceNotifier notifier;
+    private volatile boolean started;
 
     @Scheduled(fixedDelayString = "${app.tournament.job-ms:900000}", initialDelayString = "${app.tournament.job-initial-delay-ms:120000}")
     @Transactional
     public void runJob() {
         Map<String, Integer> r = run(LocalDateTime.now());
-        if (r.values().stream().anyMatch(v -> v > 0)) {
+        if (!started) {
+            // Một dòng khi khởi động để kiểm tra trên log server rằng job đang chạy
+            started = true;
+            log.info("Job giải đấu đã chạy lượt đầu (chu kỳ theo app.tournament.job-ms): {}", r);
+        } else if (r.values().stream().anyMatch(v -> v > 0)) {
             log.info("Job giải đấu: {}", r);
         }
     }

@@ -12,6 +12,7 @@ import com.horsetrack.equinecare.modules.horse.repository.HorseRegistrationRepos
 import com.horsetrack.equinecare.modules.horse.repository.HorseRepository;
 import com.horsetrack.equinecare.modules.horse.repository.StallRepository;
 import jakarta.persistence.EntityManager;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +31,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 public class HorseServiceImpl implements HorseService {
 
@@ -54,6 +56,7 @@ public class HorseServiceImpl implements HorseService {
     private final com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService;
     private final RegistrationAttachmentService attachmentService;
     private final com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier;
+    private final com.horsetrack.equinecare.modules.notification.service.EmailService emailService;
 
     public HorseServiceImpl(HorseRepository horseRepository, UserRepository userRepository, StallRepository stallRepository,
                             HorseRegistrationRepository registrationRepository, EntityManager entityManager,
@@ -65,7 +68,8 @@ public class HorseServiceImpl implements HorseService {
                             com.horsetrack.equinecare.modules.assignment.service.AssignmentRequestWriter assignmentRequests,
                             com.horsetrack.equinecare.modules.medical.service.HorseHealthService injuryService,
                             RegistrationAttachmentService attachmentService,
-                            com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier) {
+                            com.horsetrack.equinecare.modules.medical.service.HorseConditionNotifier conditionNotifier,
+                            com.horsetrack.equinecare.modules.notification.service.EmailService emailService) {
         this.horseRepository = horseRepository;
         this.userRepository = userRepository;
         this.stallRepository = stallRepository;
@@ -80,6 +84,7 @@ public class HorseServiceImpl implements HorseService {
         this.injuryService = injuryService;
         this.attachmentService = attachmentService;
         this.conditionNotifier = conditionNotifier;
+        this.emailService = emailService;
     }
 
     private boolean currentUserHasRole(String role) {
@@ -320,6 +325,21 @@ public class HorseServiceImpl implements HorseService {
         return new PreparedTrainer(horse, trainer, previous);
     }
 
+    // Kết quả duyệt hồ sơ: chuông + email cho chủ ngựa (lỗi gửi email không làm hỏng việc duyệt)
+    private void notifyRegistrationResult(User owner, String title, String message, String html) {
+        appNotifications.push(owner, "HORSE_REGISTRATION", title, message, "/owner/registrations");
+        if (!StringUtils.hasText(owner.getEmail())) {
+            return;
+        }
+        try {
+            emailService.sendAsync("HORSE_REGISTRATION", owner.getEmail(), "[HorseTrack] " + title,
+                    "<p>Xin chào <b>" + esc(owner.getFullName()) + "</b>,</p>" + html
+                            + "<p>Xem chi tiết tại mục Hồ sơ đăng ký ngựa trên HorseTrack.</p>");
+        } catch (Exception ex) {
+            log.warn("Không gửi được email kết quả duyệt hồ sơ tới {}: {}", owner.getEmail(), ex.getMessage());
+        }
+    }
+
     private void notifyTrainerBell(User user, String title, String message) {
         appNotifications.push(user, "TRAINER_ASSIGNMENT", title, message, "/trainer");
     }
@@ -446,6 +466,13 @@ public class HorseServiceImpl implements HorseService {
         registrationRepository.saveAndFlush(reg);
         auditTrail.record("APPROVE_HORSE", "Horse_Registrations", "PENDING_REVIEW",
                 "APPROVED " + reg.getRegistrationCode() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ") | chuồng " + stall.getStallCode());
+        String approvedNote = trimToNull(request.getNote());
+        notifyRegistrationResult(horse.getOwner(), "Hồ sơ ngựa " + horse.getHorseName() + " đã được duyệt",
+                "Hồ sơ " + reg.getRegistrationCode() + " của ngựa " + horse.getHorseName() + " đã được Quản lý CLB duyệt. Ngựa được cấp chuồng "
+                        + stall.getStallCode() + "." + (approvedNote != null ? " Ghi chú: " + approvedNote : ""),
+                "<p>Hồ sơ <b>" + esc(reg.getRegistrationCode()) + "</b> của ngựa <b>" + esc(horse.getHorseName()) + "</b> đã được Quản lý CLB <b>duyệt</b>.</p>"
+                        + "<p>Chuồng được cấp: <b>" + esc(stall.getStallCode()) + "</b>.</p>"
+                        + (approvedNote != null ? "<p>Ghi chú: " + esc(approvedNote) + "</p>" : ""));
         entityManager.refresh(horse);
         return mapToResponseDTO(horse);
     }
@@ -469,6 +496,13 @@ public class HorseServiceImpl implements HorseService {
         auditTrail.record("REJECT_HORSE", "Horse_Registrations", "PENDING_REVIEW",
                 "REJECTED " + reg.getRegistrationCode() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId() + ") | cho nộp lại: "
                         + reg.getAllowResubmit() + " | Lý do: " + reg.getDecisionNote());
+        boolean canResubmit = Boolean.TRUE.equals(reg.getAllowResubmit());
+        String resubmitText = canResubmit ? "Bạn được phép chỉnh sửa và nộp lại hồ sơ." : "Hồ sơ này không được nộp lại.";
+        notifyRegistrationResult(horse.getOwner(), "Hồ sơ ngựa " + horse.getHorseName() + " bị từ chối",
+                "Hồ sơ " + reg.getRegistrationCode() + " của ngựa " + horse.getHorseName() + " bị từ chối. Lý do: " + reg.getDecisionNote() + ". " + resubmitText,
+                "<p>Hồ sơ <b>" + esc(reg.getRegistrationCode()) + "</b> của ngựa <b>" + esc(horse.getHorseName()) + "</b> đã bị Quản lý CLB <b>từ chối</b>.</p>"
+                        + "<p>Lý do: " + esc(reg.getDecisionNote()).replace("\n", "<br>") + "</p>"
+                        + "<p><b>" + resubmitText + "</b></p>");
         entityManager.refresh(horse);
         return mapToResponseDTO(horse);
     }

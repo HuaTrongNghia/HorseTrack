@@ -276,7 +276,7 @@ public class RaceProposalService {
             notifier.audit("RACE_PAID_AFTER_CLOSE", e.getStatus(), e, "hóa đơn " + invoice.getInvoiceCode() + " đã thanh toán, cần hoàn tiền");
             notifier.notifyRole("Club Manager", "[HorseTrack] Cần hoàn lệ phí giải " + invoice.getInvoiceCode(),
                     "<p>Hóa đơn lệ phí <b>" + invoice.getInvoiceCode() + "</b> của đề xuất <b>" + RaceNotifier.code(e) + "</b> được thanh toán khi đề xuất đã ở trạng thái <b>"
-                            + esc(label(e.getStatus())) + "</b>. Vui lòng đối soát và hoàn tiền cho chủ ngựa.</p>");
+                            + esc(label(e.getStatus())) + "</b>. Vui lòng đối soát và hoàn tiền cho chủ ngựa.</p>", "/manager/invoices");
             return;
         }
         register(e, LocalDateTime.now(), "Đã thanh toán hóa đơn " + invoice.getInvoiceCode());
