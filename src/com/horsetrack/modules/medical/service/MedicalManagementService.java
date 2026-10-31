@@ -1,13 +1,6 @@
 package com.horsetrack.equinecare.modules.medical.service;
 
 
-@Service
-@RequiredArgsConstructor
-public class MedicalManagementService {
-
-    // Trạng thái trước khi cấp thuốc: còn sửa (phiên bản mới) hoặc hủy được
-    private static final Set<String> REVISABLE_STATES = Set.of(
-            "WAITING_STOCK_CHECK", "STOCK_AVAILABLE", "STOCK_SHORTAGE", "WAITING_RESTOCK", "REQUIRES_VET_REVIEW", "VET_CONFIRMED", "ON_HOLD_PAYMENT");
 
     private final TreatmentProtocolRepository protocolRepository;
     private final ProtocolProgressNoteRepository noteRepository;
