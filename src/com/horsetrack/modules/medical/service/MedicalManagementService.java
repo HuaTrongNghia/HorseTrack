@@ -16,13 +16,7 @@ package com.horsetrack.equinecare.modules.medical.service;
   
 
     /** Kho báo thiếu hoặc hàng về trễ: bác sĩ chấp nhận chờ hàng, giữ nguyên phác đồ. */
-    @Transactional(rollbackFor = Exception.class)
-    public TreatmentProtocolDTO waitForRestock(Integer protocolId, ProtocolWaitRequestDTO request) {
-        TreatmentProtocol protocol = findProtocol(protocolId);
-        if (!"STOCK_SHORTAGE".equals(protocol.getState()) && !"REQUIRES_VET_REVIEW".equals(protocol.getState())) {
-            throw new IllegalArgumentException("Chỉ chọn chờ hàng khi kho báo thiếu (STOCK_SHORTAGE) hoặc hàng về trễ (REQUIRES_VET_REVIEW). Hiện tại: "
-                    + protocol.getState() + ".");
-        }
+  
         LocalDate eta = request != null && request.getWaitEta() != null ? request.getWaitEta() : latestShortageEta(protocolId);
         protocol.setState("WAITING_RESTOCK");
         protocol.setWaitEta(eta);
