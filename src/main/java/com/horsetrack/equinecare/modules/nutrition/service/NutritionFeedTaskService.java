@@ -58,7 +58,7 @@ public class NutritionFeedTaskService {
 
     @Value("${app.nutrition.morning-time:07:00}")
     private String morningTime;
-    @Value("${app.nutrition.noon-time:11:30}")
+    @Value("${app.nutrition.noon-time:10:45}")
     private String noonTime;
     @Value("${app.nutrition.evening-time:17:00}")
     private String eveningTime;
