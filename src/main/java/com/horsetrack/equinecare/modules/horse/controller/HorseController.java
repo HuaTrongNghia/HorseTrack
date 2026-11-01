@@ -29,7 +29,7 @@ public class HorseController {
 
     @PostMapping("/register")
     @PreAuthorize("hasAnyAuthority('Horse Owner', 'Club Manager')")
-    @Operation(summary = "Đăng ký ngựa", description = "Chủ ngựa đăng ký cho chính mình. Club Manager đăng ký hộ thì phải chọn ownerId.")
+    @Operation(summary = "Đăng ký ngựa", description = "Chủ ngựa đăng ký cho chính mình.")
     public ResponseEntity<ApiResponse<HorseResponseDTO>> registerHorse(@Valid @RequestBody HorseRegistrationRequestDTO request) {
         HorseResponseDTO response = horseService.registerHorse(request);
         return ResponseEntity.status(HttpStatus.CREATED)
