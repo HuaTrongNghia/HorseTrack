@@ -115,7 +115,7 @@ public class TrainingExecutionController {
     // HLV hoặc Quản lý CLB đánh giá phong độ sau buổi tập
     @PutMapping("/{sessionId}/evaluate")
     @PreAuthorize("hasAnyAuthority('Trainer', 'Club Manager')")
-    @Operation(summary = "Đánh giá buổi tập", description = "HLV hoặc Club Manager đánh giá phong độ sau buổi tập.")
+    @Operation(summary = "Đánh giá buổi tập", description = "HLV đánh giá phong độ sau buổi tập.")
     public ResponseEntity<ApiResponse<Void>> evaluateSession(
             @PathVariable Integer sessionId,
             @Valid @RequestBody SessionEvaluateRequestDTO request) {
