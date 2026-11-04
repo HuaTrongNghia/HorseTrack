@@ -20,6 +20,9 @@ public class TrainingPlanDetailDTO {
     private LocalDate startDate;
     private LocalDate endDate;
     private String goal;
+    private String type;
     private String status;
+    private PlanStaffGuideDTO staffGuide;
+    private java.util.List<TrainingPlanPhaseDTO> phases;
     private List<TrainingSessionDTO> sessions;
 }
