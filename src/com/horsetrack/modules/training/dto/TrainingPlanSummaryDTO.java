@@ -23,5 +23,6 @@ public class TrainingPlanSummaryDTO {
     private Double progress;
     private String type;
     private String goal;
+    private PlanStaffGuideDTO staffGuide;
     private java.util.List<TrainingPlanPhaseDTO> phases;
 }
