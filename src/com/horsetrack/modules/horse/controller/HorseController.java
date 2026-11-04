@@ -29,7 +29,7 @@ public class HorseController {
 
     @PostMapping("/register")
     @PreAuthorize("hasAnyAuthority('Horse Owner', 'Club Manager')")
-    @Operation(summary = "Đăng ký ngựa", description = "Chủ ngựa đăng ký cho chính mình. Club Manager đăng ký hộ thì phải chọn ownerId.")
+    @Operation(summary = "Đăng ký ngựa", description = "Chủ ngựa đăng ký cho chính mình.")
     public ResponseEntity<ApiResponse<HorseResponseDTO>> registerHorse(@Valid @RequestBody HorseRegistrationRequestDTO request) {
         HorseResponseDTO response = horseService.registerHorse(request);
         return ResponseEntity.status(HttpStatus.CREATED)
@@ -90,10 +90,10 @@ public class HorseController {
     }
 
     // Club Manager từ chối hồ sơ (có thể cho phép nộp lại)
-    // Club Manager phân công HLV phụ trách ngựa; giáo án đang chạy được bàn giao cho HLV mới
+    // Club Manager phân công hoặc chuyển HLV. Mỗi HLV tối đa 5 ngựa. Không chuyển khi ngựa còn giáo án đang mở.
     @PutMapping("/{id}/assign-trainer")
     @PreAuthorize("hasAuthority('Club Manager')")
-    @Operation(summary = "Phân công HLV", description = "Gửi yêu cầu xác nhận. Ngựa chưa đổi người phụ trách cho đến khi HLV xác nhận. Giáo án đang chạy được bàn giao cho HLV mới.")
+    @Operation(summary = "Phân công HLV", description = "Gửi yêu cầu xác nhận. Mỗi HLV tối đa 5 ngựa. Chuyển từ HLV này sang HLV khác chỉ khi ngựa không còn giáo án đang mở (PENDING, ACTIVE, PAUSED). Phác đồ điều trị và thực đơn dinh dưỡng giữ theo ngựa.")
     public ResponseEntity<ApiResponse<HorseResponseDTO>> assignTrainer(
             @PathVariable Integer id,
             @Valid @RequestBody com.horsetrack.equinecare.modules.horse.dto.HorseAssignTrainerRequestDTO request) {
