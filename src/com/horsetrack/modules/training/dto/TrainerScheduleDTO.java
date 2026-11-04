@@ -14,6 +14,23 @@ public class TrainerScheduleDTO {
     private String activityType;
     private String status;
     private String planName;
+    private String planType;
+    private String trackType;
+    private String staffGuide;
+    private java.util.List<String> steps;
     private String horseName;
     private String stallZone;
+    private Integer evaluationScore;
+    private String evaluationComment;
+    private String evaluatedBy;
+    private String evaluatedAt;
+    private String notes;
+    private Integer maxHeartRate;
+    private java.math.BigDecimal maxSpeedKmh;
+    private LocalDateTime startedAt;
+    private LocalDateTime pausedAt;
+    private String pausedReason;
+    private java.util.List<SessionReadingDTO> readings;
+    private java.util.List<SessionReadingDTO> recovery;
+    private String vetCaseCode;
 }
