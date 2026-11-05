@@ -25,5 +25,8 @@ public interface TrainingPlanService {
     void addTrainingSessionToPlan(Integer planId, TrainingSessionCreateRequestDTO request);
 
     Integer createTrainingPlan(TrainingPlanCreateRequestDTO request);
+
+    /** Sửa giáo án đang chờ, khi chưa có buổi tập nào được nhân viên xác nhận. */
+    void updateTrainingPlan(Integer planId, TrainingPlanCreateRequestDTO request);
 }
 

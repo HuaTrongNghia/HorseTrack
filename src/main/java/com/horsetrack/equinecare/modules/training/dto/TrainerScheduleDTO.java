@@ -14,6 +14,10 @@ public class TrainerScheduleDTO {
     private String activityType;
     private String status;
     private String planName;
+    private String planType;
+    private String trackType;
+    private String staffGuide;
+    private java.util.List<String> steps;
     private String horseName;
     private String stallZone;
     private Integer evaluationScore;

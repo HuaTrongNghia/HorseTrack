@@ -41,6 +41,8 @@ public class HorseServiceImpl implements HorseService {
     // Không còn kiểm tra giấy chứng nhận sức khỏe (đã bỏ khỏi hồ sơ đăng ký)
     private static final Set<String> REQUIRED_CHECKS = Set.of("IDENTITY", "OWNERSHIP");
     private static final BigDecimal CM_PER_HAND = new BigDecimal("10.16");
+    /** Mỗi HLV chỉ phụ trách tối đa 5 ngựa. */
+    private static final int MAX_HORSES_PER_TRAINER = 5;
 
     private final HorseRepository horseRepository;
     private final UserRepository userRepository;
@@ -260,7 +262,7 @@ public class HorseServiceImpl implements HorseService {
     @Override
     @Transactional
     public HorseResponseDTO assignTrainer(Integer horseId, HorseAssignTrainerRequestDTO request) {
-        PreparedTrainer prepared = prepareTrainer(horseId, request.getTrainerId());
+        PreparedTrainer prepared = prepareTrainer(horseId, request.getTrainerId(), false);
         assignmentRequests.openTrainerHorse(prepared.horse, prepared.trainer, prepared.previous, currentUser());
         return mapToResponseDTO(prepared.horse);
     }
@@ -268,26 +270,19 @@ public class HorseServiceImpl implements HorseService {
     @Override
     @Transactional
     public HorseResponseDTO applyTrainerAssignment(Integer horseId, Integer trainerId) {
-        PreparedTrainer prepared = prepareTrainer(horseId, trainerId);
+        PreparedTrainer prepared = prepareTrainer(horseId, trainerId, true);
         Horse horse = prepared.horse;
         User trainer = prepared.trainer;
         User previous = prepared.previous;
         horse.setAssignedTrainer(trainer);
         horseRepository.save(horse);
 
-        int handedOver = 0;
-        for (String st : com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES) {
-            for (var plan : trainingPlanRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), st)) {
-                plan.setHeadTrainer(trainer);
-                trainingPlanRepository.save(plan);
-                handedOver++;
-            }
-        }
-
+        // Phác đồ điều trị và thực đơn dinh dưỡng gắn với ngựa, không đổi theo HLV.
+        // Giáo án đang mở đã bị chặn ở prepareTrainer, nên không bàn giao giáo án.
         auditTrail.record("ASSIGN_TRAINER", "Horses",
                 previous != null ? "assigned_trainer_id=" + previous.getUserId() : "assigned_trainer_id=null",
                 "assigned_trainer_id=" + trainer.getUserId() + " | ngựa " + horse.getHorseName() + " (horse_id=" + horse.getHorseId()
-                        + ") | bàn giao " + handedOver + " giáo án");
+                        + ") | phác đồ và thực đơn giữ theo ngựa");
 
         // HLV mới vừa tự xác nhận → không spam mail/chuông. Chỉ báo HLV cũ qua chuông.
         if (previous != null) {
@@ -302,12 +297,31 @@ public class HorseServiceImpl implements HorseService {
         for (String st : com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES) {
             if (!trainingPlanRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), st).isEmpty()) {
                 throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đang có giáo án " + st
-                        + ". Hãy phân công HLV khác để bàn giao giáo án, hoặc kết thúc / hủy giáo án trước khi bỏ phân công.");
+                        + ". Chỉ chuyển hoặc bỏ HLV khi ngựa không còn giáo án đang mở (chờ chạy, đang chạy, tạm dừng). Hãy hoàn thành hoặc hủy giáo án trước. Phác đồ điều trị và thực đơn dinh dưỡng vẫn giữ theo ngựa.");
             }
         }
     }
 
-    private PreparedTrainer prepareTrainer(Integer horseId, Integer trainerId) {
+    /**
+     * @param confirming true khi HLV xác nhận: chỉ đếm ngựa đang phụ trách thật.
+     *                   false khi quản lý gửi yêu cầu: yêu cầu bỏ ngựa đang chờ được tính là sắp trống chỗ.
+     */
+    private void assertTrainerCapacity(User trainer, Horse horse, boolean confirming) {
+        if (horse.getAssignedTrainer() != null && trainer.getUserId().equals(horse.getAssignedTrainer().getUserId())) {
+            return;
+        }
+        long assigned = horseRepository.countByAssignedTrainer_UserId(trainer.getUserId());
+        int incoming = confirming ? 0 : assignmentRequests.pendingIncomingHorses(trainer.getUserId(), horse.getHorseId());
+        int freeing = confirming ? 0 : assignmentRequests.pendingReleases(trainer.getUserId());
+        long used = assigned + incoming - freeing;
+        if (used >= MAX_HORSES_PER_TRAINER) {
+            throw new IllegalArgumentException("HLV " + trainer.getFullName() + " đã đủ " + MAX_HORSES_PER_TRAINER
+                    + " ngựa (đang phụ trách " + assigned + "). Mỗi HLV chỉ quản lý tối đa " + MAX_HORSES_PER_TRAINER
+                    + " ngựa. Hãy bỏ bớt ngựa và chờ HLV xác nhận trước khi phân công thêm.");
+        }
+    }
+
+    private PreparedTrainer prepareTrainer(Integer horseId, Integer trainerId, boolean confirming) {
         Horse horse = findHorse(horseId);
         if (horse.getStall() == null) {
             throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " chưa được duyệt và cấp chuồng, chưa thể phân công HLV.");
@@ -325,6 +339,10 @@ public class HorseServiceImpl implements HorseService {
         if (previous != null && previous.getUserId().equals(trainer.getUserId())) {
             throw new IllegalArgumentException("Ngựa " + horse.getHorseName() + " đã được phân công cho " + trainer.getFullName() + ".");
         }
+        if (previous != null) {
+            assertNoOpenPlan(horse);
+        }
+        assertTrainerCapacity(trainer, horse, confirming);
         return new PreparedTrainer(horse, trainer, previous);
     }
 

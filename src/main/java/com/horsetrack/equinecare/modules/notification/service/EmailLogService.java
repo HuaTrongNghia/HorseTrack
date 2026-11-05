@@ -26,6 +26,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class EmailLogService {
 
+    private static final int BOUNCE_WINDOW_DAYS = 3;
+
     private final EmailLogRepository logRepository;
     private final UserRepository userRepository;
 
@@ -48,6 +50,27 @@ public class EmailLogService {
         } catch (Exception ex) {
             log.warn("Không ghi được nhật ký email tới {} ({}): {}", toEmail, status, ex.getMessage());
         }
+    }
+
+    /**
+     * Thư bị trả về: chuyển dòng SENT gần nhất tới địa chỉ này sang FAILED, để nhật ký không có cả SENT lẫn FAILED cho một email.
+     * Không tìm thấy dòng SENT (đã quá lâu, hoặc email gửi trước khi có nhật ký) thì ghi một dòng FAILED mới.
+     */
+    public void markBounced(String toEmail, String fallbackPurpose, String subject, String error) {
+        try {
+            var sent = logRepository.findFirstByToEmailIgnoreCaseAndStatusAndSentAtAfterOrderByLogIdDesc(
+                    toEmail, EmailLog.SENT, LocalDateTime.now().minusDays(BOUNCE_WINDOW_DAYS));
+            if (sent.isPresent()) {
+                EmailLog entry = sent.get();
+                entry.setStatus(EmailLog.FAILED);
+                entry.setError(truncate(error, 1000));
+                logRepository.save(entry);
+                return;
+            }
+        } catch (Exception ex) {
+            log.warn("Không cập nhật được nhật ký email tới {}: {}", toEmail, ex.getMessage());
+        }
+        record(toEmail, fallbackPurpose, subject, EmailLog.FAILED, error);
     }
 
     @Transactional(readOnly = true)

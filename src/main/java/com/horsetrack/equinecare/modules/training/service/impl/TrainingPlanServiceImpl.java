@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -38,6 +39,8 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     private final com.horsetrack.equinecare.modules.training.service.SessionVetLink sessionVetLink;
     private final com.horsetrack.equinecare.modules.care.service.HorseScheduleGuard scheduleGuard;
     private final com.horsetrack.equinecare.modules.tournament.service.RaceTrainingGuard raceTrainingGuard;
+    private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
+    private final com.horsetrack.equinecare.modules.notification.service.AppNotificationService appNotifications;
 
     // Thời lượng mặc định một buổi tập (bảng chỉ lưu giờ bắt đầu), dùng để kiểm tra trùng giờ
     @org.springframework.beans.factory.annotation.Value("${app.training.session-duration-minutes:60}")
@@ -152,6 +155,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                     .progress(progress)
                     .type(plan.getPlanType())
                     .goal(plan.getGoal())
+                    .staffGuide(com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.toDto(plan.getPlanType()))
                     .phases(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.toDtos(plan))
                     .build();
         });
@@ -235,6 +239,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .goal(plan.getGoal())
                 .type(plan.getPlanType())
                 .status(plan.getStatus())
+                .staffGuide(com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.toDto(plan.getPlanType()))
                 .phases(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.toDtos(plan))
                 .sessions(sessionDTOs)
                 .build();
@@ -350,12 +355,13 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
             throw new IllegalArgumentException("Ngựa này đang có một giáo án PENDING, ACTIVE hoặc PAUSED. Hãy hoàn thành hoặc hủy giáo án cũ trước.");
         }
 
+        var guide = com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.require(request.getType());
         TrainingPlan plan = TrainingPlan.builder()
                 .planName(request.getPlanName().trim())
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
                 .goal(request.getGoal())
-                .planType(request.getType() != null && !request.getType().isBlank() ? request.getType().trim() : null)
+                .planType(guide.type())
                 // Giáo án mới ở trạng thái chờ; chỉ chạy khi Groom xác nhận buổi tập và tới ngày bắt đầu
                 .status(com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.PLAN_PENDING)
                 .createdAt(LocalDateTime.now())
@@ -363,6 +369,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .headTrainer(trainer)
                 .build();
         plan.getPhases().addAll(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.build(plan, request.getPhases()));
+        assertTrackFree(plan, horse.getHorseId());
         // 7 ngày trước giải mà ngựa đã được HLV xác nhận thi: không có giai đoạn cường độ Cao
         for (var ph : plan.getPhases()) {
             java.time.LocalDate[] range = com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.rangeOf(plan, ph);
@@ -370,5 +377,151 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         }
 
         return trainingPlanRepository.save(plan).getPlanId();
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void updateTrainingPlan(Integer planId, TrainingPlanCreateRequestDTO request) {
+        TrainingPlan plan = findPlan(planId);
+        Horse horse = plan.getHorse();
+        horseAccessGuard.checkAssigned(horse);
+        if (horse == null || !horse.getHorseId().equals(request.getHorseId())) {
+            throw new IllegalArgumentException("Không đổi ngựa của giáo án. Hủy giáo án này rồi lập giáo án cho ngựa khác.");
+        }
+        if (!com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.PLAN_PENDING.equalsIgnoreCase(plan.getStatus())) {
+            throw new IllegalArgumentException("Chỉ điều chỉnh được giáo án chưa bắt đầu. Giáo án đang " + plan.getStatus() + ".");
+        }
+        if (Boolean.TRUE.equals(horse.getIsLocked())) {
+            throw new IllegalArgumentException("Ngựa đang bị khóa y tế, không thể điều chỉnh giáo án.");
+        }
+        if (request.getEndDate().isBefore(request.getStartDate())) {
+            throw new IllegalArgumentException("Ngày kết thúc (endDate) không được nhỏ hơn ngày bắt đầu (startDate).");
+        }
+        boolean staffConfirmed = plan.getSessions().stream().anyMatch(s -> {
+            String st = String.valueOf(s.getStatus()).toUpperCase();
+            return !"PENDING".equals(st) && !"CANCELLED".equals(st);
+        });
+        if (staffConfirmed) {
+            throw new IllegalArgumentException("Nhân viên đã xác nhận buổi tập của giáo án này, không điều chỉnh được nữa.");
+        }
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        for (TrainingSession session : plan.getSessions()) {
+            if (!"PENDING".equalsIgnoreCase(session.getStatus()) || session.getSessionDate() == null) {
+                continue;
+            }
+            LocalDate day = session.getSessionDate().toLocalDate();
+            if (day.isBefore(request.getStartDate()) || day.isAfter(request.getEndDate())) {
+                throw new IllegalArgumentException("Buổi tập #" + session.getSessionId() + " ngày " + day.format(fmt)
+                        + " nằm ngoài khoảng mới. Hủy buổi đó hoặc chọn ngày bao trùm các buổi chưa xác nhận.");
+            }
+        }
+
+        var guide = com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.require(request.getType());
+        String before = plan.getPlanName() + " | " + plan.getPlanType() + " | " + plan.getStartDate() + " → " + plan.getEndDate();
+        plan.setPlanName(request.getPlanName().trim());
+        plan.setStartDate(request.getStartDate());
+        plan.setEndDate(request.getEndDate());
+        plan.setGoal(request.getGoal());
+        plan.setPlanType(guide.type());
+
+        java.util.List<com.horsetrack.equinecare.modules.training.entity.TrainingPlanPhase> built =
+                com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.build(plan, request.getPhases());
+        com.horsetrack.equinecare.modules.training.entity.TrainingPlanPhase next = built.get(0);
+        while (plan.getPhases().size() > 1) {
+            plan.getPhases().remove(plan.getPhases().size() - 1);
+        }
+        com.horsetrack.equinecare.modules.training.entity.TrainingPlanPhase phase = plan.getPhases().isEmpty() ? null : plan.getPhases().get(0);
+        if (phase == null) {
+            plan.getPhases().add(next);
+            phase = next;
+        } else {
+            phase.setPhaseName(next.getPhaseName());
+            phase.setDurationWeeks(next.getDurationWeeks());
+            phase.setIntensity(next.getIntensity());
+            if (next.getDistanceM() != null) {
+                phase.setDistanceM(next.getDistanceM());
+            }
+            if (next.getTargetSpeedKmh() != null) {
+                phase.setTargetSpeedKmh(next.getTargetSpeedKmh());
+            }
+            phase.setTrackType(next.getTrackType());
+            phase.setSessionsPerWeek(next.getSessionsPerWeek());
+            phase.setHrLimitBpm(next.getHrLimitBpm());
+        }
+        assertTrackFree(plan, horse.getHorseId());
+        java.time.LocalDate[] range = com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.rangeOf(plan, phase);
+        raceTrainingGuard.assertAllowed(horse, range[0], range[1], phase.getIntensity(), "điều chỉnh giáo án");
+
+        String track = com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.trackLabel(phase.getTrackType());
+        for (TrainingSession session : plan.getSessions()) {
+            if (!"PENDING".equalsIgnoreCase(session.getStatus())) {
+                continue;
+            }
+            session.setActivityType(guide.type());
+            if (phase.getHrLimitBpm() != null) {
+                session.setMaxHeartRate(phase.getHrLimitBpm());
+            }
+            session.setNotes(rewriteTrackNote(session.getNotes(), track));
+        }
+        trainingPlanRepository.save(plan);
+        notifyAdjustedPlan(plan, guide.type(), track, fmt);
+        auditTrail.record("UPDATE_TRAINING_PLAN", "Training_Plans", before,
+                plan.getPlanName() + " | " + plan.getPlanType() + " | " + track
+                        + " | " + plan.getStartDate() + " → " + plan.getEndDate() + " | giáo án #" + plan.getPlanId());
+    }
+
+    // Báo Mã phu có buổi đang chờ xác nhận (mỗi người một lần) để xem lại cách thực hiện trước khi xác nhận
+    private void notifyAdjustedPlan(TrainingPlan plan, String type, String track, DateTimeFormatter fmt) {
+        String message = "HLV đã điều chỉnh giáo án \"" + plan.getPlanName() + "\" của ngựa " + plan.getHorse().getHorseName()
+                + ": loại " + type + ", " + track + ", từ " + plan.getStartDate().format(fmt) + " đến " + plan.getEndDate().format(fmt)
+                + ". Xem lại cách thực hiện trước khi xác nhận buổi tập.";
+        plan.getSessions().stream()
+                .filter(s -> "PENDING".equalsIgnoreCase(s.getStatus()))
+                .map(TrainingSession::getAssignedTo)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toMap(User::getUserId, u -> u, (a, b) -> a))
+                .values()
+                .forEach(groom -> appNotifications.push(groom, "TRAINING_PLAN_ADJUSTED", "Giáo án " + plan.getPlanName() + " đã được điều chỉnh", message, "/groom/sessions"));
+    }
+
+    private static String rewriteTrackNote(String notes, String track) {
+        if (track == null || track.isBlank()) {
+            return notes;
+        }
+        if (notes == null || notes.isBlank()) {
+            return track;
+        }
+        for (String label : java.util.List.of("Cỏ nhân tạo", "Đường đất", "Đường cỏ")) {
+            if (notes.startsWith(label)) {
+                return track + notes.substring(label.length());
+            }
+        }
+        int mark = notes.indexOf(" · Ghi nhận:");
+        if (mark >= 0) {
+            return track + notes.substring(mark);
+        }
+        return notes;
+    }
+
+    /** Mỗi loại đường chỉ một ngựa trong các giáo án đang mở có khoảng ngày giao nhau. */
+    private void assertTrackFree(TrainingPlan plan, Integer horseId) {
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+        for (var ph : plan.getPhases()) {
+            List<TrainingPlan> taken = trainingPlanRepository.findOpenOnTrack(
+                    ph.getTrackType(),
+                    com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES,
+                    plan.getEndDate(),
+                    plan.getStartDate(),
+                    horseId);
+            if (taken.isEmpty()) {
+                continue;
+            }
+            TrainingPlan other = taken.get(0);
+            String horseName = other.getHorse() != null ? other.getHorse().getHorseName() : "một ngựa khác";
+            throw new IllegalArgumentException(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.trackLabel(ph.getTrackType())
+                    + " đã có ngựa " + horseName + " trong giáo án \"" + other.getPlanName()
+                    + "\" từ " + other.getStartDate().format(fmt) + " đến " + other.getEndDate().format(fmt)
+                    + ". Mỗi loại đường chỉ một ngựa trong khoảng ngày giáo án trùng nhau.");
+        }
     }
 }

@@ -16,7 +16,18 @@ public final class TrainingPlanPhases {
             "LOW", "LOW", "THẤP", "LOW", "NHẸ", "LOW",
             "MEDIUM", "MEDIUM", "TRUNG BÌNH", "MEDIUM", "VỪA", "MEDIUM",
             "HIGH", "HIGH", "CAO", "HIGH", "NẶNG", "HIGH");
-    private static final Set<String> TRACKS = Set.of("SYNTHETIC", "DIRT", "TURF");
+    private static final Map<String, String> TRACKS = Map.ofEntries(
+            Map.entry("SYNTHETIC", "SYNTHETIC"),
+            Map.entry("CỎ NHÂN TẠO", "SYNTHETIC"),
+            Map.entry("CO NHAN TAO", "SYNTHETIC"),
+            Map.entry("DIRT", "DIRT"),
+            Map.entry("ĐẤT", "DIRT"),
+            Map.entry("DAT", "DIRT"),
+            Map.entry("ĐƯỜNG ĐẤT", "DIRT"),
+            Map.entry("TURF", "TURF"),
+            Map.entry("CỎ", "TURF"),
+            Map.entry("CO", "TURF"),
+            Map.entry("ĐƯỜNG CỎ", "TURF"));
 
     private TrainingPlanPhases() {
     }
@@ -52,10 +63,7 @@ public final class TrainingPlanPhases {
             if (intensity == null) {
                 throw new IllegalArgumentException("Cường độ '" + p.getIntensity() + "' không hợp lệ (LOW / MEDIUM / HIGH).");
             }
-            String track = StringUtils.hasText(p.getTrackType()) ? p.getTrackType().trim().toUpperCase() : null;
-            if (track != null && !TRACKS.contains(track)) {
-                throw new IllegalArgumentException("Loại đường chạy '" + p.getTrackType() + "' không hợp lệ (SYNTHETIC / DIRT / TURF).");
-            }
+            String track = trackCode(p.getTrackType());
             result.add(TrainingPlanPhase.builder()
                     .plan(plan)
                     .phaseNo(no++)
@@ -70,6 +78,31 @@ public final class TrainingPlanPhases {
                     .build());
         }
         return result;
+    }
+
+    /** Mã đường SYNTHETIC / DIRT / TURF. Bắt buộc khi lập giáo án. */
+    public static String trackCode(String raw) {
+        if (!StringUtils.hasText(raw)) {
+            throw new IllegalArgumentException("Phải chọn loại đường tập: Cỏ nhân tạo, Đường đất hoặc Đường cỏ.");
+        }
+        String track = TRACKS.get(raw.trim().toUpperCase(Locale.forLanguageTag("vi")));
+        if (track == null) {
+            throw new IllegalArgumentException("Loại đường tập '" + raw.trim()
+                    + "' không hợp lệ. Chỉ dùng Cỏ nhân tạo, Đường đất hoặc Đường cỏ.");
+        }
+        return track;
+    }
+
+    public static String trackLabel(String code) {
+        if (code == null) {
+            return "";
+        }
+        return switch (code) {
+            case "SYNTHETIC" -> "Cỏ nhân tạo";
+            case "DIRT" -> "Đường đất";
+            case "TURF" -> "Đường cỏ";
+            default -> code;
+        };
     }
 
     /** Giai đoạn chứa ngày day (rỗng nếu giáo án không chia giai đoạn hoặc ngày nằm ngoài các giai đoạn) */

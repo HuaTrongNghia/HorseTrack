@@ -37,7 +37,7 @@ public class TrainingPlanPhaseDTO {
     @DecimalMin(value = "0", message = "Tốc độ không được âm") @DecimalMax(value = "100", message = "Tốc độ tối đa 100 km/h")
     private BigDecimal targetSpeedKmh;
 
-    // SYNTHETIC / DIRT / TURF (tùy chọn)
+    // Bắt buộc khi lập giáo án: SYNTHETIC (Cỏ nhân tạo) / DIRT (Đường đất) / TURF (Đường cỏ)
     private String trackType;
 
     @Min(value = 1, message = "Số buổi/tuần từ 1 đến 14") @Max(value = 14, message = "Số buổi/tuần từ 1 đến 14")

@@ -64,12 +64,23 @@ public class TrainingPlanController {
     // Trainer tạo giáo án mới cho ngựa (sau đó thêm buổi tập qua POST /{planId}/sessions)
     @PostMapping
     @PreAuthorize("hasAuthority('Trainer')")
-    @Operation(summary = "Lập giáo án huấn luyện", description = "Tạo giáo án cho ngựa được phân công. Thêm buổi tập bằng POST /{planId}/sessions.")
+    @Operation(summary = "Lập giáo án huấn luyện", description = "Tạo giáo án cho ngựa được phân công. Mỗi giáo án một giai đoạn và một loại đường: Cỏ nhân tạo, Đường đất hoặc Đường cỏ. Trong khoảng ngày trùng nhau, mỗi loại đường chỉ một ngựa. Loại giáo án là Sức bền, Tốc độ, Phục hồi hoặc Kỹ thuật, kèm hướng dẫn các bước cho Mã phu. Thêm buổi tập bằng POST /{planId}/sessions.")
     public ResponseEntity<ApiResponse<Integer>> createTrainingPlan(
             @Valid @RequestBody TrainingPlanCreateRequestDTO request) {
         Integer planId = trainingPlanService.createTrainingPlan(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.ok("Tạo giáo án huấn luyện thành công", planId));
+    }
+
+    @PutMapping("/{planId}")
+    @PreAuthorize("hasAuthority('Trainer')")
+    @Operation(summary = "Điều chỉnh giáo án chưa được xác nhận",
+            description = "Chỉ giáo án PENDING và chưa có buổi tập nào được Mã phu xác nhận. Buổi đã xếp nhưng còn chờ xác nhận được giữ nếu vẫn nằm trong khoảng ngày mới.")
+    public ResponseEntity<ApiResponse<Integer>> updateTrainingPlan(
+            @PathVariable Integer planId,
+            @Valid @RequestBody TrainingPlanCreateRequestDTO request) {
+        trainingPlanService.updateTrainingPlan(planId, request);
+        return ResponseEntity.ok(ApiResponse.ok("Đã điều chỉnh giáo án", planId));
     }
 
     // ==========================================

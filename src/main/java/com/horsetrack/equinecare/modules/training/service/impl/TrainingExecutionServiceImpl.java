@@ -58,13 +58,33 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
             String horseName = null;
             String stallZone = null;
             String planName = null;
-            
-            if (session.getTrainingPlan() != null) {
-                planName = session.getTrainingPlan().getPlanName();
-                if (session.getTrainingPlan().getHorse() != null) {
-                    horseName = session.getTrainingPlan().getHorse().getHorseName();
-                    if (session.getTrainingPlan().getHorse().getStall() != null) {
-                        stallZone = session.getTrainingPlan().getHorse().getStall().getBarnZone();
+            String planType = null;
+            String trackType = null;
+            String staffGuide = null;
+            java.util.List<String> steps = null;
+
+            TrainingPlan plan = session.getTrainingPlan();
+            if (plan != null) {
+                planName = plan.getPlanName();
+                planType = plan.getPlanType();
+                var guide = com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.find(planType);
+                if (guide != null) {
+                    staffGuide = guide.summary();
+                    steps = guide.steps();
+                }
+                if (session.getSessionDate() != null) {
+                    trackType = com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases
+                            .phaseOn(plan, session.getSessionDate().toLocalDate())
+                            .map(ph -> ph.getTrackType())
+                            .orElse(null);
+                }
+                if (trackType == null && plan.getPhases() != null && !plan.getPhases().isEmpty()) {
+                    trackType = plan.getPhases().get(0).getTrackType();
+                }
+                if (plan.getHorse() != null) {
+                    horseName = plan.getHorse().getHorseName();
+                    if (plan.getHorse().getStall() != null) {
+                        stallZone = plan.getHorse().getStall().getBarnZone();
                     }
                 }
             }
@@ -75,6 +95,10 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
                     .activityType(session.getActivityType())
                     .status(session.getStatus())
                     .planName(planName)
+                    .planType(planType)
+                    .trackType(trackType)
+                    .staffGuide(staffGuide)
+                    .steps(steps)
                     .horseName(horseName)
                     .stallZone(stallZone)
                     .notes(com.horsetrack.equinecare.modules.training.service.SessionEvaluationHelper.removeEvaluation(session.getNotes()))

@@ -71,8 +71,18 @@ public class UserController {
     @PreAuthorize("hasAuthority('Club Manager')")
     @Operation(summary = "Gửi lại email xác nhận tài khoản nhân viên", description = "Chỉ khi nhân viên chưa xác nhận. Mật khẩu tạm mới và liên kết xác nhận mới được gửi trong email; liên kết cũ hết hiệu lực.")
     public ResponseEntity<ApiResponse<Void>> resendConfirmation(@PathVariable Integer id) {
+        var existing = userService.getUserById(id);
+        try {
+            staffAccountService.ensureStaffEmailDeliverable(existing.getEmail());
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.badRequest().body(ApiResponse.error(ex.getMessage()));
+        }
         var created = staffAccountService.resend(id);
-        String message = staffAccountService.emailResultMessage(staffAccountService.sendAccountEmail(created), created.user().getEmail(),
+        var delivery = staffAccountService.sendAccountEmail(created);
+        if (delivery == com.horsetrack.equinecare.modules.notification.service.EmailService.Delivery.FAILED) {
+            staffAccountService.notifyStaffEmailFailed(created.user().getEmail(), "Máy chủ thư từ chối địa chỉ này hoặc gửi bị lỗi.");
+        }
+        String message = staffAccountService.emailResultMessage(delivery, created.user().getEmail(),
                 "Đã tạo liên kết xác nhận và mật khẩu tạm mới.");
         return ResponseEntity.ok(ApiResponse.ok(message, null));
     }

@@ -13,6 +13,9 @@ import java.time.LocalDateTime;
 @Repository
 public interface EmailLogRepository extends JpaRepository<EmailLog, Long> {
 
+    // Lần gửi SENT gần nhất tới địa chỉ, còn trong khoảng thời gian thư trả về có thể tới
+    java.util.Optional<EmailLog> findFirstByToEmailIgnoreCaseAndStatusAndSentAtAfterOrderByLogIdDesc(String toEmail, String status, LocalDateTime after);
+
     // Lọc tùy chọn: tham số null thì bỏ qua điều kiện đó
     @Query("SELECT e FROM EmailLog e WHERE (:userId IS NULL OR e.userId = :userId) AND (:purpose IS NULL OR e.purpose = :purpose) "
             + "AND (:status IS NULL OR e.status = :status) AND (:toEmail IS NULL OR LOWER(e.toEmail) LIKE :toEmail) "

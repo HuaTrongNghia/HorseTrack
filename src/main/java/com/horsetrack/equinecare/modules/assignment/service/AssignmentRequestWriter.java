@@ -93,6 +93,27 @@ public class AssignmentRequestWriter {
         return saved;
     }
 
+    /** Yêu cầu nhận ngựa đang chờ, không tính ngựa exceptHorseId (sẽ bị hủy khi gửi lại) và ngựa đã thuộc HLV này. */
+    public int pendingIncomingHorses(Integer trainerId, Integer exceptHorseId) {
+        int n = 0;
+        for (AssignmentRequest request : repository.findByStatusAndTargetUserIdAndRequestType(PENDING, trainerId, TRAINER_HORSE)) {
+            if (request.getHorseId() == null || request.getHorseId().equals(exceptHorseId)) {
+                continue;
+            }
+            Horse horse = horseRepository.findById(request.getHorseId()).orElse(null);
+            if (horse != null && horse.getAssignedTrainer() != null && trainerId.equals(horse.getAssignedTrainer().getUserId())) {
+                continue;
+            }
+            n++;
+        }
+        return n;
+    }
+
+    /** Yêu cầu bỏ ngựa đang chờ. Slot chỉ trống sau khi HLV xác nhận, nhưng yêu cầu mới được xếp trước lúc đó. */
+    public int pendingReleases(Integer trainerId) {
+        return repository.findByStatusAndTargetUserIdAndRequestType(PENDING, trainerId, TRAINER_RELEASE).size();
+    }
+
     public Integer currentUserId() {
         return currentUser().getUserId();
     }

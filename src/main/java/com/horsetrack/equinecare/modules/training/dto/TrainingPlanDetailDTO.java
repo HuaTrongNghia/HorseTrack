@@ -22,6 +22,7 @@ public class TrainingPlanDetailDTO {
     private String goal;
     private String type;
     private String status;
+    private PlanStaffGuideDTO staffGuide;
     private java.util.List<TrainingPlanPhaseDTO> phases;
     private List<TrainingSessionDTO> sessions;
 }

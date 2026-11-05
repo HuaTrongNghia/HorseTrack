@@ -71,6 +71,8 @@ public class AuthController {
     public ResponseEntity<ApiResponse<Void>> createStaff(@Valid @RequestBody StaffCreateRequestDTO request) {
         com.horsetrack.equinecare.modules.auth.service.StaffAccountService.CreatedStaff created;
         try {
+            // Tên miền không nhận thư: báo trên form, nhật ký và chuông. Không tạo tài khoản, không gửi email.
+            staffAccountService.ensureStaffEmailDeliverable(request.getEmail());
             // Lưu tài khoản trước (transaction riêng); email chỉ gửi khi đã lưu thành công
             created = authService.createStaff(request);
         } catch (IllegalArgumentException ex) {
@@ -84,7 +86,11 @@ public class AuthController {
         // Gửi email thất bại không hủy tài khoản đã tạo; báo để Club Manager gửi thông tin cho nhân viên theo cách khác
         // Email gửi ở nền; chờ tối đa app.mail.wait-seconds để báo kết quả, quá hạn thì vẫn tiếp tục gửi
         String email = created.user().getEmail();
-        String message = staffAccountService.emailResultMessage(staffAccountService.sendAccountEmail(created), email,
+        EmailService.Delivery delivery = staffAccountService.sendAccountEmail(created);
+        if (delivery == EmailService.Delivery.FAILED) {
+            staffAccountService.notifyStaffEmailFailed(email, "Máy chủ thư từ chối địa chỉ này hoặc gửi bị lỗi.");
+        }
+        String message = staffAccountService.emailResultMessage(delivery, email,
                 "Tạo tài khoản nhân viên thành công! Nhân viên cần nhấn \"Xác nhận tài khoản\" trong email trước khi đăng nhập / được phân công.");
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.ok(message, null));
     }

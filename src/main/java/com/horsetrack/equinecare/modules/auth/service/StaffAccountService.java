@@ -4,9 +4,15 @@ import com.horsetrack.equinecare.common.exception.ResourceNotFoundException;
 import com.horsetrack.equinecare.modules.audit.service.AuditTrail;
 import com.horsetrack.equinecare.modules.auth.entity.User;
 import com.horsetrack.equinecare.modules.auth.repository.UserRepository;
+import com.horsetrack.equinecare.modules.notification.entity.EmailLog;
+import com.horsetrack.equinecare.modules.notification.service.AppNotificationService;
+import com.horsetrack.equinecare.modules.notification.service.EmailDomainVerifier;
+import com.horsetrack.equinecare.modules.notification.service.EmailLogService;
 import com.horsetrack.equinecare.modules.notification.service.EmailService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -39,9 +45,14 @@ public class StaffAccountService {
     public record CreatedStaff(User user, String rawPassword, String rawToken) {
     }
 
+    private static final String EMAIL_LOG_LINK = "/manager/email-logs";
+
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmailService emailService;
+    private final EmailDomainVerifier emailDomainVerifier;
+    private final EmailLogService emailLogService;
+    private final AppNotificationService appNotifications;
     private final AuditTrail auditTrail;
 
     @Value("${app.staff.confirm-url:http://localhost:8080/api/v1/auth/confirm-account}")
@@ -69,6 +80,23 @@ public class StaffAccountService {
         return token;
     }
 
+    /**
+     * Tên miền không nhận thư thì không gửi, không tạo tài khoản.
+     * Ghi nhật ký FAILED và chuông cho quản lý đang đăng nhập. Không gửi thư báo lỗi vào hộp thư hệ thống.
+     */
+    public void ensureStaffEmailDeliverable(String rawEmail) {
+        if (!StringUtils.hasText(rawEmail) || !rawEmail.contains("@")) {
+            return;
+        }
+        String email = rawEmail.trim().toLowerCase(java.util.Locale.ROOT);
+        try {
+            emailDomainVerifier.checkDeliverable(email);
+        } catch (IllegalArgumentException ex) {
+            rememberFailure(email, "[HorseTrack] Tài khoản nhân viên của bạn", "STAFF_ACCOUNT", ex.getMessage());
+            throw ex;
+        }
+    }
+
     /** Gửi email tài khoản (email đăng nhập, mật khẩu, nút xác nhận) và chờ kết quả tối đa app.mail.wait-seconds */
     public EmailService.Delivery sendAccountEmail(CreatedStaff created) {
         User u = created.user();
@@ -81,11 +109,52 @@ public class StaffAccountService {
     public String emailResultMessage(EmailService.Delivery delivery, String email, String prefix) {
         return switch (delivery) {
             case SENT -> emailService.isConfigured()
-                    ? prefix + " Đã gửi email xác nhận tới " + email + "."
+                    ? prefix + " Đã chuyển email xác nhận tới máy chủ thư cho " + email
+                            + ". Nếu địa chỉ không tồn tại, sau vài phút hệ thống sẽ báo ở chuông và Nhật ký email."
                     : prefix + " (Chế độ dev: email chưa gửi thật, liên kết xác nhận và mật khẩu in trong console server.)";
             case PENDING -> prefix + " Email tới " + email + " đang được gửi; nếu nhân viên không nhận được sau vài phút, hãy gửi lại email xác nhận.";
-            case FAILED -> prefix + " Nhưng KHÔNG gửi được email tới " + email + ". Hãy kiểm tra địa chỉ rồi gửi lại email xác nhận.";
+            case FAILED -> prefix + " Nhưng KHÔNG gửi được email tới " + email
+                    + ". Lỗi đã ghi vào Nhật ký email và chuông của quản lý. Không gửi thư báo lỗi vào hộp thư hệ thống.";
         };
+    }
+
+    /** Máy chủ thư từ chối lúc gửi: chuông cho quản lý. Nhật ký FAILED do EmailService ghi. Không gửi thêm email. */
+    public void notifyStaffEmailFailed(String email, String detail) {
+        notifyManagers(email, detail);
+    }
+
+    /** Thư trả về (địa chỉ Gmail không tồn tại): ghi nhật ký FAILED, chuông quản lý, không gửi thêm email. */
+    public void recordBouncedStaffEmail(String email, String subject, String detail, boolean staffAccount) {
+        String safeEmail = StringUtils.hasText(email) ? email.trim() : "khong-ro@bounce";
+        emailLogService.markBounced(safeEmail, staffAccount ? "STAFF_ACCOUNT" : "EMAIL_BOUNCE", subject, detail);
+        notifyManagers(safeEmail, detail);
+    }
+
+    private void rememberFailure(String email, String subject, String purpose, String detail) {
+        emailLogService.record(email, purpose, subject, EmailLog.FAILED, detail);
+        notifyManagers(email, detail);
+    }
+
+    private void notifyManagers(String email, String detail) {
+        String title = "Không gửi được email nhân viên";
+        String message = "Địa chỉ " + email + " không nhận được thư. " + (detail == null ? "" : detail)
+                + " Xem Nhật ký email. Hệ thống không gửi thư báo lỗi vào hộp thư hệ thống.";
+        User me = currentUserOrNull();
+        if (me != null && "Club Manager".equals(me.getRoleName())) {
+            appNotifications.push(me, "STAFF_EMAIL_FAILED", title, message, EMAIL_LOG_LINK);
+            return;
+        }
+        for (User manager : userRepository.findByRoleNameInAndIsActiveTrue(java.util.List.of("Club Manager"))) {
+            appNotifications.push(manager, "STAFF_EMAIL_FAILED", title, message, EMAIL_LOG_LINK);
+        }
+    }
+
+    private User currentUserOrNull() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !StringUtils.hasText(auth.getName()) || "anonymousUser".equals(auth.getName())) {
+            return null;
+        }
+        return userRepository.findByUsername(auth.getName()).orElse(null);
     }
 
     /** Nhân viên nhấn "Xác nhận tài khoản" trong email */
