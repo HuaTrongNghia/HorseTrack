@@ -33,4 +33,12 @@ public class UserResponseDTO {
     private LocalDateTime createdAt;
     private Boolean emailConfirmed;        // false: nhân viên chưa nhấn xác nhận trong email (HLV / Groom chưa phân công được)
     private LocalDateTime emailVerifiedAt;
+    /** Hiện nút "Gửi lại email xác nhận" / "Sửa email" (nhân viên chưa xác nhận) */
+    private Boolean canResendConfirmation;
+    private Boolean canChangeEmail;
+    /** Hiện nút "Xóa tài khoản" (nhân viên chưa xác nhận; BE vẫn kiểm tra dữ liệu nghiệp vụ khi xóa) */
+    private Boolean canDelete;
+    /** HLV: số ngựa đang phụ trách / giới hạn */
+    private Integer horsesAssigned;
+    private Integer horseLimit;
 }

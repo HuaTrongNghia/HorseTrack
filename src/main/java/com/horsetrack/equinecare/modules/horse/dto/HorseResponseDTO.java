@@ -50,6 +50,12 @@ public class HorseResponseDTO {
     private Integer raceCount;
     private Integer raceWins;
     private BigDecimal totalPrize;
+    /** Giáo án đang mở của ngựa (null nếu không có) */
+    private String openPlanName;
+    /** Quản lý CLB chuyển / bỏ HLV được: đã cấp chuồng và không có giáo án đang mở */
+    private Boolean canChangeTrainer;
+    /** Hiện nút "Xóa ngựa tạo nhầm" (chưa cấp chuồng; BE vẫn kiểm tra dữ liệu nghiệp vụ khi xóa) */
+    private Boolean canDelete;
 
     @Data
     @Builder

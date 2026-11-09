@@ -25,4 +25,8 @@ public class TrainingPlanDetailDTO {
     private PlanStaffGuideDTO staffGuide;
     private java.util.List<TrainingPlanPhaseDTO> phases;
     private List<TrainingSessionDTO> sessions;
+    private String trackType;
+    private Boolean canAdjust;
+    private Boolean canCancel;
+    private Boolean canForceCancel;
 }

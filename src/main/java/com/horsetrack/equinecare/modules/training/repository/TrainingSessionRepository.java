@@ -33,6 +33,19 @@ public interface TrainingSessionRepository extends JpaRepository<TrainingSession
 
     List<TrainingSession> findByStatusAndSessionDateBefore(String status, LocalDateTime before);
 
+    List<TrainingSession> findByTrainingPlan_PlanIdAndStatusIn(Integer planId, java.util.Collection<String> statuses);
+
+    List<TrainingSession> findByStatusInAndSessionDateBefore(java.util.Collection<String> statuses, LocalDateTime before);
+
+    // Buổi tập chưa kết thúc của ngựa khác trên cùng loại đường, bắt đầu trong khoảng (from, to) -> trùng khung giờ trên đường
+    @org.springframework.data.jpa.repository.Query("SELECT s FROM TrainingSession s WHERE s.status IN ('PENDING', 'CONFIRMED', 'IN_PROGRESS', 'PAUSED_PENDING_TRAINER') " +
+            "AND s.sessionDate > :from AND s.sessionDate < :to AND s.trainingPlan.horse.horseId <> :horseId " +
+            "AND EXISTS (SELECT ph.phaseId FROM TrainingPlanPhase ph WHERE ph.plan = s.trainingPlan AND ph.trackType = :trackType) ORDER BY s.sessionDate")
+    List<TrainingSession> findOnTrack(@org.springframework.data.repository.query.Param("trackType") String trackType,
+                                      @org.springframework.data.repository.query.Param("horseId") Integer horseId,
+                                      @org.springframework.data.repository.query.Param("from") LocalDateTime from,
+                                      @org.springframework.data.repository.query.Param("to") LocalDateTime to);
+
     // F21-05: buổi tập chưa kết thúc (chờ xác nhận / đã xác nhận / đang tập / tạm dừng) của một nhân viên bắt đầu trong khoảng (from, to) -> trùng khung giờ
     @org.springframework.data.jpa.repository.Query("SELECT s FROM TrainingSession s WHERE s.assignedTo.userId = :userId " +
             "AND s.status IN ('PENDING', 'CONFIRMED', 'IN_PROGRESS', 'PAUSED_PENDING_TRAINER') AND s.sessionDate > :from AND s.sessionDate < :to ORDER BY s.sessionDate")

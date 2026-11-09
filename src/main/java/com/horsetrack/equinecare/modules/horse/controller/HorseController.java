@@ -21,10 +21,13 @@ public class HorseController {
 
     private final HorseService horseService;
     private final TrainingPlanService trainingPlanService;
+    private final com.horsetrack.equinecare.modules.horse.service.HorseCleanupService horseCleanupService;
 
-    public HorseController(HorseService horseService, TrainingPlanService trainingPlanService) {
+    public HorseController(HorseService horseService, TrainingPlanService trainingPlanService,
+                           com.horsetrack.equinecare.modules.horse.service.HorseCleanupService horseCleanupService) {
         this.horseService = horseService;
         this.trainingPlanService = trainingPlanService;
+        this.horseCleanupService = horseCleanupService;
     }
 
     @PostMapping("/register")
@@ -108,6 +111,16 @@ public class HorseController {
     public ResponseEntity<ApiResponse<HorseResponseDTO>> unassignTrainer(@PathVariable Integer id) {
         HorseResponseDTO response = horseService.unassignTrainer(id);
         return ResponseEntity.ok(ApiResponse.ok("Đã gửi yêu cầu bỏ phân công. HLV hiện tại vẫn phụ trách cho đến khi xác nhận.", response));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @io.swagger.v3.oas.annotations.Operation(summary = "Xóa ngựa tạo nhầm",
+            description = "Chỉ ngựa chưa được cấp chuồng và chỉ có hồ sơ đăng ký (không giáo án, ca khám, hóa đơn, đề xuất thi đấu...). "
+                    + "Bắt buộc ?reason= (≥ 5 ký tự). Chủ ngựa nhận thông báo. Ghi Audit_Logs DELETE_HORSE.")
+    public ResponseEntity<ApiResponse<Void>> deleteHorse(@PathVariable Integer id, @RequestParam String reason) {
+        horseCleanupService.deleteUnusedHorse(id, reason);
+        return ResponseEntity.ok(ApiResponse.ok("Đã xóa ngựa", null));
     }
 
     @PutMapping("/{id}/reject")

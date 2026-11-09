@@ -155,6 +155,11 @@ public class UserServiceImpl implements UserService {
                 .createdAt(user.getCreatedAt())
                 .emailConfirmed(user.getEmailVerifiedAt() != null)
                 .emailVerifiedAt(user.getEmailVerifiedAt())
+                .canResendConfirmation(com.horsetrack.equinecare.modules.auth.service.StaffAccountService.canChangeEmail(user))
+                .canChangeEmail(com.horsetrack.equinecare.modules.auth.service.StaffAccountService.canChangeEmail(user))
+                .canDelete(com.horsetrack.equinecare.modules.auth.service.StaffAccountCleanup.deletableKind(user))
+                .horsesAssigned("Trainer".equals(user.getRoleName()) ? (int) horseRepository.countByAssignedTrainer_UserId(user.getUserId()) : null)
+                .horseLimit("Trainer".equals(user.getRoleName()) ? com.horsetrack.equinecare.modules.horse.service.HorseServiceImpl.MAX_HORSES_PER_TRAINER : null)
                 .build();
     }
 

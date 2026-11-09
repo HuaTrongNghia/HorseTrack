@@ -29,6 +29,7 @@ public class TrainingPlanController {
 
     private final TrainingPlanService trainingPlanService;
     private final com.horsetrack.equinecare.modules.training.service.TrainingPlanLifecycle planLifecycle;
+    private final com.horsetrack.equinecare.modules.training.service.TrainingAdminService trainingAdminService;
 
     // Trainer chỉ nhận số liệu và giáo án của các ngựa được phân công
     @GetMapping("/dashboard-stats")
@@ -64,7 +65,7 @@ public class TrainingPlanController {
     // Trainer tạo giáo án mới cho ngựa (sau đó thêm buổi tập qua POST /{planId}/sessions)
     @PostMapping
     @PreAuthorize("hasAuthority('Trainer')")
-    @Operation(summary = "Lập giáo án huấn luyện", description = "Tạo giáo án cho ngựa được phân công. Mỗi giáo án một giai đoạn và một loại đường: Cỏ nhân tạo, Đường đất hoặc Đường cỏ. Trong khoảng ngày trùng nhau, mỗi loại đường chỉ một ngựa. Loại giáo án là Sức bền, Tốc độ, Phục hồi hoặc Kỹ thuật, kèm hướng dẫn các bước cho Mã phu. Thêm buổi tập bằng POST /{planId}/sessions.")
+    @Operation(summary = "Lập giáo án huấn luyện", description = "Tạo giáo án cho ngựa được phân công. Mỗi giáo án một giai đoạn và một loại đường: Cỏ nhân tạo, Đường đất hoặc Đường cỏ. Mỗi loại đường chỉ một ngựa trong cùng khung giờ buổi tập (kiểm tra khi xếp buổi). Ngày bắt đầu không ở quá khứ. Loại giáo án là Sức bền, Tốc độ, Phục hồi hoặc Kỹ thuật, kèm hướng dẫn các bước cho Mã phu. Thêm buổi tập bằng POST /{planId}/sessions.")
     public ResponseEntity<ApiResponse<Integer>> createTrainingPlan(
             @Valid @RequestBody TrainingPlanCreateRequestDTO request) {
         Integer planId = trainingPlanService.createTrainingPlan(request);
@@ -109,7 +110,7 @@ public class TrainingPlanController {
     // 3. Trainer tạo buổi tập trên Lịch
     @PostMapping("/{planId}/sessions")
     @PreAuthorize("hasAuthority('Trainer')")
-    @Operation(summary = "Thêm buổi tập vào giáo án", description = "HLV đặt buổi trên lịch và gán Groom cùng khu.")
+    @Operation(summary = "Thêm buổi tập vào giáo án", description = "HLV đặt buổi trên lịch và gán Groom cùng khu. Loại đường của giáo án chỉ một ngựa trong cùng khung giờ buổi tập (app.training.session-duration-minutes, mặc định 60 phút): trùng giờ với ngựa khác trên cùng đường thì 400.")
     public ResponseEntity<ApiResponse<Void>> addSessionToPlan(
             @PathVariable Integer planId,
             @Valid @RequestBody TrainingSessionCreateRequestDTO request) {
@@ -126,6 +127,25 @@ public class TrainingPlanController {
     public ResponseEntity<ApiResponse<String>> cancelPlan(@PathVariable Integer planId,
                                                           @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.PlanCancelRequestDTO request) {
         return ResponseEntity.ok(ApiResponse.ok("Đã hủy giáo án", planLifecycle.cancel(planId, request.getReason())));
+    }
+
+    @PutMapping("/{planId}/force-cancel")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @Operation(summary = "Hủy cưỡng chế giáo án (Quản lý CLB)",
+            description = "Gỡ kẹt giáo án mà HLV không hủy được (đang chạy, có buổi đang tập / tạm dừng). Buổi chưa bắt đầu → CANCELLED, đã bắt đầu → STOPPED, giáo án → CANCELLED. "
+                    + "Bắt buộc lý do. Không áp dụng khi có buổi chờ bác sĩ (WAITING_VET). Ghi Audit_Logs, báo HLV và Mã phu.")
+    public ResponseEntity<ApiResponse<String>> forceCancelPlan(@PathVariable Integer planId,
+                                                               @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.PlanCancelRequestDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã hủy cưỡng chế giáo án", trainingAdminService.forceCancelPlan(planId, request.getReason())));
+    }
+
+    @PutMapping("/{planId}/track")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @Operation(summary = "Gán loại đường cho giáo án cũ (Quản lý CLB)",
+            description = "Cho giáo án đang mở lập trước khi có loại đường. trackType: SYNTHETIC / DIRT / TURF. Báo lỗi nếu buổi chưa kết thúc trùng giờ với ngựa khác trên đường đó.")
+    public ResponseEntity<ApiResponse<String>> setPlanTrack(@PathVariable Integer planId,
+                                                            @Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.PlanTrackRequestDTO request) {
+        return ResponseEntity.ok(ApiResponse.ok("Đã gán loại đường", trainingAdminService.setPlanTrack(planId, request.getTrackType())));
     }
 
     // Cho giáo án tạm dừng chạy lại (ngựa không bị khóa, không còn buổi tập chờ bác sĩ)

@@ -177,6 +177,40 @@ public class StaffAccountService {
         return user;
     }
 
+    /** Tài khoản nhân viên chưa xác nhận: Quản lý CLB được sửa email và gửi lại email xác nhận */
+    public static boolean canChangeEmail(User u) {
+        return u != null && !"Horse Owner".equals(u.getRoleName()) && !"Club Manager".equals(u.getRoleName()) && u.getEmailVerifiedAt() == null;
+    }
+
+    /**
+     * Sửa email của tài khoản nhân viên chưa xác nhận (VD: nhập nhầm, thư bị trả về), rồi cấp mật khẩu tạm và mã xác nhận mới.
+     * Trả về thông tin để gửi email tài khoản tới địa chỉ mới.
+     */
+    @Transactional
+    public CreatedStaff changeEmail(Integer userId, String rawEmail) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Không tìm thấy người dùng với ID: " + userId));
+        if (!canChangeEmail(user)) {
+            throw new IllegalArgumentException(user.getEmailVerifiedAt() != null
+                    ? "Nhân viên " + user.getFullName() + " đã xác nhận tài khoản, không đổi email ở đây."
+                    : "Chỉ sửa email cho tài khoản nhân viên chưa xác nhận.");
+        }
+        String email = rawEmail.trim().toLowerCase(java.util.Locale.ROOT);
+        if (email.equalsIgnoreCase(user.getEmail())) {
+            throw new IllegalArgumentException("Email mới trùng email hiện tại.");
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("Email " + email + " đã được tài khoản khác sử dụng.");
+        }
+        ensureStaffEmailDeliverable(email);
+        String old = user.getEmail();
+        user.setEmail(email);
+        userRepository.save(user);
+        auditTrail.record("CHANGE_STAFF_EMAIL", "Users", "email=" + old,
+                "email=" + email + " | " + user.getUsername() + " (user_id=" + userId + ", vai trò " + user.getRoleName() + ")");
+        return resend(userId);
+    }
+
     /** Club Manager gửi lại email xác nhận: tài khoản chưa đăng nhập lần nào nên cấp mật khẩu mới cùng mã mới */
     @Transactional
     public CreatedStaff resend(Integer userId) {

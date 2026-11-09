@@ -1872,3 +1872,32 @@ Mọi API khác (trừ login/register/refresh/logout) chỉ cần đăng nhập.
 - **L6. Một số API vẫn chưa phân quyền.** Các API protocols, vaccinations vẫn cho **mọi user đã login** gọi (khám tiền thi đấu đã giới hạn Veterinarian / Club Manager). Các API ngựa, `/medical/**` và `/medical-management/**` đã được phân quyền (xem mục 18).
 - **L7. Thiếu API tạo dữ liệu.** Đã có API tạo Training Plan (6.0) và Care Task (9.0). Đã có module kho cho nhân viên kho (12A–12D). Đã có kiểm kho và cấp thuốc cho phác đồ (12E). Vẫn chưa có API tạo Stall.
 - **L8. `AuditController` và `AudtitController` là class rỗng.** Hai class này không có endpoint nào và tên sau bị gõ sai chính tả.
+
+### Bổ sung 11/2026: đường tập theo buổi, hoàn tiền, gỡ kẹt giáo án, quản trị tài khoản
+
+Chạy `DATABASE_refunds.sql` **trước** khi deploy bản BE này (tạo bảng `Invoice_Refunds`, thêm trạng thái hóa đơn `REFUND_PENDING`).
+
+**Đường tập khóa theo buổi.** Giáo án vẫn bắt buộc chọn một loại đường (`SYNTHETIC` / `DIRT` / `TURF`), nhưng nhiều ngựa dùng chung một đường được. `POST /training-plans/{planId}/sessions` → `400` khi ngựa khác đã có buổi chưa kết thúc trên cùng đường trong khung giờ ± `app.training.session-duration-minutes` (mặc định 60 phút). `PUT /training-plans/{planId}` đổi đường thì kiểm tra lại các buổi đang chờ xác nhận. Ngày bắt đầu giáo án không được ở quá khứ (khi lập, và khi sửa có đổi ngày).
+
+**Hoàn tiền** (`Club Manager`):
+- Khoản chờ hoàn tạo tự động khi: hủy giai đoạn phác đồ đã trả, ngựa bị khóa khi đã đóng lệ phí giải, lệ phí giải được thanh toán sau khi đề xuất đã đóng. Hóa đơn → `REFUND_PENDING`, Quản lý CLB nhận chuông (link `/manager/refunds`).
+- `GET /api/v1/billing/refunds?status=PENDING|DONE` (bỏ trống = tất cả): hóa đơn, ngựa, chủ ngựa + số điện thoại, số tiền (tổng giao dịch thành công), lý do, `canConfirm`.
+- `PUT /api/v1/billing/refunds/{refundId}/confirm` body `{ "transactionRef": "FT2611090001", "transferredOn": "2026-11-09", "transferredBy": "Kế toán CLB", "note": "..." }` → hóa đơn `REFUNDED`, chủ ngựa nhận chuông + email. Xác nhận lần hai → `400`.
+
+**Gỡ kẹt giáo án / buổi tập** (`Club Manager`, bắt buộc `reason` 5–500 ký tự, ghi `Audit_Logs`, báo HLV và Mã phu):
+- `PUT /api/v1/training-sessions/{id}/force-close` body `{ "reason": "..." }`: chưa bắt đầu → `CANCELLED`, đang tập / tạm dừng → `STOPPED`. Buổi `WAITING_VET` → `400`.
+- `PUT /api/v1/training-plans/{id}/force-cancel` body `{ "reason": "..." }`: đóng mọi buổi chưa kết thúc rồi giáo án → `CANCELLED`. Có buổi `WAITING_VET` → `400`.
+- `PUT /api/v1/training-plans/{id}/track` body `{ "trackType": "DIRT" }`: gán đường cho giáo án cũ đang mở.
+- Job tự đóng buổi chưa kết thúc quá `app.training.stale-session-hours` (mặc định 24) giờ sau giờ tập, chạy mỗi `app.training.stale-check-ms` (mặc định 1 giờ).
+
+**Tài khoản và ngựa tạo nhầm** (`Club Manager`):
+- `PUT /api/v1/users/{id}/email` body `{ "email": "..." }`: chỉ nhân viên chưa xác nhận; kiểm tra trùng và tên miền nhận thư, cấp mật khẩu tạm + liên kết xác nhận mới gửi tới email mới.
+- `DELETE /api/v1/users/{id}`: chỉ nhân viên chưa xác nhận và chưa có dữ liệu nghiệp vụ; có dữ liệu → `400` kèm danh sách.
+- `DELETE /api/v1/horses/{id}?reason=...`: chỉ ngựa chưa cấp chuồng và chỉ có hồ sơ đăng ký; chủ ngựa nhận chuông.
+
+**Báo HLV khi khám tiền thi đấu không đạt**: HLV phụ trách ngựa nhận chuông + email cùng lý do.
+
+**Cờ cho FE** (FE chỉ đọc cờ, không tự tính luật):
+- Giáo án (`GET /training-plans`, `GET /training-plans/{id}`): `trackType`, `canAdjust`, `canCancel`, `canForceCancel`; buổi tập trong chi tiết: `canForceClose`.
+- Người dùng (`GET /users`): `canResendConfirmation`, `canChangeEmail`, `canDelete`, `horsesAssigned` / `horseLimit` (HLV).
+- Ngựa (`GET /horses`, `GET /horses/{id}`): `openPlanName`, `canChangeTrainer`, `canDelete`.

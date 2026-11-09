@@ -41,6 +41,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
     private final com.horsetrack.equinecare.modules.tournament.service.RaceTrainingGuard raceTrainingGuard;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.notification.service.AppNotificationService appNotifications;
+    private final com.horsetrack.equinecare.modules.training.service.TrackSlotGuard trackSlotGuard;
 
     // Thời lượng mặc định một buổi tập (bảng chỉ lưu giờ bắt đầu), dùng để kiểm tra trùng giờ
     @org.springframework.beans.factory.annotation.Value("${app.training.session-duration-minutes:60}")
@@ -157,6 +158,10 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                     .goal(plan.getGoal())
                     .staffGuide(com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.toDto(plan.getPlanType()))
                     .phases(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.toDtos(plan))
+                    .trackType(planTrack(plan))
+                    .canAdjust(canAdjust(plan))
+                    .canCancel(canCancel(plan))
+                    .canForceCancel(com.horsetrack.equinecare.modules.training.service.TrainingAdminService.canForceCancel(plan))
                     .build();
         });
     }
@@ -225,6 +230,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                             .phaseNo(s.getSessionDate() == null ? null : com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases
                                     .phaseOn(plan, s.getSessionDate().toLocalDate()).map(ph -> ph.getPhaseNo()).orElse(null))
                             .vetCaseCode(caseCodes.get(s.getSessionId()))
+                            .canForceClose(com.horsetrack.equinecare.modules.training.service.TrainingAdminService.canForceClose(s))
                             .build();
                 })
                 .collect(Collectors.toList());
@@ -242,6 +248,10 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .staffGuide(com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.toDto(plan.getPlanType()))
                 .phases(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.toDtos(plan))
                 .sessions(sessionDTOs)
+                .trackType(planTrack(plan))
+                .canAdjust(canAdjust(plan))
+                .canCancel(canCancel(plan))
+                .canForceCancel(com.horsetrack.equinecare.modules.training.service.TrainingAdminService.canForceCancel(plan))
                 .build();
     }
 
@@ -322,6 +332,9 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                     + "), trùng khung giờ " + sessionDurationMinutes + " phút với buổi mới.");
         }
 
+        // Mỗi loại đường chỉ một ngựa trong cùng khung giờ buổi tập
+        trackSlotGuard.assertFree(plan, horse, start);
+
         trainingSessionRepository.save(session);
     }
 
@@ -341,6 +354,9 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
 
         if (request.getEndDate().isBefore(request.getStartDate())) {
             throw new IllegalArgumentException("Ngày kết thúc (endDate) không được nhỏ hơn ngày bắt đầu (startDate).");
+        }
+        if (request.getStartDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Ngày bắt đầu đã qua. Chọn từ hôm nay trở đi.");
         }
         // Ngựa chưa được duyệt (chưa có chuồng) thì chưa thuộc CLB quản lý
         if (horse.getStall() == null) {
@@ -369,7 +385,6 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .headTrainer(trainer)
                 .build();
         plan.getPhases().addAll(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.build(plan, request.getPhases()));
-        assertTrackFree(plan, horse.getHorseId());
         // 7 ngày trước giải mà ngựa đã được HLV xác nhận thi: không có giai đoạn cường độ Cao
         for (var ph : plan.getPhases()) {
             java.time.LocalDate[] range = com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.rangeOf(plan, ph);
@@ -396,6 +411,9 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         }
         if (request.getEndDate().isBefore(request.getStartDate())) {
             throw new IllegalArgumentException("Ngày kết thúc (endDate) không được nhỏ hơn ngày bắt đầu (startDate).");
+        }
+        if (!request.getStartDate().equals(plan.getStartDate()) && request.getStartDate().isBefore(LocalDate.now())) {
+            throw new IllegalArgumentException("Ngày bắt đầu đã qua. Chọn từ hôm nay trở đi hoặc giữ nguyên ngày bắt đầu cũ.");
         }
         boolean staffConfirmed = plan.getSessions().stream().anyMatch(s -> {
             String st = String.valueOf(s.getStatus()).toUpperCase();
@@ -427,6 +445,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         java.util.List<com.horsetrack.equinecare.modules.training.entity.TrainingPlanPhase> built =
                 com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.build(plan, request.getPhases());
         com.horsetrack.equinecare.modules.training.entity.TrainingPlanPhase next = built.get(0);
+        String oldTrack = planTrack(plan);
         while (plan.getPhases().size() > 1) {
             plan.getPhases().remove(plan.getPhases().size() - 1);
         }
@@ -448,7 +467,15 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
             phase.setSessionsPerWeek(next.getSessionsPerWeek());
             phase.setHrLimitBpm(next.getHrLimitBpm());
         }
-        assertTrackFree(plan, horse.getHorseId());
+        // Đổi loại đường: các buổi đã xếp (chờ xác nhận) phải không trùng giờ với ngựa khác trên đường mới
+        if (!java.util.Objects.equals(oldTrack, phase.getTrackType())) {
+            trainingPlanRepository.saveAndFlush(plan);
+            for (TrainingSession session : trainingSessionRepository.findByTrainingPlan_PlanIdAndStatusIn(plan.getPlanId(), List.of("PENDING"))) {
+                if (session.getSessionDate() != null) {
+                    trackSlotGuard.assertFree(plan, horse, session.getSessionDate());
+                }
+            }
+        }
         java.time.LocalDate[] range = com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.rangeOf(plan, phase);
         raceTrainingGuard.assertAllowed(horse, range[0], range[1], phase.getIntensity(), "điều chỉnh giáo án");
 
@@ -503,25 +530,31 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
         return notes;
     }
 
-    /** Mỗi loại đường chỉ một ngựa trong các giáo án đang mở có khoảng ngày giao nhau. */
-    private void assertTrackFree(TrainingPlan plan, Integer horseId) {
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("dd/MM/yyyy");
-        for (var ph : plan.getPhases()) {
-            List<TrainingPlan> taken = trainingPlanRepository.findOpenOnTrack(
-                    ph.getTrackType(),
-                    com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES,
-                    plan.getEndDate(),
-                    plan.getStartDate(),
-                    horseId);
-            if (taken.isEmpty()) {
-                continue;
-            }
-            TrainingPlan other = taken.get(0);
-            String horseName = other.getHorse() != null ? other.getHorse().getHorseName() : "một ngựa khác";
-            throw new IllegalArgumentException(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.trackLabel(ph.getTrackType())
-                    + " đã có ngựa " + horseName + " trong giáo án \"" + other.getPlanName()
-                    + "\" từ " + other.getStartDate().format(fmt) + " đến " + other.getEndDate().format(fmt)
-                    + ". Mỗi loại đường chỉ một ngựa trong khoảng ngày giáo án trùng nhau.");
+    private static String planTrack(TrainingPlan plan) {
+        return plan.getPhases() == null || plan.getPhases().isEmpty() ? null : plan.getPhases().get(0).getTrackType();
+    }
+
+    /** HLV điều chỉnh được: giáo án chưa bắt đầu, ngựa không bị khóa, chưa có buổi nào được Mã phu xác nhận (giống updateTrainingPlan) */
+    static boolean canAdjust(TrainingPlan plan) {
+        if (!com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.PLAN_PENDING.equalsIgnoreCase(plan.getStatus())
+                || (plan.getHorse() != null && Boolean.TRUE.equals(plan.getHorse().getIsLocked()))) {
+            return false;
         }
+        return plan.getSessions().stream().allMatch(s -> {
+            String st = String.valueOf(s.getStatus()).toUpperCase();
+            return "PENDING".equals(st) || "CANCELLED".equals(st);
+        });
+    }
+
+    /** HLV hủy được: giáo án chưa bắt đầu, ngựa không bị khóa, không có buổi đã bắt đầu / đã xong (giống TrainingPlanLifecycle.cancel) */
+    static boolean canCancel(TrainingPlan plan) {
+        if (!com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.PLAN_PENDING.equalsIgnoreCase(plan.getStatus())
+                || (plan.getHorse() != null && Boolean.TRUE.equals(plan.getHorse().getIsLocked()))) {
+            return false;
+        }
+        return plan.getSessions().stream().allMatch(s -> {
+            String st = String.valueOf(s.getStatus()).toUpperCase();
+            return "PENDING".equals(st) || "CONFIRMED".equals(st) || "CANCELLED".equals(st);
+        });
     }
 }

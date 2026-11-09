@@ -51,6 +51,7 @@ public class RaceProposalService {
     private final RaceSlotAllocator slots;
     private final RaceMapper mapper;
     private final RaceNotifier notifier;
+    private final com.horsetrack.equinecare.modules.finance.service.RefundService refundService;
 
     public static String label(String status) {
         return RaceNotifier.label(status);
@@ -236,8 +237,14 @@ public class RaceProposalService {
         LocalDateTime now = LocalDateTime.now();
         ExternalCompetition c = competitionRepository.findByIdForUpdate(e.getCompetition().getCompetitionId()).orElse(e.getCompetition());
         if (!Boolean.TRUE.equals(e.getVetPassed())) {
-            slots.close(e, CompetitionEntry.VET_FAILED, "Bác sĩ " + e.getVet().getFullName() + " kết luận khám không đạt"
-                    + (e.getVetNote() != null ? ": " + e.getVetNote() : ""), "PRERACE_EXAM_FAIL", now);
+            String why = "Bác sĩ " + e.getVet().getFullName() + " kết luận khám không đạt" + (e.getVetNote() != null ? ": " + e.getVetNote() : "");
+            slots.close(e, CompetitionEntry.VET_FAILED, why, "PRERACE_EXAM_FAIL", now);
+            // HLV phụ trách (người đã xác nhận đề xuất) cần biết để điều chỉnh giáo án / báo bác sĩ khóa tập nếu cần
+            var trainer = e.getHorse().getAssignedTrainer() != null ? e.getHorse().getAssignedTrainer() : e.getTrainer();
+            notifier.notify(trainer, "[HorseTrack] Ngựa " + e.getHorse().getHorseName() + " khám tiền thi đấu không đạt",
+                    "<p>Đề xuất <b>" + RaceNotifier.code(e) + "</b> thi giải <b>" + esc(c.getCompetitionName()) + "</b> ngày " + c.getStartDate()
+                            + " đã bị hủy vì khám không đạt.</p><p>" + esc(why) + "</p>"
+                            + "<p>Ngựa này không được đề xuất lại cho giải này. Xem lại giáo án hiện tại của ngựa; nếu cần ngưng tập, báo bác sĩ khóa huấn luyện.</p>");
             return;
         }
         List<String> fail = eligibility.failures(e.getHorse(), c, Set.of("HAS_TRAINER"));
@@ -272,11 +279,12 @@ public class RaceProposalService {
             return;
         }
         if (!CompetitionEntry.WAITING_PAYMENT.equals(e.getStatus())) {
-            // Thanh toán về sau khi đề xuất đã mất suất: báo Quản lý CLB đối soát hoàn tiền
+            // Thanh toán về sau khi đề xuất đã mất suất: ghi khoản chờ hoàn (Quản lý CLB nhận chuông, xác nhận ở màn hình Hoàn tiền)
             notifier.audit("RACE_PAID_AFTER_CLOSE", e.getStatus(), e, "hóa đơn " + invoice.getInvoiceCode() + " đã thanh toán, cần hoàn tiền");
-            notifier.notifyRole("Club Manager", "[HorseTrack] Cần hoàn lệ phí giải " + invoice.getInvoiceCode(),
-                    "<p>Hóa đơn lệ phí <b>" + invoice.getInvoiceCode() + "</b> của đề xuất <b>" + RaceNotifier.code(e) + "</b> được thanh toán khi đề xuất đã ở trạng thái <b>"
-                            + esc(label(e.getStatus())) + "</b>. Vui lòng đối soát và hoàn tiền cho chủ ngựa.</p>", "/manager/invoices");
+            refundService.request(invoice, "Lệ phí giải được thanh toán khi đề xuất " + RaceNotifier.code(e) + " đã ở trạng thái " + label(e.getStatus()));
+            notifier.notify(e.getOwner(), "[HorseTrack] Lệ phí đề xuất " + RaceNotifier.code(e) + " sẽ được hoàn",
+                    "<p>Hóa đơn <b>" + invoice.getInvoiceCode() + "</b> được thanh toán khi đề xuất đã ở trạng thái <b>" + esc(label(e.getStatus()))
+                            + "</b>. CLB sẽ hoàn lại số tiền bạn đã trả.</p>");
             return;
         }
         register(e, LocalDateTime.now(), "Đã thanh toán hóa đơn " + invoice.getInvoiceCode());

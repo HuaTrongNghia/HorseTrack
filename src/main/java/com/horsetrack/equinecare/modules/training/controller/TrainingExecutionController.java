@@ -24,6 +24,17 @@ public class TrainingExecutionController {
 
     private final TrainingExecutionService trainingExecutionService;
     private final com.horsetrack.equinecare.modules.training.service.SessionMonitorService sessionMonitorService;
+    private final com.horsetrack.equinecare.modules.training.service.TrainingAdminService trainingAdminService;
+
+    @PutMapping("/{sessionId}/force-close")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @io.swagger.v3.oas.annotations.Operation(summary = "Đóng cưỡng chế buổi tập (Quản lý CLB)",
+            description = "Gỡ kẹt buổi tập bị bỏ dở. Chưa bắt đầu (PENDING / CONFIRMED) → CANCELLED, đang tập / tạm dừng → STOPPED. Bắt buộc lý do. "
+                    + "Không áp dụng cho buổi chờ bác sĩ (WAITING_VET). Ghi Audit_Logs, báo HLV và Mã phu. Hệ thống cũng tự đóng buổi quá app.training.stale-session-hours (mặc định 24 giờ).")
+    public ResponseEntity<com.horsetrack.equinecare.common.base.ApiResponse<String>> forceClose(@PathVariable Integer sessionId,
+            @jakarta.validation.Valid @RequestBody com.horsetrack.equinecare.modules.training.dto.PlanCancelRequestDTO request) {
+        return ResponseEntity.ok(com.horsetrack.equinecare.common.base.ApiResponse.ok("Đã đóng buổi tập", trainingAdminService.forceCloseSession(sessionId, request.getReason())));
+    }
 
     @GetMapping("/my-schedule")
     @Operation(summary = "Lịch tập của tôi", description = "startDate và endDate dạng yyyy-MM-dd.")

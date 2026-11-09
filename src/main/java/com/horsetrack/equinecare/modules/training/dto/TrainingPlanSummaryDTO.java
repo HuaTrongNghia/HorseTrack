@@ -25,4 +25,12 @@ public class TrainingPlanSummaryDTO {
     private String goal;
     private PlanStaffGuideDTO staffGuide;
     private java.util.List<TrainingPlanPhaseDTO> phases;
+    /** SYNTHETIC / DIRT / TURF, null với giáo án cũ chưa gắn đường */
+    private String trackType;
+    /** HLV hiện nút "Điều chỉnh" (PUT /training-plans/{planId}) */
+    private Boolean canAdjust;
+    /** HLV hiện nút "Hủy" (PUT /{planId}/cancel) */
+    private Boolean canCancel;
+    /** Quản lý CLB hiện nút "Hủy cưỡng chế" (PUT /{planId}/force-cancel) */
+    private Boolean canForceCancel;
 }

@@ -387,7 +387,7 @@ public class MedicalManagementService {
         }
         if (!phaseBilling.isPhaseSettled(protocol, next.getPhaseNo())
                 && phaseBilling.findPhaseInvoice(protocol.getProtocolId(), next.getPhaseNo())
-                .filter(inv -> "REFUNDED".equals(inv.getPaymentStatus())).isPresent()) {
+                .filter(com.horsetrack.equinecare.modules.finance.service.RefundService::isRefund).isPresent()) {
             throw new IllegalArgumentException("Hóa đơn giai đoạn " + next.getPhaseNo() + " (" + next.getPhaseName()
                     + ") đã được hoàn tiền. Không thể chuyển sang giai đoạn này.");
         }

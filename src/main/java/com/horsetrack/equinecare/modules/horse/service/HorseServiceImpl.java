@@ -42,7 +42,7 @@ public class HorseServiceImpl implements HorseService {
     private static final Set<String> REQUIRED_CHECKS = Set.of("IDENTITY", "OWNERSHIP");
     private static final BigDecimal CM_PER_HAND = new BigDecimal("10.16");
     /** Mỗi HLV chỉ phụ trách tối đa 5 ngựa. */
-    private static final int MAX_HORSES_PER_TRAINER = 5;
+    public static final int MAX_HORSES_PER_TRAINER = 5;
 
     private final HorseRepository horseRepository;
     private final UserRepository userRepository;
@@ -173,6 +173,9 @@ public class HorseServiceImpl implements HorseService {
                 .allowResubmit(rejected ? latest.getAllowResubmit() : null)
                 .assignedTrainerId(horse.getAssignedTrainer() != null ? horse.getAssignedTrainer().getUserId() : null)
                 .assignedTrainerName(horse.getAssignedTrainer() != null ? horse.getAssignedTrainer().getFullName() : null)
+                .openPlanName(openPlanName(horse))
+                .canChangeTrainer(horse.getStall() != null && openPlanName(horse) == null)
+                .canDelete(horse.getStall() == null)
                 .build();
     }
 
@@ -291,6 +294,17 @@ public class HorseServiceImpl implements HorseService {
                             + ". Bạn không còn phụ trách ngựa này.");
         }
         return mapToResponseDTO(horse);
+    }
+
+    // Giáo án đang mở (chờ chạy, đang chạy, tạm dừng) của ngựa; null nếu không có
+    private String openPlanName(Horse horse) {
+        for (String st : com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.OPEN_PLAN_STATUSES) {
+            var plans = trainingPlanRepository.findByHorse_HorseIdAndStatus(horse.getHorseId(), st);
+            if (!plans.isEmpty()) {
+                return plans.get(0).getPlanName();
+            }
+        }
+        return null;
     }
 
     private void assertNoOpenPlan(Horse horse) {

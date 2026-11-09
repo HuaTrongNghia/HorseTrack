@@ -63,6 +63,7 @@ public class ProtocolPhaseBilling {
     private final StockHoldRepository holdRepository;
     private final ProtocolProgressNoteRepository noteRepository;
     private final InvoiceService invoiceService;
+    private final RefundService refundService;
     private final AuditTrail auditTrail;
 
     // ==========================================
@@ -314,7 +315,7 @@ public class ProtocolPhaseBilling {
         if (invoice.isEmpty()) {
             return true;
         }
-        if (Invoice.REFUNDED.equals(invoice.get().getPaymentStatus())) {
+        if (RefundService.isRefund(invoice.get())) {
             return false;
         }
         return !invoice.get().isOpen();
@@ -491,16 +492,13 @@ public class ProtocolPhaseBilling {
                 continue;
             }
             for (Invoice inv : phaseInvoices(protocol.getProtocolId(), phase.getPhaseNo(), true)) {
-                if (Invoice.REFUNDED.equals(inv.getPaymentStatus())) {
+                if (RefundService.isRefund(inv)) {
                     continue;
                 }
                 if (Invoice.PAID.equals(inv.getPaymentStatus())) {
-                    inv.setPaymentStatus(Invoice.REFUNDED);
-                    invoiceRepository.save(inv);
-                    total = total.add(inv.getFinalPayableAmount() == null ? BigDecimal.ZERO : inv.getFinalPayableAmount());
-                    rows.append("<li>").append(inv.getInvoiceCode()).append(" — ").append(InvoiceGenerator.money(inv.getFinalPayableAmount())).append("</li>");
-                    auditTrail.record("REFUND_INVOICE", "Invoices", "payment_status=PAID",
-                            "payment_status=REFUNDED | " + inv.getInvoiceCode() + " | " + reason);
+                    var refund = refundService.request(inv, "Phác đồ " + protocol.getProtocolCode() + " kết thúc trước giai đoạn " + phase.getPhaseNo() + ": " + reason);
+                    total = total.add(refund.getAmount());
+                    rows.append("<li>").append(inv.getInvoiceCode()).append(" — ").append(InvoiceGenerator.money(refund.getAmount())).append("</li>");
                     refunded++;
                     continue;
                 }
@@ -525,7 +523,7 @@ public class ProtocolPhaseBilling {
                     "<p>Bác sĩ đã kết thúc phác đồ <b>" + protocol.getProtocolCode() + "</b> của ngựa <b>"
                             + HtmlUtils.htmlEscape(protocol.getHorse().getHorseName()) + "</b> trước khi làm hết các giai đoạn.</p>"
                             + "<p>Lý do: " + HtmlUtils.htmlEscape(reason) + "</p>"
-                            + "<p>Số tiền đã thanh toán cho các giai đoạn không thực hiện được hoàn:</p><ul>" + rows + "</ul>"
+                            + "<p>Số tiền đã thanh toán cho các giai đoạn không thực hiện sẽ được CLB hoàn lại:</p><ul>" + rows + "</ul>"
                             + "<p>Tổng <b>" + InvoiceGenerator.money(total) + "</b>.</p>");
         }
     }
@@ -581,12 +579,9 @@ public class ProtocolPhaseBilling {
             if (!Invoice.PAID.equals(inv.getPaymentStatus())) {
                 continue;
             }
-            inv.setPaymentStatus(Invoice.REFUNDED);
-            invoiceRepository.save(inv);
-            total = total.add(inv.getFinalPayableAmount() == null ? java.math.BigDecimal.ZERO : inv.getFinalPayableAmount());
-            rows.append("<li>").append(inv.getInvoiceCode()).append(" — ").append(InvoiceGenerator.money(inv.getFinalPayableAmount())).append("</li>");
-            auditTrail.record("REFUND_INVOICE", "Invoices", "payment_status=PAID",
-                    "payment_status=REFUNDED | " + inv.getInvoiceCode() + " | " + reason);
+            var refund = refundService.request(inv, "Hủy phác đồ " + protocol.getProtocolCode() + ": " + reason);
+            total = total.add(refund.getAmount());
+            rows.append("<li>").append(inv.getInvoiceCode()).append(" — ").append(InvoiceGenerator.money(refund.getAmount())).append("</li>");
             n++;
         }
         if (n > 0 && protocol.getHorse() != null && protocol.getHorse().getOwner() != null) {
@@ -595,7 +590,7 @@ public class ProtocolPhaseBilling {
                     "<p>Bác sĩ đã hủy phác đồ <b>" + protocol.getProtocolCode() + "</b> của ngựa <b>"
                             + HtmlUtils.htmlEscape(protocol.getHorse().getHorseName()) + "</b> sau khi bạn đã thanh toán.</p>"
                             + "<p>Lý do: " + HtmlUtils.htmlEscape(reason) + "</p>"
-                            + "<p>Số tiền được hoàn:</p><ul>" + rows + "</ul><p>Tổng <b>" + InvoiceGenerator.money(total) + "</b>.</p>");
+                            + "<p>Số tiền sẽ được CLB hoàn lại:</p><ul>" + rows + "</ul><p>Tổng <b>" + InvoiceGenerator.money(total) + "</b>.</p>");
         }
         return n;
     }

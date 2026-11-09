@@ -26,6 +26,7 @@ public class UserController {
 
     private final UserService userService;
     private final com.horsetrack.equinecare.modules.auth.service.StaffAccountService staffAccountService;
+    private final com.horsetrack.equinecare.modules.auth.service.StaffAccountCleanup staffAccountCleanup;
 
     private String getClientIp(HttpServletRequest request) {
         String xf = request.getHeader("X-Forwarded-For");
@@ -85,6 +86,32 @@ public class UserController {
         String message = staffAccountService.emailResultMessage(delivery, created.user().getEmail(),
                 "Đã tạo liên kết xác nhận và mật khẩu tạm mới.");
         return ResponseEntity.ok(ApiResponse.ok(message, null));
+    }
+
+    @PutMapping("/{id}/email")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @io.swagger.v3.oas.annotations.Operation(summary = "Sửa email tài khoản nhân viên chưa xác nhận",
+            description = "Body: { \"email\": \"...\" }. Chỉ tài khoản nhân viên chưa xác nhận (canChangeEmail = true). Kiểm tra trùng và tên miền nhận thư, "
+                    + "cấp mật khẩu tạm + liên kết xác nhận mới và gửi tới email mới. Ghi Audit_Logs CHANGE_STAFF_EMAIL.")
+    public ResponseEntity<ApiResponse<Void>> changeEmail(@PathVariable Integer id,
+                                                         @jakarta.validation.Valid @RequestBody com.horsetrack.equinecare.modules.auth.dto.ChangeStaffEmailDTO request) {
+        var created = staffAccountService.changeEmail(id, request.getEmail());
+        var delivery = staffAccountService.sendAccountEmail(created);
+        if (delivery == com.horsetrack.equinecare.modules.notification.service.EmailService.Delivery.FAILED) {
+            staffAccountService.notifyStaffEmailFailed(created.user().getEmail(), "Máy chủ thư từ chối địa chỉ này hoặc gửi bị lỗi.");
+        }
+        return ResponseEntity.ok(ApiResponse.ok(staffAccountService.emailResultMessage(delivery, created.user().getEmail(),
+                "Đã đổi email và tạo liên kết xác nhận mới."), null));
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('Club Manager')")
+    @io.swagger.v3.oas.annotations.Operation(summary = "Xóa tài khoản nhân viên tạo nhầm",
+            description = "Chỉ tài khoản nhân viên chưa xác nhận và chưa có dữ liệu nghiệp vụ; có dữ liệu thì 400 kèm danh sách, hãy khóa tài khoản. "
+                    + "Audit_Logs / Email_Logs giữ lại. Ghi Audit_Logs DELETE_STAFF_ACCOUNT.")
+    public ResponseEntity<ApiResponse<Void>> deleteStaff(@PathVariable Integer id) {
+        staffAccountCleanup.deleteUnconfirmedStaff(id);
+        return ResponseEntity.ok(ApiResponse.ok("Đã xóa tài khoản", null));
     }
 
     @PutMapping("/{id}/lock")

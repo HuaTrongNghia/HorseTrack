@@ -32,4 +32,6 @@ public class TrainingSessionDTO {
     private java.util.List<SessionReadingDTO> recovery;
     private Integer phaseNo;   // giai đoạn giáo án chứa ngày tập (null nếu giáo án không chia giai đoạn)
     private String vetCaseCode;
+    /** Quản lý CLB hiện nút "Đóng cưỡng chế" (chưa kết thúc và không chờ bác sĩ) */
+    private Boolean canForceClose;
 }
