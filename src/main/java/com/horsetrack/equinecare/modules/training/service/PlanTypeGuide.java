@@ -1,16 +1,30 @@
 package com.horsetrack.equinecare.modules.training.service;
 
 import com.horsetrack.equinecare.modules.training.dto.PlanStaffGuideDTO;
+import com.horsetrack.equinecare.modules.training.entity.TrainingPlan;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-/** Hướng dẫn cố định theo loại giáo án: việc Mã phu phải làm và các bước trong buổi tập. */
+/**
+ * Hướng dẫn theo loại giáo án: việc Mã phu phải làm và các bước trong buổi tập.
+ * 4 loại có hướng dẫn cố định; loại "Khác" dùng mô tả và các bước HLV tự viết (lưu trên giáo án).
+ */
 public final class PlanTypeGuide {
 
     public record Text(String type, String summary, List<String> steps) {
     }
+
+    /** Kết quả kiểm tra loại giáo án khi lập / sửa: loại chuẩn và phần tự viết (chỉ có với loại Khác) */
+    public record Checked(String type, String customSummary, String customSteps) {
+    }
+
+    public static final String OTHER = "Khác";
+    private static final int MAX_STEPS = 15;
+    private static final int MAX_STEP_LENGTH = 300;
+    private static final int MAX_SUMMARY_LENGTH = 1000;
+    private static final String TYPES = "Sức bền, Tốc độ, Phục hồi, Kỹ thuật hoặc Khác";
 
     private static final List<Text> ALL = List.of(
             new Text("Sức bền",
@@ -53,17 +67,78 @@ public final class PlanTypeGuide {
     private PlanTypeGuide() {
     }
 
-    /** Loại giáo án hợp lệ, đúng tên chuẩn. Báo lỗi nếu trống hoặc không thuộc 4 loại. */
+    /** Loại giáo án hợp lệ, đúng tên chuẩn. Báo lỗi nếu trống hoặc không thuộc 4 loại chuẩn. */
     public static Text require(String raw) {
         if (raw == null || raw.isBlank()) {
-            throw new IllegalArgumentException("Chọn loại giáo án: Sức bền, Tốc độ, Phục hồi hoặc Kỹ thuật.");
+            throw new IllegalArgumentException("Chọn loại giáo án: " + TYPES + ".");
         }
         Text found = BY_KEY.get(key(raw));
         if (found == null) {
-            throw new IllegalArgumentException("Loại giáo án '" + raw.trim()
-                    + "' không có hướng dẫn. Chỉ dùng Sức bền, Tốc độ, Phục hồi hoặc Kỹ thuật.");
+            throw new IllegalArgumentException("Loại giáo án '" + raw.trim() + "' không hợp lệ. Chỉ dùng " + TYPES + ".");
         }
         return found;
+    }
+
+    /**
+     * Kiểm tra loại giáo án khi HLV lập / sửa. Loại "Khác" bắt buộc có mô tả và ít nhất một bước;
+     * các loại chuẩn bỏ qua phần tự viết (dùng hướng dẫn cố định).
+     */
+    public static Checked require(String raw, String customSummary, List<String> customSteps) {
+        if (!isOther(raw)) {
+            return new Checked(require(raw).type(), null, null);
+        }
+        if (customSummary == null || customSummary.isBlank()) {
+            throw new IllegalArgumentException("Giáo án loại Khác phải có mô tả (customSummary): Mã phu cần làm gì trong buổi tập.");
+        }
+        String summary = customSummary.trim();
+        if (summary.length() > MAX_SUMMARY_LENGTH) {
+            throw new IllegalArgumentException("Mô tả giáo án Khác không được vượt quá " + MAX_SUMMARY_LENGTH + " ký tự.");
+        }
+        List<String> steps = customSteps == null ? List.of() : customSteps.stream()
+                .filter(st -> st != null && !st.isBlank())
+                .map(st -> st.replaceAll("\\s*[\\r\\n]+\\s*", " ").trim())
+                .toList();
+        if (steps.isEmpty()) {
+            throw new IllegalArgumentException("Giáo án loại Khác phải có ít nhất một bước (customSteps) để Mã phu làm theo.");
+        }
+        if (steps.size() > MAX_STEPS) {
+            throw new IllegalArgumentException("Giáo án loại Khác tối đa " + MAX_STEPS + " bước.");
+        }
+        for (int i = 0; i < steps.size(); i++) {
+            if (steps.get(i).length() > MAX_STEP_LENGTH) {
+                throw new IllegalArgumentException("Bước " + (i + 1) + " dài quá " + MAX_STEP_LENGTH + " ký tự.");
+            }
+        }
+        return new Checked(OTHER, summary, String.join("\n", steps));
+    }
+
+    public static boolean isOther(String raw) {
+        if (raw == null) {
+            return false;
+        }
+        String k = key(raw);
+        return k.equals(key(OTHER)) || k.equals("khac") || k.equals("other");
+    }
+
+    /** Hướng dẫn của một giáo án: loại Khác lấy phần HLV tự viết, loại chuẩn lấy hướng dẫn cố định */
+    public static Text forPlan(TrainingPlan plan) {
+        if (plan == null) {
+            return null;
+        }
+        if (isOther(plan.getPlanType())) {
+            List<String> steps = plan.getCustomSteps() == null || plan.getCustomSteps().isBlank() ? List.of()
+                    : java.util.Arrays.stream(plan.getCustomSteps().split("\\R")).filter(st -> !st.isBlank()).toList();
+            return new Text(OTHER, plan.getCustomSummary(), steps);
+        }
+        return find(plan.getPlanType());
+    }
+
+    public static PlanStaffGuideDTO toDto(TrainingPlan plan) {
+        Text found = forPlan(plan);
+        if (found == null) {
+            return null;
+        }
+        return PlanStaffGuideDTO.builder().summary(found.summary()).steps(found.steps()).build();
     }
 
     public static Text find(String raw) {

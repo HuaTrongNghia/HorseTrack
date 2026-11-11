@@ -45,6 +45,13 @@ public class TrainingPlan {
     @Column(name = "plan_type", length = 50)
     private String planType;
 
+    // Giáo án loại "Khác": HLV tự viết việc Mã phu phải làm và các bước (mỗi dòng một bước)
+    @Column(name = "custom_summary", columnDefinition = "NVARCHAR(1000)")
+    private String customSummary;
+
+    @Column(name = "custom_steps", columnDefinition = "NVARCHAR(MAX)")
+    private String customSteps;
+
     @Column(name = "status", nullable = false, length = 20)
     private String status; // PENDING (chờ Groom xác nhận / chờ tới ngày bắt đầu), ACTIVE, PAUSED (ngựa bị VetLock), COMPLETED, CANCELLED
 

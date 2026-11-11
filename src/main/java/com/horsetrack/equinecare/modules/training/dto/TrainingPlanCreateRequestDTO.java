@@ -38,6 +38,13 @@ public class TrainingPlanCreateRequestDTO {
     @Size(max = 50, message = "Loại giáo án (type) không được vượt quá 50 ký tự")
     private String type;
 
+    // Chỉ dùng khi type = "Khác": mô tả việc Mã phu phải làm (bắt buộc) và các bước (1–15 bước)
+    @Size(max = 1000, message = "Mô tả giáo án Khác (customSummary) không được vượt quá 1000 ký tự")
+    private String customSummary;
+
+    @Size(max = 15, message = "Giáo án Khác tối đa 15 bước")
+    private java.util.List<@Size(max = 300, message = "Mỗi bước không được vượt quá 300 ký tự") String> customSteps;
+
     // Các giai đoạn theo thứ tự; tổng số tuần không vượt thời gian giáo án
     @jakarta.validation.Valid
     @Size(max = 12, message = "Giáo án tối đa 12 giai đoạn")

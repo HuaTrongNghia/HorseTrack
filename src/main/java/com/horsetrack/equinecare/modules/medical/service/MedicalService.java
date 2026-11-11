@@ -49,6 +49,7 @@ public class MedicalService {
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.training.service.SessionIncidentHandler incidentHandler;
     private final HorseConditionNotifier conditionNotifier;
+    private final VetCaseAlert vetCaseAlert;
 
     private boolean isCurrentUserVeterinarian() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -151,6 +152,7 @@ public class MedicalService {
         // Đọc lại để lấy case_code do DB tự sinh
         entityManager.refresh(saved);
         log.info("Ca khám mới {} cho ngựa {} do {} báo", saved.getCaseCode(), horse.getHorseName(), reporter.getUsername());
+        vetCaseAlert.newCase(saved);
         return toCaseDTO(saved);
     }
 

@@ -65,7 +65,7 @@ public class TrainingPlanController {
     // Trainer tạo giáo án mới cho ngựa (sau đó thêm buổi tập qua POST /{planId}/sessions)
     @PostMapping
     @PreAuthorize("hasAuthority('Trainer')")
-    @Operation(summary = "Lập giáo án huấn luyện", description = "Tạo giáo án cho ngựa được phân công. Mỗi giáo án một giai đoạn và một loại đường: Cỏ nhân tạo, Đường đất hoặc Đường cỏ. Mỗi loại đường chỉ một ngựa trong cùng khung giờ buổi tập (kiểm tra khi xếp buổi). Ngày bắt đầu không ở quá khứ. Loại giáo án là Sức bền, Tốc độ, Phục hồi hoặc Kỹ thuật, kèm hướng dẫn các bước cho Mã phu. Thêm buổi tập bằng POST /{planId}/sessions.")
+    @Operation(summary = "Lập giáo án huấn luyện", description = "Tạo giáo án cho ngựa được phân công. Mỗi giáo án một giai đoạn và một loại đường: Cỏ nhân tạo, Đường đất hoặc Đường cỏ. Mỗi loại đường chỉ một ngựa trong cùng khung giờ buổi tập (kiểm tra khi xếp buổi). Ngày bắt đầu không ở quá khứ. Loại giáo án là Sức bền, Tốc độ, Phục hồi hoặc Kỹ thuật (hướng dẫn cố định cho Mã phu), hoặc Khác: HLV gửi kèm customSummary (mô tả việc Mã phu làm) và customSteps (1–15 bước), Mã phu thấy như hướng dẫn của các loại khác. Thêm buổi tập bằng POST /{planId}/sessions.")
     public ResponseEntity<ApiResponse<Integer>> createTrainingPlan(
             @Valid @RequestBody TrainingPlanCreateRequestDTO request) {
         Integer planId = trainingPlanService.createTrainingPlan(request);

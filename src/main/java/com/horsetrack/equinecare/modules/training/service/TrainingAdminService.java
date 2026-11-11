@@ -28,6 +28,7 @@ import java.util.Map;
  * - Job tự đóng buổi tập quá hạn (mặc định 24 giờ sau giờ tập): chưa bắt đầu → CANCELLED, đang tập / tạm dừng → STOPPED.
  * - Quản lý CLB đóng cưỡng chế một buổi tập, hủy cưỡng chế giáo án, gán loại đường cho giáo án cũ. Mọi thao tác ghi Audit_Logs.
  * Buổi tập chờ bác sĩ (WAITING_VET) không đóng ở đây: bác sĩ xử lý ca khám trước.
+ * Mỗi lần đóng / hủy báo Mã phu, HLV phụ trách và chủ ngựa (chủ ngựa trả phí chăm sóc nên cần biết lịch tập thay đổi).
  */
 @Slf4j
 @Service
@@ -40,6 +41,7 @@ public class TrainingAdminService {
             TrainingPlanActivator.SESSION_IN_PROGRESS, TrainingPlanActivator.SESSION_PAUSED_PENDING_TRAINER);
     private static final String GROOM_LINK = "/groom/sessions";
     private static final String TRAINER_LINK = "/trainer/plans";
+    private static final String OWNER_LINK = "/owner/horses/";
 
     private final TrainingSessionRepository sessionRepository;
     private final TrainingPlanRepository planRepository;
@@ -134,6 +136,9 @@ public class TrainingAdminService {
         User trainer = trainerOf(plan);
         appNotifications.push(trainer, "TRAINING_PLAN_CANCELLED", "Giáo án " + plan.getPlanName() + " bị hủy",
                 "Giáo án \"" + plan.getPlanName() + "\"" + horseLabel(plan) + " đã bị hủy. " + why + ". Ngựa lập được giáo án mới.", TRAINER_LINK);
+        pushOwner(plan, "TRAINING_PLAN_CANCELLED", "Giáo án " + plan.getPlanName() + " bị hủy",
+                "Giáo án \"" + plan.getPlanName() + "\"" + horseLabel(plan) + " đã bị hủy, " + closed + " buổi tập chưa diễn ra được hủy theo. "
+                        + why + ". HLV phụ trách sẽ lập giáo án mới cho ngựa khi phù hợp.");
         return plan.getStatus();
     }
 
@@ -181,8 +186,16 @@ public class TrainingAdminService {
         appNotifications.push(s.getAssignedTo(), "TRAINING_SESSION_CLOSED", "Buổi tập #" + s.getSessionId() + " đã đóng", what, GROOM_LINK);
         if (auditAction != null && plan != null) {
             appNotifications.push(trainerOf(plan), "TRAINING_SESSION_CLOSED", "Buổi tập #" + s.getSessionId() + " đã đóng", what, TRAINER_LINK);
+            pushOwner(plan, "TRAINING_SESSION_CLOSED", "Buổi tập #" + s.getSessionId() + " đã đóng", what);
         }
         return after;
+    }
+
+    private void pushOwner(TrainingPlan plan, String purpose, String title, String message) {
+        if (plan.getHorse() == null || plan.getHorse().getOwner() == null) {
+            return;
+        }
+        appNotifications.push(plan.getHorse().getOwner(), purpose, title, message, OWNER_LINK + plan.getHorse().getHorseId());
     }
 
     private static User trainerOf(TrainingPlan plan) {

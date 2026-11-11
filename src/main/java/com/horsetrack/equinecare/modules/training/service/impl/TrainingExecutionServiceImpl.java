@@ -31,6 +31,8 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
     private final com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator planActivator;
     private final com.horsetrack.equinecare.modules.horse.service.HorseAccessGuard horseAccessGuard;
     private final com.horsetrack.equinecare.modules.medical.repository.VetCaseRepository vetCaseRepository;
+    private final com.horsetrack.equinecare.modules.medical.service.VetCaseAlert vetCaseAlert;
+    private final jakarta.persistence.EntityManager entityManager;
     private final com.horsetrack.equinecare.modules.audit.service.AuditTrail auditTrail;
     private final com.horsetrack.equinecare.modules.training.service.SessionReadingView sessionReadingView;
     private final com.horsetrack.equinecare.modules.training.service.TrainingPlanLifecycle planLifecycle;
@@ -67,7 +69,7 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
             if (plan != null) {
                 planName = plan.getPlanName();
                 planType = plan.getPlanType();
-                var guide = com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.find(planType);
+                var guide = com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.forPlan(plan);
                 if (guide != null) {
                     staffGuide = guide.summary();
                     steps = guide.steps();
@@ -225,7 +227,10 @@ public class TrainingExecutionServiceImpl implements TrainingExecutionService {
                     .status("NEW")
                     .reportedAt(LocalDateTime.now())
                     .build());
+            // Đọc lại để lấy case_code do DB tự sinh
+            entityManager.refresh(vetCase);
             caseCode = vetCase.getCaseCode() != null ? vetCase.getCaseCode() : "#" + vetCase.getCaseId();
+            vetCaseAlert.newCase(vetCase);
             session.setNotes(session.getNotes() + " | Ca khám " + caseCode);
         }
         trainingSessionRepository.save(session);

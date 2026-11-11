@@ -156,7 +156,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                     .progress(progress)
                     .type(plan.getPlanType())
                     .goal(plan.getGoal())
-                    .staffGuide(com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.toDto(plan.getPlanType()))
+                    .staffGuide(com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.toDto(plan))
                     .phases(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.toDtos(plan))
                     .trackType(planTrack(plan))
                     .canAdjust(canAdjust(plan))
@@ -245,7 +245,7 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
                 .goal(plan.getGoal())
                 .type(plan.getPlanType())
                 .status(plan.getStatus())
-                .staffGuide(com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.toDto(plan.getPlanType()))
+                .staffGuide(com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.toDto(plan))
                 .phases(com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.toDtos(plan))
                 .sessions(sessionDTOs)
                 .trackType(planTrack(plan))
@@ -371,13 +371,15 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
             throw new IllegalArgumentException("Ngựa này đang có một giáo án PENDING, ACTIVE hoặc PAUSED. Hãy hoàn thành hoặc hủy giáo án cũ trước.");
         }
 
-        var guide = com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.require(request.getType());
+        var guide = com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.require(request.getType(), request.getCustomSummary(), request.getCustomSteps());
         TrainingPlan plan = TrainingPlan.builder()
                 .planName(request.getPlanName().trim())
                 .startDate(request.getStartDate())
                 .endDate(request.getEndDate())
                 .goal(request.getGoal())
                 .planType(guide.type())
+                .customSummary(guide.customSummary())
+                .customSteps(guide.customSteps())
                 // Giáo án mới ở trạng thái chờ; chỉ chạy khi Groom xác nhận buổi tập và tới ngày bắt đầu
                 .status(com.horsetrack.equinecare.modules.training.service.TrainingPlanActivator.PLAN_PENDING)
                 .createdAt(LocalDateTime.now())
@@ -434,13 +436,15 @@ public class TrainingPlanServiceImpl implements TrainingPlanService {
             }
         }
 
-        var guide = com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.require(request.getType());
+        var guide = com.horsetrack.equinecare.modules.training.service.PlanTypeGuide.require(request.getType(), request.getCustomSummary(), request.getCustomSteps());
         String before = plan.getPlanName() + " | " + plan.getPlanType() + " | " + plan.getStartDate() + " → " + plan.getEndDate();
         plan.setPlanName(request.getPlanName().trim());
         plan.setStartDate(request.getStartDate());
         plan.setEndDate(request.getEndDate());
         plan.setGoal(request.getGoal());
         plan.setPlanType(guide.type());
+        plan.setCustomSummary(guide.customSummary());
+        plan.setCustomSteps(guide.customSteps());
 
         java.util.List<com.horsetrack.equinecare.modules.training.entity.TrainingPlanPhase> built =
                 com.horsetrack.equinecare.modules.training.service.TrainingPlanPhases.build(plan, request.getPhases());
